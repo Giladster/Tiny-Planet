@@ -477,7 +477,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
-import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { Lensflare, LensflareElement } from "three/addons/objects/Lensflare.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeVertices, mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
@@ -831,24 +831,23 @@ addEventListener("keydown", () => sfx.unlock(), { capture: true });
 const canvas = $("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = .92;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(55, 1, 0.03, 6000);
 camera.position.set(0, 1.4, 7);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.enablePan = false; controls.minDistance = 2.6; controls.maxDistance = 18;
 const pmrem = new THREE.PMREMGenerator(renderer);
-const room = new RoomEnvironment(renderer); room.traverse((o) => { if (o.material && o.material.isMeshBasicMaterial) o.material.color.multiplyScalar(.3); }); // a dim room: soft shine, no glare
-scene.environment = pmrem.fromScene(room, .04).texture;
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), .14, .2, 1.7); composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
-scene.add(new THREE.AmbientLight(0x5864a8, 0.35));
+// one strong sun and almost no other light, like real space: planets get a bright day side and a dark night side
+scene.add(new THREE.AmbientLight(0x5864a8, 0.14));
 const SUN_DIR = new THREE.Vector3(.75, .35, .55).normalize();
-const sun = new THREE.DirectionalLight(0xfff1d6, 2.2); sun.position.copy(SUN_DIR).multiplyScalar(10); scene.add(sun);
-const rim = new THREE.DirectionalLight(0x6fe3ff, 0.5); rim.position.set(-6, -2, -4); scene.add(rim);
+const sun = new THREE.DirectionalLight(0xfff4e2, 3.4); sun.position.copy(SUN_DIR).multiplyScalar(10); scene.add(sun);
+const rim = new THREE.DirectionalLight(0x6fa8ff, 0.12); rim.position.set(-6, -2, -4); scene.add(rim);
 
 // ================= noise + textures =================
 function hash(x, y, z) { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); }
@@ -880,6 +879,18 @@ const cloudTex = sphereTexture(512, 256, (x, y, z) => {
   const n = fbm(x, y, z, 2.2, 40) * .7 + noise(x * 9, y * 9, z * 9) * .3;
   return [255, 255, 255, Math.round(ss(.5, .72, n) * 235)];
 });
+const WAVES = (() => { // a tiling ripple pattern that makes the sea glitter where the sun hits it
+  const S = 256, c = document.createElement("canvas"); c.width = c.height = S;
+  const g = c.getContext("2d"), img = g.createImageData(S, S), h = new Float32Array(S * S), T = Math.PI * 2 / S;
+  const waves = Array.from({ length: 14 }, () => [Math.round(rnd(-14, 14)), Math.round(rnd(-14, 14)), Math.random() * 6, rnd(.3, 1)]);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { let v = 0; for (const [a, b, ph, k] of waves) v += Math.sin((a * x + b * y) * T + ph) * k / Math.max(1, Math.hypot(a, b) * .25); h[y * S + x] = v; }
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const dx = h[y * S + (x + 1) % S] - h[y * S + (x + S - 1) % S], dy = h[((y + 1) % S) * S + x] - h[((y + S - 1) % S) * S + x], o = (y * S + x) * 4;
+    const l = Math.hypot(dx, dy, 2); img.data.set([(-dx / l * .5 + .5) * 255, (-dy / l * .5 + .5) * 255, (2 / l * .5 + .5) * 255, 255], o);
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 5); return t;
+})();
 function glowTexture() {
   const c = document.createElement("canvas"); c.width = c.height = 128;
   const g = c.getContext("2d"), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
@@ -889,21 +900,28 @@ function glowTexture() {
 }
 const GLOW = glowTexture();
 
-// sky: nebula, twinkling stars and a sun, all following the camera so they feel endlessly far
+// sky: the Milky Way, colored nebulas, far galaxies, twinkling stars and a blazing sun, all following the camera so they feel endlessly far
 const sky = new THREE.Group(); scene.add(sky);
+const BAND = new THREE.Vector3(.2, 1, -.35).normalize(); // the Milky Way is a glowing belt around this axis
+const NEB = sphereTexture(1024, 512, (x, y, z) => {
+  const d = x * BAND.x + y * BAND.y + z * BAND.z, band = Math.exp(-d * d / .045), core = Math.exp(-d * d / .008);
+  const n = fbm(x, y, z, 2.2, 3), m = fbm(x, y, z, 5, 17), dust = ss(.5, .72, fbm(x, y, z, 4.2, 29)); // dark dust lanes cut through the belt
+  const glow = band * (.35 + .9 * n) * (1 - dust * .8 * band) + core * m * .6 * (1 - dust * .7);
+  const red = ss(.56, .82, fbm(x, y, z, 1.6, 51)) * (.4 + band * .6), teal = ss(.6, .85, fbm(x, y, z, 1.9, 77)) * .8, faint = fbm(x, y, z, 1.1, 5) * .25;
+  return [
+    Math.min(255, Math.round(3 + 52 * glow + 70 * red + 8 * faint)),
+    Math.min(255, Math.round(4 + 46 * glow + 14 * red + 34 * teal + 8 * faint)),
+    Math.min(255, Math.round(9 + 54 * glow + 34 * red + 44 * teal + 16 * faint)), 255];
+});
+sky.add(new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 40), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, depthWrite: false })));
 {
-  const neb = sphereTexture(512, 256, (x, y, z) => {
-    const a = fbm(x, y, z, 1.4, 3), b = fbm(x, y, z, 2.8, 9);
-    const k = ss(.42, .78, a), m = ss(.45, .8, b);
-    return [Math.round(6 + 38 * k + 34 * m), Math.round(5 + 12 * k + 18 * m), Math.round(16 + 64 * k + 24 * m), 255];
-  });
-  sky.add(new THREE.Mesh(new THREE.SphereGeometry(3000, 48, 32), new THREE.MeshBasicMaterial({ map: neb, side: THREE.BackSide, depthWrite: false })));
-  const N = 6000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N), tw = new Float32Array(N);
+  const N = 9000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N), tw = new Float32Array(N), v = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
-    const v = new THREE.Vector3().randomDirection().multiplyScalar(2600);
-    p.set([v.x, v.y, v.z], i * 3);
-    const t = Math.random(); c.set(t > .85 ? [1, .8, .6] : t > .65 ? [.7, .85, 1] : [1, 1, 1], i * 3);
-    sz[i] = Math.random() < .03 ? rnd(4, 7) : rnd(1.2, 3); tw[i] = Math.random();
+    v.randomDirection();
+    if (i % 5 < 3) { v.addScaledVector(BAND, -v.dot(BAND) * (1 - Math.random() * .3)).normalize(); } // most stars crowd into the Milky Way
+    v.multiplyScalar(2600); p.set([v.x, v.y, v.z], i * 3);
+    const t = Math.random(); c.set(t > .9 ? [1, .72, .5] : t > .75 ? [1, .9, .75] : t > .5 ? [.72, .84, 1] : [1, 1, 1], i * 3); // real stars: blue-white, white, yellow, orange
+    sz[i] = Math.random() < .02 ? rnd(4, 7) : Math.random() < .3 ? rnd(2, 3.5) : rnd(.9, 2); tw[i] = Math.random();
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(p, 3)); g.setAttribute("scol", new THREE.BufferAttribute(c, 3));
@@ -911,13 +929,55 @@ const sky = new THREE.Group(); scene.add(sky);
   const starMat = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 }, pr: { value: renderer.getPixelRatio() } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `attribute vec3 scol; attribute float size; attribute float tw; uniform float time; uniform float pr; varying vec3 vC; varying float vA;
-      void main(){ vC=scol; vA=.6+.4*sin(time*(1.+tw*3.)+tw*50.); vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; gl_PointSize=size*pr; }`,
-    fragmentShader: `varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,r); gl_FragColor=vec4(vC*a*a*vA*1.4,1.); }`,
+      void main(){ vC=scol; vA=.75+.25*sin(time*(1.+tw*3.)+tw*50.); vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; gl_PointSize=size*pr; }`,
+    fragmentShader: `varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,r); gl_FragColor=vec4(vC*a*a*vA*1.5,1.); }`,
   });
   sky.userData.starMat = starMat;
   sky.add(new THREE.Points(g, starMat));
-  const sunSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(4, 3.4, 2.4), blending: THREE.AdditiveBlending, depthWrite: false }));
-  sunSprite.position.copy(SUN_DIR).multiplyScalar(2400); sunSprite.scale.setScalar(520); sky.add(sunSprite);
+  // far-away spiral galaxies, tiny and faint
+  const galaxyTex = (() => {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 128; const gx = cv.getContext("2d");
+    const gr = gx.createRadialGradient(64, 64, 0, 64, 64, 20); gr.addColorStop(0, "rgba(255,240,215,1)"); gr.addColorStop(1, "rgba(255,240,215,0)"); gx.fillStyle = gr; gx.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 1400; i++) { const arm = i % 2, r = Math.pow(Math.random(), .7) * 58, a = r * .09 + arm * Math.PI + (Math.random() - .5) * .9; gx.fillStyle = `rgba(${170 + Math.random() * 60 | 0},${190 + Math.random() * 50 | 0},255,${(.5 * (1 - r / 60)).toFixed(2)})`; gx.fillRect(64 + Math.cos(a) * r, 64 + Math.sin(a) * r * .45, 1.4, 1.4); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  for (const [d, s, rot] of [[[-.6, .3, -.74], 90, .4], [[.3, -.55, .78], 60, 2], [[-.2, .8, .55], 45, 1.1], [[.85, -.1, -.5], 70, 2.6]]) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: galaxyTex, blending: THREE.AdditiveBlending, depthWrite: false, opacity: .55, rotation: rot }));
+    m.position.copy(V(d).normalize()).multiplyScalar(2550); m.scale.setScalar(s); sky.add(m);
+  }
+  // the sun: a white-hot core, a soft warm glow around it, and a lens flare when you look at it
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(9, 8.4, 7.4), blending: THREE.AdditiveBlending, depthWrite: false }));
+  core.position.copy(SUN_DIR).multiplyScalar(2400); core.scale.setScalar(70); sky.add(core);
+  const SOFT = (() => { // light that fades fast and then lingers, like a real bright star
+    const cv = document.createElement("canvas"); cv.width = cv.height = 256; const gx = cv.getContext("2d"), gr = gx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    [[0, 1], [.04, .7], [.1, .28], [.25, .08], [.5, .02], [1, 0]].forEach(([k, a]) => gr.addColorStop(k, `rgba(255,255,255,${a})`)); gx.fillStyle = gr; gx.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(cv);
+  })();
+  const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: SOFT, color: new THREE.Color(1, .7, .42), blending: THREE.AdditiveBlending, depthWrite: false, opacity: .45 }));
+  corona.position.copy(core.position); corona.scale.setScalar(420); sky.add(corona);
+  const flareTex = (kind) => {
+    const cv = document.createElement("canvas"); cv.width = cv.height = 128; const gx = cv.getContext("2d");
+    if (kind === "ring") { gx.strokeStyle = "rgba(255,255,255,.5)"; gx.lineWidth = 6; gx.filter = "blur(3px)"; gx.beginPath(); gx.arc(64, 64, 50, 0, 7); gx.stroke(); }
+    else if (kind === "hex") { gx.fillStyle = "rgba(255,255,255,.5)"; gx.filter = "blur(2px)"; gx.beginPath(); for (let i = 0; i < 6; i++) gx.lineTo(64 + Math.cos(i * Math.PI / 3) * 54, 64 + Math.sin(i * Math.PI / 3) * 54); gx.fill(); }
+    else { const gr = gx.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(.06, "rgba(255,245,230,.6)"); gr.addColorStop(.25, "rgba(255,240,220,.1)"); gr.addColorStop(1, "rgba(255,255,255,0)"); gx.fillStyle = gr; gx.fillRect(0, 0, 128, 128); for (let i = 0; i < 2; i++) { gx.fillStyle = "rgba(255,255,255,.18)"; gx.save(); gx.translate(64, 64); gx.rotate(i * Math.PI / 2 + .3); gx.fillRect(-64, -.8, 128, 1.6); gx.restore(); } }
+    return new THREE.CanvasTexture(cv);
+  };
+  const flare = new Lensflare(), fhex = flareTex("hex"), fring = flareTex("ring");
+  flare.addElement(new LensflareElement(flareTex("star"), 260, 0, new THREE.Color(1, .95, .85)));
+  flare.addElement(new LensflareElement(fhex, 50, .35, new THREE.Color(.06, .1, .07)));
+  flare.addElement(new LensflareElement(fring, 110, .55, new THREE.Color(.05, .06, .11)));
+  flare.addElement(new LensflareElement(fhex, 80, .75, new THREE.Color(.08, .05, .1)));
+  flare.addElement(new LensflareElement(fhex, 34, .9, new THREE.Color(.1, .08, .05)));
+  flare.addElement(new LensflareElement(fring, 170, 1.05, new THREE.Color(.04, .07, .07)));
+  flare.position.copy(core.position); sky.add(flare); sky.userData.flare = flare;
+}
+// reflections: shiny things mirror this space sky and the sun, not an indoor room
+{
+  const envScene = new THREE.Scene();
+  envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 48, 32), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, color: new THREE.Color(2.2, 2.2, 2.4) })));
+  const s = new THREE.Mesh(new THREE.SphereGeometry(4, 24, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(60, 54, 44) })); s.position.copy(SUN_DIR).multiplyScalar(40); envScene.add(s);
+  const fill = new THREE.Mesh(new THREE.SphereGeometry(14, 24, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(.25, .32, .5) })); fill.position.set(-25, -30, -20); envScene.add(fill); // faint light bouncing off a far planet
+  scene.environment = pmrem.fromScene(envScene, .02).texture;
 }
 
 // ================= particles =================
@@ -1348,21 +1408,29 @@ class Planet {
     if (Array.isArray(data.stamps)) for (const st of data.stamps) this.stamp(V(st.slice(0, 3)).normalize(), ["laser", "missile", "bomb", "bomb"][st[3]] || "laser");
     g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(U * 3), 3));
     g.setAttribute("glow", new THREE.BufferAttribute(new Float32Array(U), 1));
+    g.setAttribute("city", new THREE.BufferAttribute(new Float32Array(U), 1));
     this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9, metalness: 0, envMapIntensity: .15 });
-    this.mat.onBeforeCompile = (sh) => { // cracks and wounds glow like lava
-      sh.vertexShader = "attribute float glow;\nvarying float vGlow;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow;");
-      sh.fragmentShader = "varying float vGlow;\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, .32, .06) * vGlow * 1.6;");
+    this.mat.onBeforeCompile = (sh) => { // cracks and wounds glow like lava; towns twinkle on the night side
+      sh.uniforms.sunDir = { value: SUN_DIR };
+      sh.vertexShader = "attribute float glow;\nattribute float city;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal);");
+      sh.fragmentShader = "uniform vec3 sunDir;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+totalEmissiveRadiance += vec3(1.0, .32, .06) * vGlow * 1.6;
+float night = smoothstep(.08, -.22, dot(normalize(vWN), sunDir));
+float town = step(.85, h3(floor(vDir * 170.))) * (.4 + .6 * h3(floor(vDir * 47.))) + .04;
+totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     };
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.userData.planet = this;
-    this.ocean = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ roughness: .16, metalness: .05, transparent: true, opacity: .9, envMapIntensity: .45 }));
+    this.ocean = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ roughness: .1, metalness: .1, transparent: true, opacity: .92, envMapIntensity: .3, normalMap: WAVES, normalScale: new THREE.Vector2(.45, .45) }));
     this.clouds = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, depthWrite: false, roughness: 1, envMapIntensity: .3 }));
     const atmoShader = (back) => new THREE.ShaderMaterial({
       side: back ? THREE.BackSide : THREE.FrontSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
       uniforms: { col: { value: new THREE.Color() }, sun: { value: SUN_DIR } },
       vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ vN=normalize(normalMatrix*normal); vW=normalize(mat3(modelMatrix)*normal); vec4 p=modelViewMatrix*vec4(position,1.); vV=normalize(-p.xyz); gl_Position=projectionMatrix*p; }`,
       fragmentShader: back
-        ? `uniform vec3 col; uniform vec3 sun; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float f=pow(1.0-abs(dot(vN,vV)),3.0); float lit=.35+.65*smoothstep(-.4,.6,dot(vW,sun)); gl_FragColor=vec4(col*f*lit*.38,1.); }`
-        : `uniform vec3 col; uniform vec3 sun; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float f=pow(1.0-max(0.,dot(vN,vV)),3.5); float lit=.25+.75*smoothstep(-.3,.6,dot(vW,sun)); gl_FragColor=vec4(col*f*lit*.22,1.); }`,
+        // the outer haze: brightest just above the ground, fading out into space, lit by the sun and orange at sunset
+        ? `uniform vec3 col; uniform vec3 sun; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float sd=dot(vW,sun); float f=pow(smoothstep(0.,.6,abs(dot(vN,vV))),2.2); float lit=.06+.94*smoothstep(-.35,.45,sd); vec3 c=mix(vec3(1.,.42,.16),col,smoothstep(-.12,.3,sd)); gl_FragColor=vec4(c*f*lit*1.1,1.); }`
+        // the thin bright edge where you look through the most air
+        : `uniform vec3 col; uniform vec3 sun; varying vec3 vN; varying vec3 vV; varying vec3 vW; void main(){ float sd=dot(vW,sun); float f=pow(1.0-max(0.,dot(vN,vV)),3.); float lit=.04+.96*smoothstep(-.25,.5,sd); vec3 c=mix(vec3(1.,.45,.2),col,smoothstep(-.1,.3,sd)); gl_FragColor=vec4(c*f*lit*.75,1.); }`,
     });
     this.atmoBack = new THREE.Mesh(sphereGeo, atmoShader(true));
     this.atmoRim = new THREE.Mesh(sphereGeo, atmoShader(false));
@@ -1453,16 +1521,19 @@ class Planet {
     const K = {}; for (const k of ["sea", "shore", "low", "high", "peak", "p1", "p2"]) K[k] = new THREE.Color(d[k]);
     const seaFloor = K.sea.clone().multiplyScalar(.45);
     const col = new THREE.Color(), n = new THREE.Vector3();
-    const pos = this.geo.attributes.position.array, cols = this.geo.attributes.color.array, glow = this.geo.attributes.glow.array;
+    const pos = this.geo.attributes.position.array, cols = this.geo.attributes.color.array, glow = this.geo.attributes.glow.array, city = this.geo.attributes.city.array;
+    const crowd = this.alive ? Math.min(1, .25 + this.data.pop / Math.max(1, this.data.maxPop)) : 0, cs = d.seed * 3.1 + 40;
     const stress = this.alive ? ss(60, 4, this.data.hp) : 0; // 0 = healthy, 1 = about to blow
     this.hot.length = 0;
     for (let u = 0; u < this.U; u++) {
       n.fromArray(this.dirs, u * 3);
       const t = this.base[u] + this.sculpt[u] - d.seaLevel;
       let elev;
+      city[u] = 0;
       if (hasSea && t < 0) { elev = Math.max(-.08, t * .35); col.copy(seaFloor).lerp(K.shore, ss(-.05, 0, t) * .8); this.land[u] = 0; }
       else {
         const tt = Math.max(0, t); elev = Math.min(1.3, tt * d.mountains * .55); this.land[u] = 1;
+        city[u] = crowd * ss(.6, .74, noise(n.x * 6 + cs, n.y * 6, n.z * 6)) * (1 - ss(.1, .17, tt)); // towns cluster in the lowlands
         col.copy(hasSea ? K.shore : K.low).lerp(K.low, ss(.012, .04, tt)).lerp(K.high, ss(.08, .14, tt)).lerp(K.peak, ss(.17, .24, tt));
         const lon = Math.atan2(n.z, n.x), lat = Math.asin(n.y);
         if (d.pattern === "stripes") col.copy(K.p2).lerp(K.p1, ss(-.15, .15, Math.sin(lon * 8 + lat * 2)));
@@ -1477,19 +1548,19 @@ class Planet {
       let gl = dm > .3 ? ss(.3, 1, dm) * (.35 + .65 * ss(.6, .95, this.ridge[u])) : 0;
       if (stress) gl = Math.max(gl, stress * ss(.93 - stress * .1, .985, this.ridge[u]));
       if (gl > .05) { elev -= gl * .025; col.lerp(SCORCH, gl * .6); if (gl > .3) this.hot.push(u); }
-      glow[u] = gl;
+      glow[u] = gl; if (dm || gl > .05) city[u] = 0;
       const r = this.radius[u] = R * this.shapeK[u] * (1 + elev);
       pos[u * 3] = n.x * r; pos[u * 3 + 1] = n.y * r; pos[u * 3 + 2] = n.z * r;
       cols[u * 3] = col.r; cols[u * 3 + 1] = col.g; cols[u * 3 + 2] = col.b;
     }
-    this.geo.attributes.position.needsUpdate = this.geo.attributes.color.needsUpdate = this.geo.attributes.glow.needsUpdate = true;
+    this.geo.attributes.position.needsUpdate = this.geo.attributes.color.needsUpdate = this.geo.attributes.glow.needsUpdate = this.geo.attributes.city.needsUpdate = true;
     this.geo.computeVertexNormals(); this.geo.computeBoundingSphere();
     this.ocean.visible = hasSea; this.ocean.scale.setScalar(R);
     this.ocean.material.color.set(d.sea); this.ocean.material.emissive.set(d.sea); this.ocean.material.emissiveIntensity = (d.glow || 0) * .45;
     this.clouds.visible = !!d.clouds; if (d.clouds) this.clouds.material.color.set(d.clouds);
     this.clouds.scale.setScalar(R * 1.04);
     this.atmoBack.material.uniforms.col.value.set(d.atmo); this.atmoRim.material.uniforms.col.value.set(d.atmo);
-    this.atmoBack.scale.setScalar(R * 1.13); this.atmoRim.scale.setScalar(R * 1.06);
+    this.atmoBack.scale.setScalar(R * 1.16); this.atmoRim.scale.setScalar(R * 1.05);
     const disco = d.template === "disco";
     this.mat.metalness = disco ? .75 : 0; this.mat.roughness = disco ? .22 : .82; this.mat.envMapIntensity = disco ? .9 : .15;
     this.buildGrid();
@@ -1733,11 +1804,11 @@ class Planet {
     for (let i = this.signs.length - 1; i >= 0; i--) {
       const sp = this.signs[i], pr = sp.userData.person;
       if (!signing || clock() > sp.userData.until || pr.state !== "walk") { this.spin.remove(sp); sp.material.dispose(); this.signs.splice(i, 1); continue; }
-      const k = Math.sqrt(this.R / 1.6) * (this.style.size || 1); sp.position.copy(pr.dir).multiplyScalar(this.radiusAt(pr.dir) + .62 * k); sp.scale.set(1.15 * k, .36 * k, 1);
+      const k = Math.sqrt(this.R / 1.6) * (this.style.size || 1); sp.position.copy(pr.dir).multiplyScalar(this.radiusAt(pr.dir) + .45 * k); sp.scale.set(1.15 * k, .36 * k, 1);
     }
     // pose every person: walking legs and arms, waving when happy, flailing when scared or thrown
     let k = 0;
-    const x = new THREE.Vector3(), P = this.parts, sc = 1.3 * Math.sqrt(this.R / 1.6) * (this.style.size || 1), M = new THREE.Matrix4(), L = new THREE.Matrix4(), R = new THREE.Matrix4(), e = new THREE.Euler();
+    const x = new THREE.Vector3(), P = this.parts, sc = .85 * Math.sqrt(this.R / 1.6) * (this.style.size || 1), M = new THREE.Matrix4(), L = new THREE.Matrix4(), R = new THREE.Matrix4(), e = new THREE.Euler();
     _s.setScalar(sc);
     for (const p of this.people) {
       let swing = 0, armUp = .12, wave = 0;
@@ -1960,10 +2031,10 @@ function bar(a, b, r, mat) { // a thin rod between two points
 function makeShipModel(c, root) {
   root.clear();
   const fin = c.finish || "metal", F = { metal: [.6, .3, .7], chrome: [.95, .1, .75], matte: [.05, .8, .25], carbon: [.45, .45, .4], neon: [.35, .4, .4] }[fin];
-  const body = new THREE.MeshStandardMaterial({ color: c.body, metalness: F[0], roughness: F[1], envMapIntensity: F[2] * .6 });
+  const body = new THREE.MeshStandardMaterial({ color: c.body, metalness: F[0], roughness: F[1], envMapIntensity: F[2] * 1.1 });
   if (fin === "carbon") body.map = CARBON_TEX;
   if (fin === "neon") { body.emissive.set(c.glow || "#6fe3ff"); body.emissiveIntensity = .1; }
-  const trim = new THREE.MeshStandardMaterial({ color: c.accent, metalness: .35, roughness: .4, envMapIntensity: .6 });
+  const trim = new THREE.MeshStandardMaterial({ color: c.accent, metalness: .35, roughness: .4, envMapIntensity: 1 });
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x6fe3ff, emissive: 0x0d3a52, roughness: .05, metalness: .1, clearcoat: 1 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c2028, metalness: .7, roughness: .35 });
   const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.glow || "#6fe3ff").multiplyScalar(1.1) });
@@ -2185,6 +2256,7 @@ function makeShipModel(c, root) {
     add(new THREE.TorusGeometry(.027, .006, 8, 24), glowMat, [x, 0, back - .03]);
     const f = add(flameGeo(c.flameShape), fireMat, [x, 0, back - .03], [-H, 0, 0]); f.name = "flame"; f.userData.fs = c.flameSize || 1; f.scale.setScalar(f.userData.fs);
   }
+  root.traverse((o) => { if (o.name === "navlight" && !o.children.length) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: o.material.color.clone().multiplyScalar(.5), blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(.09); o.add(h); } }); // blinking lights glow into the dark
   root.scale.setScalar(c.size);
   const info = { muzzles: muzzles.map((m) => V(m)), len: (nose - back) * c.size * 1.05, radius: (side + .1) * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
   collectParts(root, info);
@@ -4355,6 +4427,7 @@ function frame() {
   const realDt = Math.min(timer.getDelta(), .05), dt = realDt * slow, t = timer.elapsedTime;
   drawMinimap(); updateThreats();
   sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t;
+  WAVES.offset.set(t * .004, t * .0025);
   const still = reduce || brushing || (mode === "home" && (!!tool || view === "design" || view === "build"));
   if (!still) home.spin.rotation.y += dt * .04;
   for (const p of planets) {
