@@ -772,6 +772,13 @@ const sfx = (() => {
       for (const [d, f] of [[0, 900], [.11, 1200], [.22, 900]]) { const o = osc("square", f, f, t + d, .07), g = env(gain(), t + d, .003, .06); o.connect(filt("bandpass", 1500, 1500, t, 1, 3)).connect(g); out(g, .05, .1); }
     },
     boom(s = 1, at) { explosion(s, at); },
+    shipBlast(at, S = 1) { // huge layered blast: crack, roar, deep sub drop, then crackling debris
+      if (!ok()) return; const t = ac.currentTime, v = Math.max(.45, near(at));
+      explosion(4 * S, at, 2.2);
+      const s = osc("sine", 70, 18, t, 1.8), sg = env(gain(), t, .004, 1.8); s.connect(sg); out(sg, .9 * v, .3);
+      const r = noise(t, 2.5, .45), l = filt("lowpass", 1800, 80, t, 2.4, .7), rg = env(gain(), t, .01, 2.4); r.connect(l).connect(shaper(3)).connect(rg); out(rg, .55 * v, .7);
+      for (let i = 0; i < 14; i++) { const tt = t + .15 + Math.random() * 1.4, c = noise(tt, .12, 1 + Math.random()), h = filt("bandpass", 900 + Math.random() * 2500, 400, tt, .12, 1.5), cg = env(gain(), tt, .002, .08 + Math.random() * .12); c.connect(h).connect(cg); out(cg, .1 * v * Math.random(), .5); }
+    },
     rumble(at) { // the planet groans before it blows
       if (!ok()) return; const t = ac.currentTime, v = near(at);
       const n = noise(t, 1.5, .4), l = filt("lowpass", 90, 420, t, 1.4, 2), g = gain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + 1.3); g.gain.exponentialRampToValueAtTime(.0001, t + 1.5);
@@ -1041,6 +1048,30 @@ function boom(at, scale = 1) {
   s.position.copy(at); scene.add(s);
   addFx(.35, (k) => { s.scale.setScalar(scale * (.5 + k * 2.5)); s.material.opacity = 1 - k; }, () => { scene.remove(s); s.material.dispose(); });
   shake = Math.max(shake, .05 * scale * Math.max(0, 1 - camera.position.distanceTo(at) / 30));
+}
+function shipBlast(at, r, bodyColor, big) { // a ship blowing up: white flash, fireball, chain blasts, shockwaves, burning debris
+  const p = at.clone(), S = Math.max(1, Math.sqrt(r)) * (big ? 1.6 : 1), v = new THREE.Vector3(), near = Math.max(0, 1 - camera.position.distanceTo(p) / (40 * S));
+  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(8, 7, 6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  fl.position.copy(p); scene.add(fl); // blinding core flash
+  addFx(.5, (k) => { fl.scale.setScalar(S * (3 + k * 14)); fl.material.opacity = (1 - k) ** 2; }, () => { scene.remove(fl); fl.material.dispose(); });
+  boom(p, 3.2 * S);
+  for (let i = 0; i < 260 * Math.min(2, S); i++) fire.spawn(p, v.randomDirection().multiplyScalar(rnd(4, 14) * S), rnd(.2, .5), rnd(.03, .07) * S, HOT, ORANGE, 0, 1.2); // fast sparks
+  const cam = camera.position.clone().sub(p).normalize();
+  ring(p, cam, 9 * S, .9, new THREE.Color(3, 2.4, 1.6), .06); // shockwave facing you
+  ring(p, v.randomDirection().clone(), 6 * S, 1.2, new THREE.Color(2.2, 1.2, .6), .1);
+  ring(p, new THREE.Vector3(0, 1, 0), 12 * S, 1.6, new THREE.Color(1.2, 1.6, 2.6), .04);
+  for (let i = 0; i < (big ? 9 : 5); i++) addFx(rnd(.08, .7), () => {}, () => { // chain explosions ripple outward
+    const q = p.clone().add(v.randomDirection().multiplyScalar(rnd(.5, 2.2) * S * r * .6)); boom(q, rnd(1, 2) * S); sfx.boom(rnd(.8, 1.4), q);
+  });
+  const col = new THREE.Color(bodyColor);
+  for (let i = 0; i < (big ? 50 : 30); i++) chunks.spawn(p, v.randomDirection().multiplyScalar(rnd(3, 11) * S).clone(), rnd(.04, .12) * S, col, rnd(2, 4));
+  for (let i = 0; i < (big ? 14 : 8); i++) { // burning wreckage flies off trailing fire and smoke
+    const pos = p.clone(), vel = v.randomDirection().multiplyScalar(rnd(5, 12) * S).clone();
+    addFx(rnd(1.2, 2.2), (k, dt) => { pos.addScaledVector(vel, dt); vel.multiplyScalar(1 - dt * .6);
+      fire.spawn(pos, new THREE.Vector3(), .35, .12 * S * (1 - k), HOT, i % 2 ? ORANGE : RED, 1, 1); if (Math.random() < .5) smoke.spawn(pos, new THREE.Vector3(), 1.2, .14 * S, SMOKE0, SMOKE1, 2, 1); });
+  }
+  if (near > 0) { flashScreen("#fff1d0", .25 + .5 * near); shake = Math.max(shake, .25 * S * near); }
+  sfx.shipBlast(p, S);
 }
 function ring(at, normal, size, dur, color, width = .12) {
   const m = new THREE.Mesh(new THREE.RingGeometry(1 - width, 1, 128), new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
@@ -3498,10 +3529,9 @@ class Npc {
   destroy() {
     this.dead = true; this.group.visible = false; this.tag.hidden = true; this.respawnAt = this.T.big ? 120 : 40;
     const big = this.T.big ? this.info.radius : 1;
-    boom(this.group.position, 2.2 * Math.sqrt(big)); sfx.boom(2.2 * Math.min(4, Math.sqrt(big)), this.group.position);
-    if (this.T.big) { ring(this.group.position, new THREE.Vector3(0, 1, 0), this.info.radius * 4, 2.5, new THREE.Color(2.5, 1.6, 1), .08); flashScreen("#fff3d6", .5); shake = Math.max(shake, .3); }
-    const v = new THREE.Vector3();
-    for (let i = 0; i < 14; i++) chunks.spawn(this.group.position, v.randomDirection().multiplyScalar(rnd(2, 7)).clone(), rnd(.03, .08), new THREE.Color(NPC_TYPES[this.type].cfg.body), rnd(1.5, 3));
+    shipBlast(this.group.position, big, NPC_TYPES[this.type].cfg.body, !!this.T.big);
+    if (this.T.big) ring(this.group.position, new THREE.Vector3(0, 1, 0), this.info.radius * 4, 2.5, new THREE.Color(2.5, 1.6, 1), .08);
+    if (this.group.position.distanceTo(ship.position) < 60) { slow = .35; setTimeout(() => (slow = 1), 450); } // a short slow-motion moment for a close kill
     earn(this.T.big ? 250 : 30, `${this.name} destroyed`);
     missionEvent("kill"); if (this.role === "pirate") missionEvent("kill:pirate"); if (this.T.big) missionEvent("kill:big");
   }
