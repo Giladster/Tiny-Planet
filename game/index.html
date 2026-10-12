@@ -133,6 +133,17 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 .toast { padding: 9px 14px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font: 600 15px var(--display); text-align: center; animation: pop .25s ease-out; }
 .toast.boom { border-color: var(--danger); color: #ffd0d6; font-size: 18px; }
 @keyframes pop { from { transform: scale(.85); opacity: 0; } }
+#radio { top: calc(212px + env(safe-area-inset-top, 0px)); left: 16px; width: 290px; padding: 10px 12px; display: grid; gap: 7px; font-size: 13px; line-height: 1.4; }
+@media (max-width: 700px) { #radio { top: calc(150px + env(safe-area-inset-top, 0px)); width: calc(100% - 32px); max-width: 340px; } }
+#radio .rhead { display: flex; align-items: center; gap: 6px; font: 600 13px var(--display); letter-spacing: .06em; }
+#radio .rhead button { margin-left: auto; padding: 1px 8px; }
+#radio .bolt { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgba(111,227,255,.15); border: 1px solid var(--line); }
+#radio.talk .bolt { animation: boltTalk .3s ease-in-out infinite alternate; }
+@keyframes boltTalk { to { transform: scale(1.12); background: rgba(111,227,255,.35); } }
+#radioText { min-height: 18px; }
+#radioGoal { padding: 7px 9px; border-radius: 8px; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.35); color: var(--accent); font: 500 12px var(--mono); }
+#radio.min #radioText { display: none; }
+.xpbar { width: 60px; } .xpbar i { background: linear-gradient(90deg, #6fe3ff, #c8a2ff); }
 #flash { position: fixed; inset: 0; z-index: 6; pointer-events: none; background: #fff; opacity: 0; }
 
 .hpbar { display: inline-block; vertical-align: middle; width: 110px; height: 9px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; margin: 0 4px; }
@@ -415,7 +426,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 </section>
 
 <div id="flyHud" class="hud" hidden>
-  <span>SHIP <b id="hudShip">—</b></span><span>HULL <span class="hpbar"><i id="hudHpBar"></i></span> <b id="hudHp">100</b>%</span><span>SPEED <b id="hudSpeed">0</b> km/s</span><span>💰 <b id="hudCredits">0</b></span>
+  <span>SHIP <b id="hudShip">—</b></span><span>HULL <span class="hpbar"><i id="hudHpBar"></i></span> <b id="hudHp">100</b>%</span><span>SPEED <b id="hudSpeed">0</b> km/s</span><span>💰 <b id="hudCredits">0</b></span><span>LV <b id="hudLv">1</b> <span class="hpbar xpbar"><i id="hudXp"></i></span></span>
   <span id="navHud" hidden>NAV <b id="navName"></b> <b id="navDist"></b><button id="navStop" aria-label="Stop navigation">✕</button></span>
 </div>
 <section id="target" class="hud" hidden>
@@ -430,6 +441,11 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <div id="threats"></div>
 <div id="lockBox" hidden><span id="lockText">LOCKING…</span></div>
 <div id="tip" class="hud" hidden></div>
+<section id="radio" class="hud" hidden aria-live="polite">
+  <div class="rhead"><span class="bolt">🤖</span><b>BOLT</b><span class="small">· ship radio</span><span id="radioLv" class="small"></span><button id="radioMin" aria-label="Shrink radio">–</button></div>
+  <div id="radioText"></div>
+  <div id="radioGoal" hidden></div>
+</section>
 <div id="tags"></div>
 <div id="toasts"></div>
 <div id="flash"></div>
@@ -2430,7 +2446,7 @@ function renderPanels() {
   if (ui.pranks) renderPranks();
   if (ui.god) renderGod();
   if (ui.missions) renderMissions();
-  updateHint();
+  updateHint(); if (tutReady) renderGoal();
 }
 // drop-down menus in the dock
 document.querySelectorAll(".dd").forEach((d) => {
@@ -2970,6 +2986,7 @@ function hailOptions(t) {
   if (role === "trader" && type !== "racer") o.push(
     ["🔧 Repair my ship · 💰20", () => buy(20, () => { shipHp = 100; say("All fixed. Fly safe! 🔧"); })],
     ["📦 Buy a mystery crate · 💰40", () => buy(40, () => { const r = Math.random(), win = r < .35 ? 0 : r < .8 ? 70 : 160; if (win) earn(win, "mystery crate"); say(win ? `Lucky you! The crate had ${win} credits inside. 🎉` : "Oops… it was full of rubber ducks. 🦆"); })],
+    ...((wallet.owned || []).includes("twin") ? [] : [["🔫 Buy Twin cannons for my ship · 💰120", () => buy(120, () => { wallet.owned.push("twin"); saveWallet(); state.ship.guns = [...new Set([...(state.ship.guns || []), "twin"])]; buildShip(); save(); say("Fitted! Two lasers at once. Go get 'em! 🔫"); toast("🛒 You bought the Twin cannons!"); renderHail(); })]]),
     ["🗺 Ask for a tip", () => { const c = planets.filter((p) => p !== home && p.alive && !p.data.npc); const p = c[(Math.random() * c.length) | 0]; if (!p) return say("Quiet galaxy today."); setNav(p); say(`Psst… ${p.data.name} has ${fmt(p.data.pop)} people and nobody has pranked them in ages. 😈 I put it on your nav.`); }]);
   if (type === "miner") o.push(["⛏ Hire them to mine for you · 💰50", () => buy(50, () => { say("Deal! Back in 90 seconds with crystals. ⛏"); setTimeout(() => earn(130, "your miner brought crystals"), 90000); })]);
   if (type === "tourist") o.push(["📸 Take a selfie together", () => { flashScreen("#ffffff", .5); earn(5, "the tourists tipped you"); missionEvent("selfie"); say("Cheese! 📸 They love it."); }]);
@@ -3020,6 +3037,7 @@ function M() {
 }
 function saveMissions() { try { localStorage.setItem(MISSIONKEY, JSON.stringify(missions)); } catch {} }
 function missionEvent(ev, key) {
+  tutEvent(ev, key);
   let changed = false;
   for (const m of M().list) {
     const mt = MISSION_TYPES[m.id]; if (!mt || mt.ev !== ev || m.got >= m.n) continue;
@@ -3036,12 +3054,210 @@ function renderMissions() {
     row.className = "mission" + (done ? " done" : "");
     row.innerHTML = `<span><b>${esc(mt.text.replace("{n}", m.n))}</b><br>${Math.min(m.got, m.n)} / ${m.n} · 💰${mt.reward}</span>`;
     const b = document.createElement("button"); b.textContent = m.claimed ? "✓ Claimed" : done ? "Claim" : "…"; b.disabled = m.claimed || !done; b.className = done && !m.claimed ? "go" : "";
-    b.addEventListener("click", () => { if (m.claimed || m.got < m.n) return; m.claimed = true; saveMissions(); earn(mt.reward, "mission complete"); renderMissions(); });
+    b.addEventListener("click", () => { if (m.claimed || m.got < m.n) return; m.claimed = true; saveMissions(); earn(mt.reward, "mission complete"); addXp(Math.round(mt.reward / 2)); renderMissions(); });
     row.append(b); const bar = document.createElement("div"); bar.className = "bar"; bar.innerHTML = `<i style="width:${Math.min(100, m.got / m.n * 100)}%"></i>`; row.append(bar); el.append(row);
   }
   const mid = new Date(); mid.setHours(24, 0, 0, 0); $("missionReset").textContent = `New missions in ${fmtLeft(mid - Date.now())}`;
 }
 const visited = new Set();
+
+// ================= levels + Bolt, your robot (first steps for new explorers) =================
+// You are a young explorer who just claimed a tiny new planet in the busiest galaxy of all.
+// Bolt, the robot you brought with you, stays home to build and talks to you over the ship radio.
+const TUTKEY = "tinyplanets.tutorial";
+const xpFor = (lv) => 100 * lv * (lv - 1); // total XP you need to reach a level: 2 → 200, 3 → 600, 4 → 1200 …
+const levelOf = (xp) => { let lv = 1; while (xp >= xpFor(lv + 1)) lv++; return lv; };
+wallet.xp ||= 0;
+function addXp(n) {
+  const before = levelOf(wallet.xp); wallet.xp += n; saveWallet();
+  const lv = levelOf(wallet.xp); renderLevel();
+  if (lv > before) {
+    toast(`⭐ LEVEL ${lv}!`, "boom", 4000); sfx.cheer(); flashScreen("#ffe9a8", .35);
+    earn(lv * 50, "level up bonus");
+    if (tut.step >= TUT.length) radio(pickLine([`Level ${lv}! Our planet is getting famous, explorer. 🌟`, `Level ${lv}! I'm so proud I could short-circuit. ⚡`, `Level ${lv}! The neighbors are starting to talk about us.`]));
+  }
+}
+function renderLevel() {
+  const lv = levelOf(wallet.xp), a = xpFor(lv), b = xpFor(lv + 1);
+  $("hudLv").textContent = lv; $("hudXp").style.width = Math.min(100, (wallet.xp - a) / (b - a) * 100) + "%";
+  $("radioLv").textContent = `LV ${lv}`;
+}
+// ---- the radio box
+let radioQ = [], radioTyping = null, radioHideAt = 0;
+function radio(text) { radioQ.push(text); if (!radioTyping) nextRadio(); }
+function radioNow() { radioQ = []; radioTyping = null; } // drop old chatter: Bolt talks about what you are doing now
+function nextRadio() {
+  const text = radioQ.shift(); if (text === undefined) { radioTyping = null; return; }
+  const el = $("radioText"), my = radioTyping = { text, i: 0, t0: clock() }; el.textContent = "";
+  $("radio").classList.remove("min"); $("radio").classList.add("talk"); sfx.lock();
+  radioHideAt = 0; showRadio();
+  const tick = () => {
+    if (radioTyping !== my) return; // a newer message took over
+    my.i = Math.floor((clock() - my.t0) * 60); el.textContent = [...text].slice(0, my.i).join(""); // 60 letters a second
+    if (my.i < [...text].length) return setTimeout(tick, 30);
+    $("radio").classList.remove("talk");
+    setTimeout(() => { if (radioTyping !== my) return; radioTyping = null; if (radioQ.length) nextRadio(); else if (tut.step >= TUT.length) radioHideAt = clock() + 12; }, Math.min(4000, 900 + text.length * 25));
+  };
+  tick();
+}
+function showRadio() {
+  const busy = tut.step < TUT.length || radioTyping || radioQ.length || clock() < radioHideAt;
+  $("radio").hidden = !busy || document.body.classList.contains("joining") || (mode === "home" && view !== "main");
+}
+$("radioMin").addEventListener("click", () => $("radio").classList.toggle("min"));
+// ---- things Bolt asks you to fly to
+const tutObjs = [];
+function tutClear() { for (const o of tutObjs) { scene.remove(o); o.traverse((x) => { x.geometry?.dispose(); x.material?.dispose(); }); } tutObjs.length = 0; }
+function tutAdd(o) { scene.add(o); tutObjs.push(o); return o; }
+const navPoint = (name, pos) => ({ group: { position: pos }, R: .3, data: { name }, quiet: true });
+function homeAt(x, y, z) { return home.group.position.clone().add(new THREE.Vector3(x, y, z)); }
+function makeRing(at) {
+  const g = new THREE.Group(); g.position.copy(at);
+  g.add(new THREE.Mesh(new THREE.TorusGeometry(1.3, .07, 10, 48), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.6, 3.4) })));
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(.4, 1.6, 2.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: .5 }));
+  s.scale.setScalar(4); g.add(s);
+  g.lookAt(home.group.position); g.rotateY(Math.PI / 2); // stand across the path around the planet
+  return tutAdd(g);
+}
+function makeMoon(at) {
+  const g = new THREE.Group(); g.position.copy(at);
+  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 3), new THREE.MeshStandardMaterial({ color: 0x9a96a8, roughness: 1, flatShading: true })));
+  g.userData.crystals = [];
+  for (let i = 0; i < 4; i++) {
+    const c = new THREE.Mesh(new THREE.OctahedronGeometry(.28, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 1, 3.4) }));
+    const d = new THREE.Vector3(Math.cos(i * 1.57), .5 - (i % 2), Math.sin(i * 1.57)).normalize();
+    c.position.copy(d.multiplyScalar(2.3)); c.scale.set(1, 1.6, 1); g.add(c); g.userData.crystals.push(c);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(1.6, .7, 2.4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: .8 }));
+    glow.scale.set(1.6, 1, 1); c.add(glow);
+  }
+  return tutAdd(g);
+}
+// ---- the steps
+const TUT = [
+  { goal: () => "Press 🚀 Fly to take off",
+    enter() { radio("We made it, explorer! 🎉 Welcome to the busiest galaxy there is. Look at all those planets!"); radio("This tiny planet is ours now. I'll stay here and build, you go fly. Hit 🚀 Fly when you're ready!"); },
+    on: (ev) => ev === "fly" },
+  { goal: (s) => `Fly through the scan rings · ${s.n} / 3`, fly: true,
+    enter(s) {
+      radio("Radio check… you hear me? 📻 Fly through the 3 scan rings so I can map our planet. W to go, the mouse to steer.");
+      const R = home.R; s.rings = [homeAt(R * 5, .5, 0), homeAt(-R * 2, 1.5, R * 5.5), homeAt(-R * 4, -1, -R * 4)].map(makeRing);
+      s.rings.splice(0, s.n).forEach((r) => (r.visible = false)); if (s.rings[0]) setNav(navPoint("Scan ring", s.rings[0].position));
+    },
+    update(s, dt, t) {
+      for (const r of s.rings) r.children[0].material.color.setScalar(1).multiply(new THREE.Color(.5, 2.6, 3.4)).multiplyScalar(1 + Math.sin(t * 5) * .25);
+      const r = s.rings[0]; if (!r || mode !== "fly" || ship.position.distanceTo(r.position) > 1.7) return;
+      spark(r.position, 1, C(0x6fe3ff, 3)); sfx.place(); r.visible = false; s.rings.shift(); s.n++; save2();
+      if (s.rings[0]) { setNav(navPoint("Scan ring", s.rings[0].position)); radio(pickLine(["Got it! Next ring.", "Nice flying! One more…", "Beep boop, scanning…"])); }
+      else { earn(50, "planet scanned"); addXp(40); return true; }
+    } },
+  { goal: (s) => `Collect crystals on the moon next door · ${s.n} / 4`, fly: true,
+    enter(s) {
+      radio("Scan done! ✅ Now we need power. I see crystals on the little moon next door. Go grab them!");
+      s.moon = makeMoon(homeAt(26, 4, -18)); s.moon.userData.crystals.splice(0, s.n).forEach((c) => (c.visible = false));
+      setNav(navPoint("Crystal moon", s.moon.position));
+    },
+    update(s, dt, t) {
+      s.moon.rotation.y += dt * .2;
+      for (const c of s.moon.userData.crystals) { c.rotation.y += dt * 2; c.position.multiplyScalar(1 + Math.sin(t * 3) * .002); }
+      if (mode !== "fly") return;
+      for (const c of [...s.moon.userData.crystals]) {
+        const at = c.getWorldPosition(new THREE.Vector3()); if (ship.position.distanceTo(at) > 1.5) continue;
+        spark(at, .8, C(0xc8a2ff, 3)); sfx.place(); c.visible = false; s.moon.userData.crystals.splice(s.moon.userData.crystals.indexOf(c), 1); s.n++; save2();
+      }
+      return s.n >= 4;
+    } },
+  { goal: () => "Bring the crystals home to Bolt", fly: true,
+    enter() { radio("Got them all! 💎 Bring them home to me."); setNav(home); },
+    update() {
+      if (mode !== "fly" || ship.position.distanceTo(home.group.position) > home.R * 7) return;
+      setNav(null);
+      if (!state.home.decor.some((d) => d.type === "base")) { state.home.decor.push({ type: "base", n: [.28, .62, .73] }); home.rebuildDecor(); save(); }
+      spark(home.group.position.clone().add(new THREE.Vector3(0, home.R, 0)), 1.6, C(0x7dff9b, 3)); sfx.cheer();
+      radio("Power's on! ⚡ Look at our planet, we have our first building!"); earn(75, "first building"); addXp(60); return true;
+    } },
+  { goal: (s) => `Visit the neighbors on ${s.name || "a nearby planet"}`, fly: true,
+    enter(s) {
+      const near = planets.filter((p) => p !== home && p.alive && !p.data.npc).sort((a, b) => a.group.position.distanceTo(home.group.position) - b.group.position.distanceTo(home.group.position))[0];
+      if (!near) return; s.name = near.data.name; s.target = near.data.id || near.data.name;
+      radio(`Time to meet the neighbors! 👋 ${near.data.name} is close. Fly over and say hi. Hold Shift to boost!`); setNav(near);
+    },
+    on: (ev, key, s) => !s.target || (ev === "visit" && key === s.target),
+    after() { radio("They love you already! Everyone here is so friendly. Well… almost everyone."); addXp(20); } },
+  { goal: () => "Find a trader, press I to talk, and buy Twin cannons", fly: true,
+    enter(s) {
+      radio("Traders fly all over the galaxy. Follow the arrow to one, aim at it and press I to talk. Let's buy our ship some Twin cannons! 🔫");
+      s.pick = () => { const tr = npcs.filter((n) => !n.dead && n.role === "trader" && n.type !== "racer"); return tr.sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position))[0]; };
+      s.trader = s.pick(); s.nav = { get group() { return (s.trader || home).group; }, R: .3, data: { name: "Space trader" }, quiet: true }; setNav(s.nav);
+    },
+    update(s, dt) {
+      if ((wallet.owned || []).includes("twin")) return true;
+      if ((s.tick = (s.tick || 0) + dt) > 2) { s.tick = 0; if (!s.trader || s.trader.dead) s.trader = s.pick(); }
+    },
+    after() { setNav(null); radio("Ooh, shiny! Our ship looks way cooler now. 😎"); addXp(30); } },
+  { goal: () => "Shoot down the pirate drone near home!", fly: true,
+    enter(s) {
+      radio("🚨 Uh oh! A pirate drone is sneaking around our planet! Go get it, explorer! Click or L to shoot.");
+      const n = new Npc("pirate", { planet: home.data.name }); n.name = "Pirate drone"; n.hp = n.maxHp = 12; n.hostile = true; n.tut = true;
+      n.group.position.copy(home.group.position).add(new THREE.Vector3(home.R * 4, 1, home.R * 3)); npcs.push(n); s.drone = n;
+      s.nav = { get group() { return n.group; }, R: .3, data: { name: "Pirate drone" }, quiet: true }; setNav(s.nav);
+    },
+    update(s) {
+      const n = s.drone; if (!n) return true;
+      if (!n.dead) { n.hostile = true; return; }
+      scene.remove(n.group); n.tag.remove(); n.trail.dispose(); npcs.splice(npcs.indexOf(n), 1); setNav(null); return true;
+    },
+    after() { radio("BOOM! 💥 You got it! Our planet is safe."); earn(100, "planet defended"); addXp(50); } },
+];
+const freshPlayer = !load(WALLETKEY) && !load(KEY) && !load("tinyplanets.token"); // nothing saved yet in this browser
+let tut = load(TUTKEY) || { step: freshPlayer || new URLSearchParams(location.search).has("tutorial") ? 0 : TUT.length, n: 0 };
+const tutS = {}; // the live step's objects (not saved)
+function save2() { tut.n = tutS.n; store(TUTKEY, tut); }
+var tutReady = false; // var, so the menus can ask before this part of the game has loaded
+function tutEnter() {
+  tutReady = true;
+  tutClear(); for (const k of Object.keys(tutS)) delete tutS[k]; tutS.n = tut.n || 0;
+  const st = TUT[tut.step];
+  if (!st) { showRadio(); renderGoal(); return; }
+  st.enter?.(tutS); renderGoal(); showRadio();
+}
+function tutNext() {
+  radioNow(); const st = TUT[tut.step]; st?.after?.(tutS);
+  tut.step++; tut.n = 0; store(TUTKEY, tut);
+  if (tut.step >= TUT.length) {
+    tutClear(); setNav(null);
+    if (levelOf(wallet.xp) < 2) addXp(xpFor(2) - wallet.xp);
+    radio("We did it, partner! 🌟 We're on the galaxy map now.");
+    radio("Check 📋 Missions every day for jobs, and make our planet beautiful in 🪐 My planet → Decorate. I'll radio you with tips. Over and out! 📻");
+    renderGoal(); return;
+  }
+  tutEnter();
+}
+function tutEvent(ev, key) { const st = TUT[tut.step]; if (st && st.on && st.on(ev, key, tutS)) tutNext(); }
+function tutStep(dt, t) {
+  const st = TUT[tut.step];
+  if (st && st.update && st.update(tutS, dt, t)) tutNext();
+  if (st && (tutS.goalTick = (tutS.goalTick || 0) + dt) > .25) { tutS.goalTick = 0; renderGoal(); }
+  if (!st && !radioTyping && radioHideAt && clock() > radioHideAt) { radioHideAt = 0; showRadio(); }
+  if (!st && mode === "fly" && clock() > (tutS.nextTip ||= clock() + 150)) { tutS.nextTip = clock() + rnd(150, 240); radio(pickLine(TIPS)); }
+}
+function renderGoal() {
+  const st = TUT[tut.step], el = $("radioGoal");
+  el.hidden = !st; if (!st) return;
+  el.innerHTML = `🎯 ${esc(st.goal(tutS))}${st.fly && mode === "home" ? " · press 🚀 Fly" : ""}<span class="small"> · step ${tut.step + 1} / ${TUT.length}</span>`;
+  showRadio();
+}
+const TIPS = [
+  "Tip: aim at any ship and press I to talk. Some sell stuff, some just want a selfie. 📸",
+  "Tip: hold Shift to boost. Space and X fly up and down.",
+  "Tip: open 🗺 Map, click a planet and press Navigate. I'll draw you an arrow.",
+  "Tip: press F when your lock is ready and a missile chases the enemy down. 🚀",
+  "Tip: 📋 Missions has new jobs every day. Free credits, explorer!",
+  "Tip: the 🚀 Hangar sells better guns. Our ship deserves it.",
+  "Tip: 😈 Pranks are fun. Toilet paper on a planet never gets old.",
+  "Tip: pirates hang out near Krell Station. Fly there only when you feel brave. 🏴‍☠️",
+  "Tip: hurt? Talk to a trader and pay 20 credits for a repair. 🔧",
+  "Bolt here. I planted a little flower on our planet. Don't tell anyone. 🌸",
+];
 
 // ================= conquering =================
 const ransomOf = (d) => Math.round(100 + (d.maxPop || 8000) / 80);
@@ -3541,6 +3757,7 @@ class Npc {
     this.wreck = { t: 0, dur: this.T.big ? 3.2 : rnd(1.6, 2.2), axis: new THREE.Vector3().randomDirection(), spin: this.T.big ? rnd(.3, .6) : rnd(3, 6), pop: .2,
       vel: this.vel.clone().multiplyScalar(.5).add(new THREE.Vector3().randomDirection().multiplyScalar(this.T.big ? 1 : 4)) };
     earn(this.T.big ? 250 : 30, `${this.name} destroyed`);
+    addXp(this.T.big ? 60 : 10);
     missionEvent("kill"); if (this.role === "pirate") missionEvent("kill:pirate"); if (this.T.big) missionEvent("kill:big");
   }
 }
@@ -3781,7 +3998,7 @@ function showJoin(world) { // first visit: pick a name and a planet
     if (!name) { $("joinMsg").textContent = "Please type your player name."; $("joinName").focus(); return; }
     const base = defaults().home;
     base.design = { ...designFrom(tpl, (Math.random() * 1000) | 0), around: { sats: 1 } };
-    base.decor = base.decor.map((d) => (d.type === "sign" && d.text === "GILAD'S ROCK" ? { ...d, text: (planetName || name).toUpperCase().slice(0, 20) } : d));
+    base.decor = [{ type: "mailbox", n: [-.35, .35, .87] }, { type: "sign", n: [.1, .55, .83], text: (planetName || name).toUpperCase().slice(0, 20) }]; // a brand new planet: just your flag and a mailbox
     net.send({ t: "join", name, planetName: planetName || name + "'s Planet", planet: { design: base.design, decor: base.decor }, ship: { ...structuredClone(PRESETS.fighter), name: name + "'s Ship" } });
     $("joinForm").hidden = true; $("joinWait").hidden = false; $("wakeText").textContent = "Creating your planet…";
   };
@@ -4020,7 +4237,7 @@ function startFlying() { // only switches to flight; the ship waits until you pr
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
   $("hudShip").textContent = state.ship.name;
   if (navArrow) navArrow.visible = !!nav;
-  renderWeapons(); renderPanels();
+  renderWeapons(); renderPanels(); tutEvent("fly");
 }
 function land() { // fly into a black hole, come out next to home
   if (mode !== "fly") return;
@@ -4373,7 +4590,7 @@ function flyStep(dt) {
     navArrow.visible = true;
     navArrow.position.copy(ship.position).addScaledVector(headUp, ship.userData.len * .7 + .08);
     navArrow.lookAt(nav.group.position); navArrow.scale.setScalar(.45 + size * .3);
-    if (dd < nav.R * 5) { toast(`🎯 You reached ${esc(nav.data.name)}!`); setNav(null); }
+    if (dd < nav.R * 5 && !nav.quiet) { toast(`🎯 You reached ${esc(nav.data.name)}!`); setNav(null); }
   }
   const tgt = currentTarget(); $("target").hidden = !tgt;
   if (tgt && tgt.remote) {
@@ -4468,8 +4685,9 @@ $("resetAsk").addEventListener("click", () => { $("resetConfirm").hidden = false
 $("resetNo").addEventListener("click", () => { $("resetConfirm").hidden = true; $("resetAskRow").hidden = false; });
 $("resetAll").addEventListener("click", () => { setView("planet"); $("resetConfirm").hidden = false; $("resetAskRow").hidden = true; });
 function resetPlayerStuff() { // money, weapons, missions, and everyone's anger at you
-  Object.assign(wallet, { credits: 150, owned: [] }); saveWallet();
+  Object.assign(wallet, { credits: 150, owned: [], xp: 0 }); saveWallet();
   try { localStorage.removeItem(MISSIONKEY); localStorage.removeItem(SEENKEY); } catch {}
+  tut = { step: 0, n: 0 }; store(TUTKEY, tut); radioQ = []; renderLevel(); tutEnter();
   lastPlayerAttack = -99; lastHitNpc = null; shipHp = 100;
   state.ship = { ...structuredClone(PRESETS.fighter), name: state.ship.name }; delete state.ship.label; buildShip();
   spawnNpcs(); renderHangar(); renderMissions();
@@ -4532,7 +4750,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); npcStep(dt, t); junkStep(dt); remoteStep(dt, t);
+  boltStep(dt); npcStep(dt, t); tutStep(dt, t); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
   animateShipParts(ship.userData, t);
   fire.update(dt); smoke.update(dt); chunks.update(dt);
@@ -4558,10 +4776,10 @@ function startGame() {
   if (gameStarted) return; gameStarted = true; document.body.classList.remove("joining");
   buildWorld(); buildShip(); spawnNpcs(); renderDesign(); renderHangar(); renderMail(); renderChat(); renderInfo(); renderPanels(); applyQuality();
   { const dist = viewDistance(); camera.position.set(0, dist * .22, dist); }
-  renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway();
+  renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
-window.__tp = { net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
+window.__tp = { get tut() { return { tut, tutS }; }, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
 </script>
 </body>
 </html>
