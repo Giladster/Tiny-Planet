@@ -1049,28 +1049,23 @@ function boom(at, scale = 1) {
   addFx(.35, (k) => { s.scale.setScalar(scale * (.5 + k * 2.5)); s.material.opacity = 1 - k; }, () => { scene.remove(s); s.material.dispose(); });
   shake = Math.max(shake, .05 * scale * Math.max(0, 1 - camera.position.distanceTo(at) / 30));
 }
-function shipBlast(at, r, bodyColor, big) { // a ship blowing up: white flash, fireball, chain blasts, shockwaves, burning debris
-  const p = at.clone(), S = Math.max(1, Math.sqrt(r)) * (big ? 1.6 : 1), v = new THREE.Vector3(), near = Math.max(0, 1 - camera.position.distanceTo(p) / (40 * S));
-  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(8, 7, 6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
-  fl.position.copy(p); scene.add(fl); // blinding core flash
-  addFx(.5, (k) => { fl.scale.setScalar(S * (3 + k * 14)); fl.material.opacity = (1 - k) ** 2; }, () => { scene.remove(fl); fl.material.dispose(); });
-  boom(p, 3.2 * S);
-  for (let i = 0; i < 260 * Math.min(2, S); i++) fire.spawn(p, v.randomDirection().multiplyScalar(rnd(4, 14) * S), rnd(.2, .5), rnd(.03, .07) * S, HOT, ORANGE, 0, 1.2); // fast sparks
-  const cam = camera.position.clone().sub(p).normalize();
-  ring(p, cam, 9 * S, .9, new THREE.Color(3, 2.4, 1.6), .06); // shockwave facing you
-  ring(p, v.randomDirection().clone(), 6 * S, 1.2, new THREE.Color(2.2, 1.2, .6), .1);
-  ring(p, new THREE.Vector3(0, 1, 0), 12 * S, 1.6, new THREE.Color(1.2, 1.6, 2.6), .04);
-  for (let i = 0; i < (big ? 9 : 5); i++) addFx(rnd(.08, .7), () => {}, () => { // chain explosions ripple outward
-    const q = p.clone().add(v.randomDirection().multiplyScalar(rnd(.5, 2.2) * S * r * .6)); boom(q, rnd(1, 2) * S); sfx.boom(rnd(.8, 1.4), q);
-  });
+function shipBlast(at, r, bodyColor, big) { // the wreck breaks apart: flash, fireball, a few chain pops, burning pieces
+  const p = at.clone(), S = Math.max(1, Math.sqrt(r)) * (big ? 1.4 : 1), v = new THREE.Vector3(), near = Math.max(0, 1 - camera.position.distanceTo(p) / (30 * S));
+  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(6, 5, 4), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  fl.position.copy(p); scene.add(fl);
+  addFx(.3, (k) => { fl.scale.setScalar(S * (1.5 + k * 5)); fl.material.opacity = (1 - k) ** 2; }, () => { scene.remove(fl); fl.material.dispose(); });
+  boom(p, 1.6 * S);
+  for (let i = 0; i < 90 * S; i++) fire.spawn(p, v.randomDirection().multiplyScalar(rnd(3, 8) * S), rnd(.2, .45), rnd(.03, .06) * S, HOT, ORANGE, 0, 1.4);
+  ring(p, camera.position.clone().sub(p).normalize(), 3.5 * S, .6, new THREE.Color(2.4, 1.6, 1), .08);
+  for (let i = 0; i < (big ? 5 : 2); i++) addFx(rnd(.1, .45), () => {}, () => { const q = p.clone().add(v.randomDirection().multiplyScalar(rnd(.3, 1) * S * r * .5)); boom(q, rnd(.6, 1) * S); });
   const col = new THREE.Color(bodyColor);
-  for (let i = 0; i < (big ? 50 : 30); i++) chunks.spawn(p, v.randomDirection().multiplyScalar(rnd(3, 11) * S).clone(), rnd(.04, .12) * S, col, rnd(2, 4));
-  for (let i = 0; i < (big ? 14 : 8); i++) { // burning wreckage flies off trailing fire and smoke
-    const pos = p.clone(), vel = v.randomDirection().multiplyScalar(rnd(5, 12) * S).clone();
-    addFx(rnd(1.2, 2.2), (k, dt) => { pos.addScaledVector(vel, dt); vel.multiplyScalar(1 - dt * .6);
-      fire.spawn(pos, new THREE.Vector3(), .35, .12 * S * (1 - k), HOT, i % 2 ? ORANGE : RED, 1, 1); if (Math.random() < .5) smoke.spawn(pos, new THREE.Vector3(), 1.2, .14 * S, SMOKE0, SMOKE1, 2, 1); });
+  for (let i = 0; i < (big ? 30 : 16); i++) chunks.spawn(p, v.randomDirection().multiplyScalar(rnd(2, 6) * S).clone(), rnd(.04, .1) * S, col, rnd(2, 3.5));
+  for (let i = 0; i < (big ? 8 : 4); i++) { // burning pieces trailing fire and smoke
+    const pos = p.clone(), vel = v.randomDirection().multiplyScalar(rnd(3, 7) * S).clone();
+    addFx(rnd(1, 1.8), (k, dt) => { pos.addScaledVector(vel, dt); vel.multiplyScalar(1 - dt * .6);
+      fire.spawn(pos, new THREE.Vector3(), .3, .09 * S * (1 - k), HOT, i % 2 ? ORANGE : RED, 1, 1); if (Math.random() < .5) smoke.spawn(pos, new THREE.Vector3(), 1.2, .1 * S, SMOKE0, SMOKE1, 2, 1); });
   }
-  if (near > 0) { flashScreen("#fff1d0", .25 + .5 * near); shake = Math.max(shake, .25 * S * near); }
+  if (near > 0) { flashScreen("#fff1d0", .25 * near); shake = Math.max(shake, .12 * S * near); }
   sfx.shipBlast(p, S);
 }
 function ring(at, normal, size, dur, color, width = .12) {
@@ -3375,7 +3370,7 @@ class Npc {
     this.orbitR = h ? Math.max(h.R * (this.T.low ? rnd(1.5, 1.9) : rnd(2.6, 4)), h.R * 1.6 + this.info.radius * 2.5) : rnd(180, 260); this.orbitA = Math.random() * Math.PI * 2;
     this.tilt = new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(-.5, .5), rnd(0, 6), rnd(-.5, .5)));
     this.group.position.copy(c).add(new THREE.Vector3(this.orbitR, rnd(-2, 2), 0).applyAxisAngle(UP, this.orbitA));
-    this.hp = this.maxHp; this.hostile = false; this.group.visible = true; this.dead = false;
+    this.hp = this.maxHp; this.hostile = false; this.group.visible = true; this.dead = false; this.wreck = null;
     this.at = h || null; this.goal = null; this.wait = rnd(0, 3);
     if (this.opts.leader) this.group.position.copy(this.opts.leader.group.position).add(new THREE.Vector3().randomDirection().multiplyScalar(6 + this.opts.leader.info.radius * 2));
     if (this.trail) this.trail.reset();
@@ -3454,6 +3449,7 @@ class Npc {
     return d;
   }
   update(dt, t) {
+    if (this.dead && this.wreck) { this.crash(dt); return; }
     if (this.dead) { this.trail.update(this.group.position, dt, false); if ((this.respawnAt -= dt) <= 0) this.spawn(); return; }
     const pos = this.group.position, toPlayer = mode === "fly" && !playerDead ? ship.position.distanceTo(pos) : Infinity;
     const h = this.home, peaceful = this.role === "trader" || this.role === "orbit";
@@ -3503,6 +3499,18 @@ class Npc {
     for (const f of this.info.flames) f.visible = moving; setFlames(this.info, .7 + this.vel.length() / 30 + Math.random() * .3, false);
     animateShipParts(this.info, t + this.phase);
   }
+  crash(dt) { // a burning wreck tumbling through space, small blasts going off, then it breaks apart
+    const w = this.wreck, pos = this.group.position, r = this.info.radius, S = this.T.big ? Math.sqrt(r) : 1; w.t += dt;
+    pos.addScaledVector(w.vel, dt); w.vel.multiplyScalar(1 - dt * .3);
+    this.group.quaternion.multiply(_q2.setFromAxisAngle(w.axis, w.spin * dt * (1 + w.t)));
+    for (const f of this.info.flames) f.visible = Math.random() < .3; // engines sputter
+    const k = w.t / w.dur;
+    for (let i = 0; i < 3 + 4 * S; i++) fire.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(r * .5)), w.vel.clone().multiplyScalar(.4).add(_hp.randomDirection().multiplyScalar(.6 * S)), rnd(.25, .5), rnd(.08, .16) * S * (.7 + k), HOT, i % 2 ? ORANGE : RED, 1.2, 1);
+    if (Math.random() < .7) smoke.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(r * .4)), w.vel.clone().multiplyScalar(.2), rnd(1.5, 2.5), rnd(.15, .3) * S, SMOKE0, SMOKE1, 2.5, .8);
+    if ((w.pop -= dt) <= 0) { w.pop = rnd(.25, .5) * (1 - k * .6); const q = pos.clone().add(_hp.randomDirection().multiplyScalar(r * .5)); spark(q, .6 * S); if (Math.random() < .6) sfx.boom(.5 * S, q); }
+    this.trail.update(pos, dt, false);
+    if (w.t >= w.dur) { this.wreck = null; this.group.visible = false; shipBlast(pos, this.T.big ? r : 1, NPC_TYPES[this.type].cfg.body, !!this.T.big); }
+  }
   shoot() {
     for (let i = 0; i < (this.T.big ? 3 : 1); i++) this.shootOnce();
   }
@@ -3527,11 +3535,11 @@ class Npc {
     if (this.hp <= 0) this.destroy();
   }
   destroy() {
-    this.dead = true; this.group.visible = false; this.tag.hidden = true; this.respawnAt = this.T.big ? 120 : 40;
-    const big = this.T.big ? this.info.radius : 1;
-    shipBlast(this.group.position, big, NPC_TYPES[this.type].cfg.body, !!this.T.big);
-    if (this.T.big) ring(this.group.position, new THREE.Vector3(0, 1, 0), this.info.radius * 4, 2.5, new THREE.Color(2.5, 1.6, 1), .08);
-    if (this.group.position.distanceTo(ship.position) < 60) { slow = .35; setTimeout(() => (slow = 1), 450); } // a short slow-motion moment for a close kill
+    this.dead = true; this.tag.hidden = true; this.respawnAt = this.T.big ? 120 : 40;
+    // the ship doesn't vanish: it bursts into flames, spins out of control and breaks apart a moment later
+    const r = this.info.radius; boom(this.group.position, this.T.big ? 1.2 * Math.sqrt(r) : .8); sfx.boom(this.T.big ? 2 : 1.2, this.group.position);
+    this.wreck = { t: 0, dur: this.T.big ? 3.2 : rnd(1.6, 2.2), axis: new THREE.Vector3().randomDirection(), spin: this.T.big ? rnd(.3, .6) : rnd(3, 6), pop: .2,
+      vel: this.vel.clone().multiplyScalar(.5).add(new THREE.Vector3().randomDirection().multiplyScalar(this.T.big ? 1 : 4)) };
     earn(this.T.big ? 250 : 30, `${this.name} destroyed`);
     missionEvent("kill"); if (this.role === "pirate") missionEvent("kill:pirate"); if (this.T.big) missionEvent("kill:big");
   }
