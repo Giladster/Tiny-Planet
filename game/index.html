@@ -156,12 +156,30 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #minimap { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 16px; width: 180px; height: 180px; border-radius: 50%; background: rgba(8, 10, 26, .72); border: 1px solid var(--line); z-index: 3; pointer-events: none; }
 @media (max-width: 700px) { #minimap { width: 120px; height: 120px; } }
 #threats > div { position: fixed; z-index: 4; pointer-events: none; transform: translate(-50%, -50%); color: #ff3b52; font: 700 12px var(--mono); text-shadow: 0 1px 4px #000; }
-#threats .tbox { border: 2px solid #ff3b52; border-radius: 8px; box-shadow: 0 0 12px rgba(255,59,82,.7); animation: lockpulse .4s ease-in-out infinite alternate; }
-#threats .tarrow { font-size: 30px; line-height: 1; }
-#lockBox { position: fixed; z-index: 3; pointer-events: none; transform: translate(-50%, -50%); border: 2px dashed var(--accent); border-radius: 6px; transition: width .15s, height .15s; }
-#lockBox.locked { border: 2px solid var(--danger); box-shadow: 0 0 14px rgba(255,90,110,.6); animation: lockpulse .6s ease-in-out infinite alternate; }
-#lockBox span { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 6px); font: 600 11px var(--mono); letter-spacing: .1em; color: var(--accent); white-space: nowrap; text-shadow: 0 1px 3px #000; }
-#lockBox.locked span { color: var(--danger); }
+#threats .tbox { border: 3px solid #ff3b52; border-radius: 8px; box-shadow: 0 0 16px rgba(255,59,82,.9), inset 0 0 10px rgba(255,59,82,.5); background: rgba(255,40,60,.08); animation: lockpulse .3s ease-in-out infinite alternate; }
+#threats .tbox span { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px); white-space: nowrap; background: #ff2a44; color: #fff; padding: 1px 6px; border-radius: 4px; font: 700 11px var(--mono); }
+#threats .tarrow { font-size: 38px; line-height: 1; filter: drop-shadow(0 0 6px #ff2030); }
+#lockBox { position: fixed; z-index: 3; pointer-events: none; transform: translate(-50%, -50%); transition: width .12s, height .12s; --lc: #ffd24a;
+  background: linear-gradient(var(--lc), var(--lc)) left top / 14px 2px, linear-gradient(var(--lc), var(--lc)) left top / 2px 14px, linear-gradient(var(--lc), var(--lc)) right top / 14px 2px, linear-gradient(var(--lc), var(--lc)) right top / 2px 14px,
+    linear-gradient(var(--lc), var(--lc)) left bottom / 14px 2px, linear-gradient(var(--lc), var(--lc)) left bottom / 2px 14px, linear-gradient(var(--lc), var(--lc)) right bottom / 14px 2px, linear-gradient(var(--lc), var(--lc)) right bottom / 2px 14px; background-repeat: no-repeat; }
+#lockBox.locked { --lc: #ff2a44; border: 2px solid #ff2a44; border-radius: 50%; box-shadow: 0 0 18px rgba(255,42,68,.8), inset 0 0 12px rgba(255,42,68,.5); animation: lockpulse .35s ease-in-out infinite alternate; }
+#lockBox.locked::before, #lockBox.locked::after { content: ""; position: absolute; background: #ff2a44; left: 50%; top: -10px; bottom: -10px; width: 2px; transform: translateX(-50%); }
+#lockBox.locked::after { top: 50%; bottom: auto; left: -10px; right: -10px; width: auto; height: 2px; transform: translateY(-50%); }
+#lockBox span { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 8px); font: 700 12px var(--mono); letter-spacing: .1em; color: #ffd24a; white-space: nowrap; text-shadow: 0 1px 3px #000; text-align: center; }
+#lockBox span b { color: #fff; background: #ff2a44; padding: 1px 6px; border-radius: 4px; font-weight: 700; }
+#lockBox.locked span { color: #ff2a44; }
+#crosshair.locked::before { border-color: #ff2a44; box-shadow: 0 0 10px #ff2a44; }
+#hitmark { position: absolute; inset: -12px; opacity: 0; pointer-events: none; }
+#hitmark::before, #hitmark::after { content: ""; position: absolute; inset: 0; background: linear-gradient(45deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%), linear-gradient(-45deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%);
+  -webkit-mask: radial-gradient(circle, transparent 38%, #000 40%); mask: radial-gradient(circle, transparent 38%, #000 40%); }
+#hitmark.on { animation: hitmk .22s ease-out; }
+#hitmark.big::before { filter: drop-shadow(0 0 4px #ff3040) hue-rotate(0deg); background: linear-gradient(45deg, transparent 44%, #ff4050 44%, #ff4050 56%, transparent 56%), linear-gradient(-45deg, transparent 44%, #ff4050 44%, #ff4050 56%, transparent 56%); }
+@keyframes hitmk { 0% { opacity: 1; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.25); } }
+.dmgnum { position: fixed; z-index: 3; pointer-events: none; transform: translate(-50%, -50%); font: 800 16px var(--mono); color: #ffe27a; text-shadow: 0 0 6px #ff6a00, 0 1px 2px #000; }
+.dmgnum.big { font-size: 24px; color: #ff4b5c; text-shadow: 0 0 8px #ff2a44, 0 1px 2px #000; }
+#hitDir { position: fixed; left: 50%; top: 50%; width: 0; height: 0; z-index: 4; pointer-events: none; }
+#hitDir > div { position: absolute; left: -90px; top: -230px; width: 180px; height: 70px; transform-origin: 90px 230px; border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: radial-gradient(ellipse at 50% 100%, transparent 58%, rgba(255,40,60,.95) 62%, rgba(255,40,60,.35) 75%, transparent 80%); filter: drop-shadow(0 0 8px #ff2030); }
 @keyframes lockpulse { to { box-shadow: 0 0 24px rgba(255,90,110,.9); } }
 #weapons { left: 16px; flex-direction: column; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); padding: 6px; display: flex; gap: 6px; }
 #weapons button { position: relative; overflow: hidden; display: grid; gap: 1px; padding: 5px 10px; text-align: center; min-width: 74px; }
@@ -407,7 +425,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="stat" id="tPrankRow" hidden><span class="k">PRANKS</span><span id="tPranks"></span></div>
 </section>
 <div id="weapons" class="hud" hidden></div>
-<div id="crosshair" hidden></div>
+<div id="crosshair" hidden><div id="hitmark"></div></div><div id="hitDir"></div>
 <canvas id="minimap" class="hud" width="360" height="360" aria-label="Minimap"></canvas>
 <div id="threats"></div>
 <div id="lockBox" hidden><span id="lockText">LOCKING…</span></div>
@@ -536,7 +554,7 @@ const PRESETS = {
   random:    { label: "Surprise me" },
 };
 const WEAPONS = {
-  laser:   { label: "Lasers",   keyLabel: "L / click", cd: .07 },
+  laser:   { label: "Lasers",   keyLabel: "L / click", cd: .1 },
   missile: { label: "Missiles", keyLabel: "F", cd: .45 },
   bomb:    { label: "Bombs",    keyLabel: "B", cd: 1.1 },
   troops:  { label: "Troops",   keyLabel: "T", cd: 2.5 },
@@ -719,14 +737,24 @@ const sfx = (() => {
       const o = osc("sawtooth", 55, 160, t, .5), og = env(gain(), t, .01, .6); o.connect(filt("lowpass", 900, 900, t, 1)).connect(shaper(4)).connect(og); out(og, .1, .2);
       const s = osc("sine", 70, 38, t, .35), sg = env(gain(), t, .005, .35); s.connect(sg); out(sg, .22, .1);
     },
-    laser() { // sci-fi blaster: falling zap with a hard edge
-      if (!ok()) return; const t = ac.currentTime; if (t - lastLaser < .045) return; lastLaser = t;
-      const f = 1500 + Math.random() * 500;
-      const o1 = osc("square", f, 170, t, .13), o2 = osc("sawtooth", f * .66, 120, t, .15, 12);
-      const bp = filt("bandpass", 3200, 500, t, .14, 1.6), g = env(gain(), t, .002, .13);
-      o1.connect(bp); o2.connect(bp); bp.connect(g); out(g, .1, .22);
-      const c = noise(t, .03, 2), ch = filt("highpass", 4000, 4000, t, .03), cg = env(gain(), t, .001, .025); c.connect(ch).connect(cg); out(cg, .06, 0);
+    laser() { // heavy laser cannon: a deep punch, a snarling energy blast, a plasma crack and a sizzle
+      if (!ok()) return; const t = ac.currentTime; if (t - lastLaser < .06) return; lastLaser = t;
+      const th = osc("sine", 170, 38, t, .2), tg = env(gain(), t, .002, .2); th.connect(tg); out(tg, .32, .08);
+      const f = 380 + Math.random() * 70, o1 = osc("sawtooth", f, 62, t, .24), o2 = osc("sawtooth", f * 1.012, 60, t, .24, -18), o3 = osc("square", f * .5, 40, t, .2);
+      const lp = filt("lowpass", 5200, 260, t, .22, 5), g = env(gain(), t, .001, .22);
+      o1.connect(lp); o2.connect(lp); o3.connect(lp); lp.connect(shaper(6)).connect(g); out(g, .075, .3);
+      const c = noise(t, .07, 1.7), cb = filt("bandpass", 5200, 1400, t, .07, .9), cg = env(gain(), t, .001, .065); c.connect(cb).connect(shaper(3)).connect(cg); out(cg, .1, .15);
+      const z = noise(t + .02, .3, 2.2), zb = filt("highpass", 7000, 2500, t + .02, .3), zg = env(gain(), t + .02, .01, .28); z.connect(zb).connect(zg); out(zg, .025, .45);
     },
+    hitEnemy(at, big) { // your shot slams into a ship: a metal clang and a crunch
+      if (!ok()) return; const t = ac.currentTime, v = Math.max(.55, near(at));
+      const n = noise(t, .16, 1.2), b = filt("bandpass", 2600, 900, t, .15, 2.5), g = env(gain(), t, .001, .14); n.connect(b).connect(shaper(5)).connect(g); out(g, .22 * v, .25);
+      for (const f of [523, 787]) { const o = osc("triangle", f * (1 + Math.random() * .04), f * .8, t, .22), og = env(gain(), t, .001, .22); o.connect(og); out(og, .05 * v, .3); }
+      const k = osc("square", 260, 70, t, .1), kg = env(gain(), t, .001, .1); k.connect(filt("lowpass", 1200, 300, t, .1)).connect(kg); out(kg, .08 * v, .1);
+      if (big) { const s = osc("sine", 110, 32, t, .4), sg = env(gain(), t, .003, .4); s.connect(sg); out(sg, .35 * v, .3); }
+    },
+    lockTick(k) { if (!ok()) return; const t = ac.currentTime, o = osc("square", 900 + k * 600, 900 + k * 600, t, .035), g = env(gain(), t, .002, .035); o.connect(filt("bandpass", 1600, 1600, t, 1, 2)).connect(g); out(g, .045, .05); },
+    lockHold() { if (!ok()) return; const t = ac.currentTime, o = osc("square", 1900, 1900, t, .08), g = env(gain(), t, .002, .08); o.connect(filt("bandpass", 2000, 2000, t, 1, 3)).connect(g); out(g, .03, .05); },
     missile() { // launch thump, then a rocket hiss that fades away
       if (!ok()) return; const t = ac.currentTime;
       const th = osc("sine", 130, 42, t, .25), tg = env(gain(), t, .003, .25); th.connect(tg); out(tg, .45, .15);
@@ -789,7 +817,7 @@ const sfx = (() => {
       const s = osc("sine", 55, 12, t, 7), sg = env(gain(), t, .05, 7); s.connect(sg); out(sg, 1 * v, .3);
       const h = noise(t, .6, 2), hp = filt("highpass", 3000, 800, t, .5), hg = env(gain(), t, .001, .5); h.connect(hp).connect(hg); out(hg, .5 * v, .6);
     },
-    lock() { if (!ok()) return; const t = ac.currentTime; for (const d of [0, .09]) { const o = osc("square", 1500, 1500, t + d, .06), g = env(gain(), t + d, .002, .06); o.connect(g); out(g, .05, .1); } },
+    lock() { if (!ok()) return; const t = ac.currentTime; [1200, 1600, 2100].forEach((f, i) => { const o = osc("square", f, f, t + i * .07, .09), g = env(gain(), t + i * .07, .002, .09); o.connect(filt("bandpass", 1800, 1800, t, 1, 1.5)).connect(g); out(g, .07, .1); }); },
     cheer() { if (!ok()) return; const t = ac.currentTime; [523, 659, 784, 1046].forEach((f, i) => { const o = osc("triangle", f, f, t + i * .1, .4), g = env(gain(), t + i * .1, .01, .35); o.connect(g); out(g, .08, .7); }); },
     zap() { if (!ok()) return; const t = ac.currentTime, o = osc("sawtooth", 2400, 700, t, .06), g = env(gain(), t, .002, .05); o.connect(g); out(g, .02, .2); },
     place() { if (!ok()) return; const t = ac.currentTime, o = osc("sine", 520, 980, t, .1), g = env(gain(), t, .005, .18); o.connect(g); out(g, .14, .4); },
@@ -1528,7 +1556,6 @@ class Planet {
     if (!this.alive) return;
     if (this.isHome && godOn("shield")) { spark(this.mesh.localToWorld(n.clone().multiplyScalar(this.R)), .5, C(0x8fd0ff, 2)); return; }
     const cfg = DAMAGE[kind];
-    if (!remote) lastPlayerAttack = clock();
     if (!remote && net.me && this.data.id) net.send({ t: "hit", id: this.data.id, n: n.toArray().map(r3), kind });
     this.stamp(n, kind);
     this.dirty = true;
@@ -3179,13 +3206,15 @@ const NPC_TYPES = { // role: trader = flies planet to planet, guard = protects i
   crystal: { role: "drift", name: "Crystal being", hp: 60, speed: 6, cfg: { hull: "crystal", wings: "none", engines: 1, extras: ["glow"], body: "#9df0ff", accent: "#c8a2ff", glow: "#c8a2ff", flame: "#c8a2ff", flameShape: "ball", finish: "chrome", size: 2.2 } },
   pirateBoss: { role: "pirate", name: "Pirate captain", hp: 90, speed: 34, cfg: { hull: "shark", wings: "bat", engines: 3, extras: ["flag", "spikes", "cannons"], body: "#1a1010", accent: "#b01818", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 2.4 } },
   escort:  { role: "guard", name: "Convoy escort", hp: 35, speed: 30, cfg: { hull: "interceptor", wings: "delta", engines: 2, extras: ["lights"], body: "#8a8f99", accent: "#d8a040", glow: "#ffd080", flame: "#ffb547", finish: "metal", size: 1.1 } },
-  kraken:  { role: "drift", name: "Space kraken", hp: 800, speed: 5, big: true, high: true, cfg: { hull: "squid", wings: "none", engines: 1, extras: [], body: "#6a2a8a", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 16 } },
-  hive:    { role: "drift", name: "Crystal hive ship", hp: 700, speed: 4, big: true, high: true, cfg: { hull: "crystal", wings: "none", engines: 1, extras: ["glow"], body: "#9df0ff", accent: "#c8a2ff", glow: "#c8a2ff", flame: "#c8a2ff", flameShape: "ball", finish: "chrome", size: 18 } },
+  kraken:  { role: "drift", wild: true, name: "Space kraken", hp: 800, speed: 5, big: true, high: true, cfg: { hull: "squid", wings: "none", engines: 1, extras: [], body: "#6a2a8a", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 16 } },
+  hive:    { role: "drift", wild: true, name: "Crystal hive ship", hp: 700, speed: 4, big: true, high: true, cfg: { hull: "crystal", wings: "none", engines: 1, extras: ["glow"], body: "#9df0ff", accent: "#c8a2ff", glow: "#c8a2ff", flame: "#c8a2ff", flameShape: "ball", finish: "chrome", size: 18 } },
   freighter: { role: "trader", name: "Giant freighter", hp: 300, speed: 7, big: true, cfg: { hull: "hauler", wings: "none", engines: 4, extras: ["lights", "turret", "antenna"], body: "#6f7686", accent: "#c97b2a", glow: "#ffb547", flame: "#ffb547", finish: "matte", size: 9 } },
-  mothership: { role: "drift", name: "Alien mothership", hp: 600, speed: 4, big: true, high: true, cfg: { hull: "saucer", wings: "ring", engines: 4, extras: ["lights", "glow", "turret"], body: "#4a5a6a", accent: "#9dff6a", glow: "#9dff6a", flame: "#9dff6a", finish: "chrome", size: 22 } },
-  dreadnought: { role: "guard", name: "Krell dreadnought", hp: 500, speed: 9, big: true, angry: 55, cfg: { hull: "battleship", wings: "wide", engines: 4, extras: ["cannons", "turret", "antenna", "lights"], body: "#2a1a1a", accent: "#a01818", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 14 } },
+  mothership: { role: "drift", wild: true, name: "Alien mothership", hp: 600, speed: 4, big: true, high: true, cfg: { hull: "saucer", wings: "ring", engines: 4, extras: ["lights", "glow", "turret"], body: "#4a5a6a", accent: "#9dff6a", glow: "#9dff6a", flame: "#9dff6a", finish: "chrome", size: 22 } },
+  dreadnought: { role: "guard", outlaw: true, name: "Krell dreadnought", hp: 500, speed: 9, big: true, angry: 55, cfg: { hull: "battleship", wings: "wide", engines: 4, extras: ["cannons", "turret", "antenna", "lights"], body: "#2a1a1a", accent: "#a01818", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 14 } },
 };
-let lastPlayerAttack = -99; // when you last attacked anyone: the space police remember
+let lastPlayerAttack = -99; // when you last attacked a peaceful ship or the police: the space police remember
+const crimePos = new THREE.Vector3(); // where it happened: only police near it come for you
+const outlaw = (n) => n.role === "pirate" || !!n.T.outlaw;
 const npcTemplates = {};
 const npcs = [], npcBolts = [];
 let shipHp = 100, lastPlayerHit = -99, playerDead = false;
@@ -3205,6 +3234,24 @@ class Trail { // a short fading line behind a ship, so you can spot it from far 
   }
   reset() { this.ready = false; }
   dispose() { scene.remove(this.line); this.line.geometry.dispose(); }
+}
+// ---- hit feedback: you see and hear every hit on an enemy ship
+const HITCOL = C(0xfff0c0, 3.5), _hp = new THREE.Vector3();
+function hitFx(n, amount) {
+  const r = n.info.radius, at = n.group.position.clone().add(_hp.randomDirection().multiplyScalar(r * .5)), big = amount >= 30;
+  spark(at, big ? 1.4 : .7, HITCOL);
+  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(4, 3.2, 2.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  fl.position.copy(at); scene.add(fl); // a white-hot flash where the shot landed
+  addFx(.14, (k) => { fl.scale.setScalar(r * (big ? 3 : 1.6) * (.6 + k)); fl.material.opacity = 1 - k; }, () => { scene.remove(fl); fl.material.dispose(); });
+  const col = new THREE.Color(n.T ? n.T.cfg.body : 0x999999);
+  for (let i = 0; i < (big ? 6 : 2); i++) chunks.spawn(at, _hp.randomDirection().multiplyScalar(rnd(2, 5)).clone(), rnd(.015, .04) * Math.max(1, r), col, rnd(.8, 1.6));
+  n.hitTime = clock(); sfx.hitEnemy(at, big); hitMarker(big); dmgNumber(at, amount);
+}
+function hitMarker(big) { const h = $("hitmark"); h.classList.remove("on", "big"); void h.offsetWidth; h.classList.add("on"); if (big) h.classList.add("big"); }
+function dmgNumber(at, amount) { // a number pops out of the ship you hit
+  const el = document.createElement("div"); el.className = "dmgnum" + (amount >= 30 ? " big" : ""); el.textContent = Math.round(amount); $("tags").append(el);
+  const p = at.clone(), v = new THREE.Vector3();
+  addFx(.7, (k) => { v.copy(p).project(camera); el.hidden = v.z > 1; el.style.left = (v.x + 1) / 2 * innerWidth + "px"; el.style.top = (1 - v.y) / 2 * innerHeight - k * 40 + "px"; el.style.opacity = 1 - k * k; }, () => el.remove());
 }
 class Npc {
   constructor(type, opts) {
@@ -3265,15 +3312,25 @@ class Npc {
   wingman(dt, t) { // a ship you hired: follows you and shoots your enemies
     const enemy = npcs.filter((n) => n !== this && !n.dead && n.hostile && n.group.position.distanceTo(ship.position) < 90).sort((a, b) => a.group.position.distanceTo(this.group.position) - b.group.position.distanceTo(this.group.position))[0];
     const fwd = FWD.clone().applyQuaternion(head), right = new THREE.Vector3(1, 0, 0).applyQuaternion(head);
-    if (enemy) {
-      this.steer(enemy.group.position.clone().add(new THREE.Vector3(Math.sin(t + this.phase), .3, Math.cos(t + this.phase)).multiplyScalar(8 + enemy.info.radius * 2)), this.speed * 1.3, dt, 2.5);
-      if ((this.cool -= dt) <= 0 && enemy.group.position.distanceTo(this.group.position) < 60) {
-        this.cool = .7; const a = this.group.position.clone(), b = enemy.group.position.clone();
-        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color: new THREE.Color(.4, 2.5, 3), transparent: true }));
-        scene.add(line); addFx(.12, (k) => (line.material.opacity = 1 - k), () => { scene.remove(line); line.geometry.dispose(); });
-        enemy.hp -= 6; spark(b, .4, C(0x6fe3ff, 2)); sfx.enemyLaser(a); if (enemy.hp <= 0) enemy.destroy();
-      }
-    } else this.steer(ship.position.clone().addScaledVector(fwd, -6 - this.info.radius * 3).addScaledVector(right, (this.phase > 3 ? 1 : -1) * 5), Math.min(this.speed * 1.5, 12 + vel.length() * 1.2), dt, 3);
+    if (enemy) this.fight(enemy, dt, t, 1.3);
+    else this.steer(ship.position.clone().addScaledVector(fwd, -6 - this.info.radius * 3).addScaledVector(right, (this.phase > 3 ? 1 : -1) * 5), Math.min(this.speed * 1.5, 12 + vel.length() * 1.2), dt, 3);
+  }
+  fight(enemy, dt, t, sp) { // fly around an enemy ship and shoot it (wingmen, and police helping you)
+    this.steer(enemy.group.position.clone().add(new THREE.Vector3(Math.sin(t + this.phase), .3, Math.cos(t + this.phase)).multiplyScalar(8 + enemy.info.radius * 2)), this.speed * sp, dt, 2.5);
+    if ((this.cool -= dt) <= 0 && enemy.group.position.distanceTo(this.group.position) < 60) {
+      this.cool = .7; const a = this.group.position.clone(), b = enemy.group.position.clone();
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color: new THREE.Color(.4, 2.5, 3), transparent: true }));
+      scene.add(line); addFx(.12, (k) => (line.material.opacity = 1 - k), () => { scene.remove(line); line.geometry.dispose(); });
+      enemy.hp -= 6; enemy.lastHit = clock(); spark(b, .4, C(0x6fe3ff, 2)); sfx.enemyLaser(a); if (enemy.hp <= 0) enemy.destroy();
+    }
+  }
+  pirateNear() { // a pirate attacking you (or one you are fighting) close to this police ship
+    let best = null, bd = 120;
+    for (const n of npcs) {
+      if (n.dead || !outlaw(n) || !(n.hostile || clock() - (n.lastHit || -99) < 15)) continue;
+      const d = n.group.position.distanceTo(this.group.position); if (d < bd && n.group.position.distanceTo(ship.position) < 150) { bd = d; best = n; }
+    }
+    return best;
   }
   cruise(dt) { // speed up, travel straight, steer around planets, slow down and stop at the goal
     const pos = this.group.position;
@@ -3300,7 +3357,7 @@ class Npc {
     // decide who to fight
     if (this.role === "pirate" && toPlayer < 35) this.hostile = true;
     if (this.role === "guard" && h && ((clock() - (h.playerHitAt || -99) < 25 && toPlayer < 70) || toPlayer < (this.T.angry || 0))) this.hostile = true;
-    if (this.role === "patrol" && clock() - lastPlayerAttack < 20 && toPlayer < 90) this.hostile = true;
+    if (this.role === "patrol" && ((clock() - lastPlayerAttack < 20 && crimePos.distanceTo(pos) < 120 && toPlayer < 120) || clock() - (this.lastHit || -99) < 20)) this.hostile = true; // police only chase you if you attacked them or a peaceful ship near them
     if (toPlayer > 130 + this.info.radius * 3) this.hostile = false;
     const L = this.opts.leader && !this.opts.leader.dead ? this.opts.leader : null;
     if (L) { // a pack fights together
@@ -3309,14 +3366,16 @@ class Npc {
     }
     if (clock() < (this.peaceUntil || 0)) this.hostile = false; // you paid them off
     const hired = mode === "fly" && clock() < (this.escortUntil || 0);
+    const help = !hired && !this.hostile && this.role === "patrol" && mode === "fly" ? this.pirateNear() : null;
     if (hired) { this.hostile = false; this.wingman(dt, t); }
+    else if (help) this.fight(help, dt, t, .9); // police help you fight pirates
     else if (peaceful && clock() < this.fleeUntil) { // run away from you
       this.steer(pos.clone().add(pos.clone().sub(ship.position).setLength(50)), this.speed * (this.T.big ? 1.6 : 2.6), dt);
     } else if (this.hostile) { // chase, keep a little distance, shoot
       const keep = 5 + this.info.radius * 2.5;
-      const side = new THREE.Vector3(Math.sin(t * .7 + this.phase), Math.cos(t * .5 + this.phase) * .5, 0).multiplyScalar(keep);
+      const side = new THREE.Vector3(Math.sin(t * .35 + this.phase), Math.cos(t * .25 + this.phase) * .5, 0).multiplyScalar(keep);
       const goal = ship.position.clone().add(side).addScaledVector(FWD.clone().applyQuaternion(head), -keep * .6);
-      const d = this.steer(goal, Math.min(this.speed * 1.3, 18 + toPlayer), dt, this.T.big ? 1 : 2.5);
+      const d = this.steer(goal, Math.min(this.speed * .7, 8 + toPlayer * .5), dt, this.T.big ? 1 : 1.4); // slower in a fight, so you can hit them
       if (d < keep) this.vel.multiplyScalar(1 - dt * 2);
       this.cool -= dt;
       if (this.cool <= 0 && toPlayer < 70 + this.info.radius * 2) { this.cool = this.T.big ? rnd(.25, .5) : rnd(.5, 1.1); this.shoot(); }
@@ -3334,6 +3393,10 @@ class Npc {
     this.group.visible = seen; // far-away small ships are skipped so the game stays smooth
     this.trail.update(pos.clone().addScaledVector(FWD.clone().applyQuaternion(this.group.quaternion), -this.info.len * .55), dt, seen && moving);
     if (!seen) return;
+    const hk = this.hp / this.maxHp, jolt = clock() - (this.hitTime || -9); // hurt ships smoke, burn and shake when hit
+    this.model.position.set(0, 0, 0); if (jolt < .15) this.model.position.randomDirection().multiplyScalar(this.info.radius * .12 * (1 - jolt / .15));
+    if (hk < .6 && Math.random() < dt * (hk < .3 ? 40 : 14)) smoke.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(this.info.radius * .4)), this.vel.clone().multiplyScalar(.3), rnd(.8, 1.5), .1 * this.info.radius + .05, SMOKE0, SMOKE1, 2.5, 1);
+    if (hk < .3 && Math.random() < dt * 30) fire.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(this.info.radius * .3)), this.vel.clone().multiplyScalar(.3), rnd(.2, .4), .06 * this.info.radius + .03, HOT, ORANGE, 1, 1);
     for (const f of this.info.flames) f.visible = moving; setFlames(this.info, .7 + this.vel.length() / 30 + Math.random() * .3, false);
     animateShipParts(this.info, t + this.phase);
   }
@@ -3345,7 +3408,7 @@ class Npc {
     if (this.T.big) from.add(new THREE.Vector3().randomDirection().multiplyScalar(this.info.radius * .5));
     const lead = ship.position.clone().addScaledVector(vel, ship.position.distanceTo(from) / 120).add(new THREE.Vector3().randomDirection().multiplyScalar(rnd(0, 1.4)));
     const dir = lead.sub(from).normalize(), col = new THREE.Color(NPC_TYPES[this.type].cfg.glow).multiplyScalar(3);
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .7, 6), new THREE.MeshBasicMaterial({ color: col }));
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(.03, .03, 1, 6), new THREE.MeshBasicMaterial({ color: col }));
     m.position.copy(from); m.quaternion.setFromUnitVectors(UP, dir); scene.add(m);
     npcBolts.push({ obj: m, v: dir.multiplyScalar(120), life: 2, by: this });
     sfx.enemyLaser(from);
@@ -3354,10 +3417,10 @@ class Npc {
     if (this.dead) return;
     if (clock() < (this.escortUntil || 0)) this.escortUntil = 0; // shoot your wingman and they quit
     this.hp -= amount; this.hostile = !(this.role === "trader" || this.role === "orbit"); lastHitNpc = this; lastHitAt = clock(); this.lastHit = clock();
-    if (this.role !== "pirate") lastPlayerAttack = clock();
+    if (!outlaw(this) && !this.T.wild) { lastPlayerAttack = clock(); crimePos.copy(this.group.position); } // a crime: nearby police will come
     if (!this.hostile) this.fleeUntil = clock() + 8;
     const h = this.home; if (h) h.playerHitAt = clock(); // the whole guard squad comes for you
-    spark(this.group.position, .6);
+    hitFx(this, amount);
     if (this.hp <= 0) this.destroy();
   }
   destroy() {
@@ -3390,7 +3453,7 @@ function npcStep(dt, t) {
     const b = npcBolts[i]; b.life -= dt;
     const p0 = b.obj.position.clone(); b.obj.position.addScaledVector(b.v, dt);
     let gone = b.life <= 0;
-    if (!gone && mode === "fly" && !playerDead && !rolling() && hitSphere(p0, b.obj.position, ship.position, ship.userData.radius * 1.2)) { hurtPlayer(6, b.by || b.from); spark(b.obj.position, .5, RED); gone = true; }
+    if (!gone && mode === "fly" && !playerDead && !rolling() && hitSphere(p0, b.obj.position, ship.position, ship.userData.radius * 1.2)) { hurtPlayer(4, b.by || b.from); spark(b.obj.position, .5, RED); gone = true; }
     if (!gone) for (const p of planets) if (p.alive && hitSphere(p0, b.obj.position, p.group.position, p.R)) { gone = true; break; }
     if (gone) { scene.remove(b.obj); b.obj.geometry.dispose(); npcBolts.splice(i, 1); }
   }
@@ -3409,8 +3472,14 @@ function junkStep(dt) { // tomatoes, shoes and rocks flying at your ship
   }
 }
 const attackers = new Map(); // who shot you lately -> until when we keep showing them
+function hitDirection(from) { // a red arc around the middle of the screen points at whoever shot you
+  const v = from.clone().applyMatrix4(camera.matrixWorldInverse), a = Math.atan2(v.x, -v.z); // 0 = straight ahead
+  const el = $("hitDir").appendChild(document.createElement("div"));
+  el.style.transform = `rotate(${a}rad)`;
+  addFx(1.1, (k) => (el.style.opacity = k < .15 ? 1 : 1 - (k - .15) / .85), () => el.remove());
+}
 function hurtPlayer(amount, by) {
-  if (by && by.group) attackers.set(by, clock() + 6);
+  if (by && by.group) { attackers.set(by, clock() + 6); if (mode === "fly") hitDirection(by.group.position); }
   if (godOn("inv")) return;
   shipHp = Math.max(0, shipHp - amount); lastPlayerHit = clock(); shake = Math.max(shake, .04);
   flashScreen("#ff3040", .18); sfx.hit();
@@ -3498,7 +3567,7 @@ class RemoteShip {
     this.trail.update(this.group.position, dt, moving);
     animateShipParts(this.info, t);
   }
-  damage(amount) { net.send({ t: "pvp", target: this.pid, dmg: amount }); spark(this.group.position, .5); lastHitNpc = this; lastHitAt = clock(); }
+  damage(amount) { net.send({ t: "pvp", target: this.pid, dmg: amount * .4 }); hitFx(this, amount); lastHitNpc = this; lastHitAt = clock(); } // players take less than aliens, so duels last
   remove() { scene.remove(this.group); this.tag.remove(); this.trail.dispose(); remotes.delete(this.pid); }
 }
 const fighters = () => (remotes.size ? npcs.concat([...remotes.values()]) : npcs);
@@ -3661,6 +3730,40 @@ function spaceDust(dt, spd) {
   }
 }
 const TRAIL0 = new THREE.Color(.55, .65, .85), TRAIL1 = new THREE.Color(.1, .12, .2);
+// boost: an energy sheath wraps the hull and light streams off the wing tips, so you can see you are going super fast
+const boostFx = (() => {
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, power: { value: 0 }, color: { value: new THREE.Color() } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: `varying vec2 vUv; varying float vF; void main(){ vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.); vec3 n=normalize(normalMatrix*normal); vF=1.-abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader: `uniform float time, power; uniform vec3 color; varying vec2 vUv; varying float vF;
+      void main(){ float along=vUv.y; float flow=.55+.45*sin(along*26.+time*38.+vUv.x*6.283*3.); float fade=smoothstep(.05,.55,along)*smoothstep(1.,.85,along);
+        float a=pow(vF,1.6)*fade*flow*power; gl_FragColor=vec4(color*a*1.6,1.); }`,
+  });
+  const g = new THREE.Group(); g.visible = false; ship.add(g);
+  const sheath = new THREE.Mesh(new THREE.CylinderGeometry(.35, 1, 1, 28, 1, true), mat); // tight at the nose, wide at the back
+  sheath.rotation.x = Math.PI / 2; g.add(sheath);
+  const tipMat = new THREE.ShaderMaterial({
+    uniforms: mat.uniforms, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader: `uniform float time, power; uniform vec3 color; varying vec2 vUv;
+      void main(){ float along=vUv.y; float core=1.-abs(vUv.x-.5)*2.; float a=core*core*pow(along,1.5)*(.7+.3*sin(along*40.+time*50.))*power; gl_FragColor=vec4(mix(color,vec3(1.),.35)*a*2.,1.); }`,
+  });
+  const tips = [-1, 1].map((sgn) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), tipMat); m.userData.sgn = sgn; g.add(m); return m; });
+  return { g, mat, sheath, tips, k: 0 };
+})();
+function updateBoostFx(dt, on) {
+  const b = boostFx; b.k += ((on ? 1 : 0) - b.k) * Math.min(1, dt * (on ? 5 : 3));
+  b.g.visible = mode === "fly" && b.k > .01; if (!b.g.visible) return;
+  const L = ship.userData.len, R = ship.userData.radius;
+  b.mat.uniforms.time.value = clock(); b.mat.uniforms.power.value = b.k * (.85 + Math.random() * .15);
+  b.mat.uniforms.color.value.copy(ship.userData.boostCol).multiplyScalar(.8);
+  b.g.quaternion.copy(model.quaternion); // lean with the ship
+  b.sheath.scale.set(R * .9, L * 1.3 * (.8 + b.k * .3), R * .55); b.sheath.position.set(0, 0, L * .05);
+  for (const m of b.tips) { // long thin streaks flowing back from the wing tips
+    const len = L * (.8 + b.k * 1.4);
+    m.scale.set(R * .08, len, 1); m.position.set(m.userData.sgn * R * .95, 0, -L * .3 - len / 2); m.rotation.set(Math.PI / 2, 0, 0);
+  }
+}
 // ---- galaxies, minimap and danger arrows
 const GALAXIES = [ // the main crowded galaxy, and far ones for explorers
   { name: "Main Galaxy", c: [0, 0, 0], r: 1100, color: "rgba(111,227,255,.55)" },
@@ -3713,7 +3816,7 @@ function updateThreats() { // red boxes on people shooting at you, and arrows wh
     v.copy(src.group.position).project(camera);
     const behind = v.z > 1, on = !behind && Math.abs(v.x) < .95 && Math.abs(v.y) < .92, dist = Math.round(src.group.position.distanceTo(ship.position) * 1000);
     el.hidden = false;
-    if (on) { const sz = Math.max(34, Math.min(140, ((src.info && src.info.radius) || src.R || 1) * 900 / Math.max(1, src.group.position.distanceTo(camera.position)))); el.className = "tbox"; el.style.width = el.style.height = sz + "px"; el.style.left = (v.x + 1) / 2 * innerWidth + "px"; el.style.top = (1 - v.y) / 2 * innerHeight + "px"; el.textContent = ""; el.style.transform = "translate(-50%, -50%)"; }
+    if (on) { const sz = Math.max(40, Math.min(150, ((src.info && src.info.radius) || src.R || 1) * 1000 / Math.max(1, src.group.position.distanceTo(camera.position)))); el.className = "tbox"; el.style.width = el.style.height = sz + "px"; el.style.left = (v.x + 1) / 2 * innerWidth + "px"; el.style.top = (1 - v.y) / 2 * innerHeight + "px"; el.innerHTML = `<span>⚠ ${esc(src.name || src.data?.name || "enemy")}</span>`; el.style.transform = "translate(-50%, -50%)"; }
     else {
       let x = v.x, y = v.y; if (behind) { x = -x; y = -y; } const a = Math.atan2(y, x), rr = Math.min(innerWidth, innerHeight) * .42;
       el.className = "tarrow"; el.style.width = el.style.height = ""; el.style.left = innerWidth / 2 + Math.cos(a) * rr + "px"; el.style.top = innerHeight / 2 - Math.sin(a) * rr + "px";
@@ -3723,22 +3826,31 @@ function updateThreats() { // red boxes on people shooting at you, and arrows wh
   }
   for (; i < threatEls.length; i++) threatEls[i].hidden = true;
 }
-function updateLock(dt, fwd) { // weapons lock onto the enemy you are fighting
+let lockBeep = 0;
+function updateLock(dt, fwd) { // weapons lock onto the enemy you are fighting; once locked, a missile (F) chases it down
+  const inCone = (n, cos, max) => { if (!n || n.dead) return false; const to = n.group.position.clone().sub(ship.position), d = to.length(); return d < max && to.divideScalar(d).dot(fwd) > cos; };
   let cand = aimNpc && !aimNpc.dead ? aimNpc : null;
-  if (!cand) { let best = Math.cos(.45); for (const n of fighters()) { if (n.dead || !(n.hostile || n === lastHitNpc)) continue; const to = n.group.position.clone().sub(ship.position), d = to.length(); if (d > 150) continue; const c = to.normalize().dot(fwd); if (c > best) { best = c; cand = n; } } }
+  if (!cand && inCone(lockCand, Math.cos(.6), 200)) cand = lockCand; // keep tracking the same ship while it stays roughly ahead
+  if (!cand) { let best = Math.cos(.5); for (const n of fighters()) { if (n.dead || !(n.hostile || n === lastHitNpc || attackers.has(n))) continue; const to = n.group.position.clone().sub(ship.position), d = to.length(); if (d > 200) continue; const c = to.normalize().dot(fwd); if (c > best) { best = c; cand = n; } } }
   if (cand && cand === lockCand) lockT += dt; else { lockCand = cand; lockT = 0; }
-  if (lockCand && lockT > .6 && lockTarget !== lockCand) { lockTarget = lockCand; sfx.lock(); }
-  if (lockTarget && (lockTarget.dead || lockTarget.group.position.distanceTo(ship.position) > 170 || lockTarget.group.position.clone().sub(ship.position).normalize().dot(fwd) < Math.cos(1.1))) lockTarget = null;
-  const box = $("lockBox"), show = lockTarget || lockCand;
+  if (lockTarget && (lockTarget.dead || !inCone(lockTarget, Math.cos(1.1), 230))) lockTarget = null;
+  if (lockCand && lockT > .6 && lockTarget !== lockCand) { lockTarget = lockCand; sfx.lock(); lockBeep = .5; }
+  const locking = lockCand && lockCand !== lockTarget;
+  if ((lockBeep -= dt) <= 0) { // beeps speed up while locking, then a steady chirp while locked
+    if (locking) { const k = Math.min(1, lockT / .6); sfx.lockTick(k); lockBeep = .16 - k * .1; }
+    else if (lockTarget) { sfx.lockHold(); lockBeep = .5; }
+  }
+  const box = $("lockBox"), show = locking ? lockCand : lockTarget;
+  $("crosshair").classList.toggle("locked", !!lockTarget);
   if (!show) { box.hidden = true; return; }
   const v = show.group.position.clone().project(camera);
   if (v.z > 1) { box.hidden = true; return; }
   box.hidden = false; box.classList.toggle("locked", show === lockTarget);
-  const r = Math.max(26, Math.min(120, show.info.radius * 900 / Math.max(1, show.group.position.distanceTo(camera.position))));
-  const shrink = show === lockTarget ? 1 : 1.8 - Math.min(1, lockT / .6) * .8;
+  const r = Math.max(34, Math.min(140, show.info.radius * 900 / Math.max(1, show.group.position.distanceTo(camera.position))));
+  const shrink = show === lockTarget ? 1 : 2.2 - Math.min(1, lockT / .6) * 1.2;
   box.style.left = (v.x + 1) / 2 * innerWidth + "px"; box.style.top = (1 - v.y) / 2 * innerHeight + "px";
   box.style.width = box.style.height = r * shrink + "px";
-  $("lockText").textContent = show === lockTarget ? `LOCKED · ${show.name}` : "LOCKING…";
+  $("lockText").innerHTML = show === lockTarget ? `🔒 LOCKED · ${esc(show.name)}<br><b>F · FIRE MISSILE</b>` : `LOCKING ${Math.round(Math.min(1, lockT / .6) * 100)}%`;
 }
 let roll = null, lastHitNpc = null, aimNpc = null;
 const rolling = () => !!roll;
@@ -3904,10 +4016,12 @@ function fireWeapon(kind) {
   if (kind === "laser") {
     let from;
     for (let i = 0; i < G.bolts; i++) {
-      from = muzzleWorld(); const dir = aimPoint.clone().sub(from).normalize(), w = .012 * sz * G.thick;
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(w, w, .7, 6), new THREE.MeshBasicMaterial({ color: G.color }));
+      from = muzzleWorld(); const tgt = aimTarget() || (lockTarget && !lockTarget.dead ? { npc: lockTarget } : null); // locked on: your lasers find the target
+      const dir = (tgt && tgt.npc ? tgt.npc.group.position.clone() : aimPoint.clone()).sub(from).normalize(), w = .03 * sz * G.thick;
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(w * .45, w * .45, 1.9, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.5, 4.5) })); // white-hot core
+      m.add(new THREE.Mesh(new THREE.CylinderGeometry(w, w, 2.1, 8), new THREE.MeshBasicMaterial({ color: G.color, transparent: true, opacity: .75, blending: THREE.AdditiveBlending, depthWrite: false }))); // colored glow
       m.position.copy(from); m.quaternion.setFromUnitVectors(UP, dir); scene.add(m);
-      bolts.push({ kind, obj: m, v: dir.multiplyScalar(320), speed: 320, life: 2, target: aimTarget(), dmg: G.dmg });
+      bolts.push({ kind, obj: m, v: dir.multiplyScalar(600), speed: 600, life: 1.2, target: tgt, dmg: G.dmg });
     }
     if (net.me && Math.random() < .5) net.send({ t: "shot", kind, from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: aimPoint.clone().add(WORLD_OFFSET).toArray().map(r3) });
     sfx.laser();
@@ -3917,7 +4031,7 @@ function fireWeapon(kind) {
     const n = new THREE.Mesh(new THREE.ConeGeometry(.02, .06, 12), mats.flag); n.rotation.x = Math.PI / 2; n.position.z = .11; g.add(n);
     g.position.copy(muzzleWorld()); g.quaternion.copy(ship.quaternion); g.scale.setScalar(sz); scene.add(g);
     const target = lockTarget && !lockTarget.dead ? { npc: lockTarget } : aimTarget();
-    bolts.push({ kind, obj: g, v: (target && target.npc ? target.npc.group.position.clone() : aimPoint.clone()).sub(g.position).normalize().multiplyScalar(40).add(vel).add(new THREE.Vector3().randomDirection().multiplyScalar(i * 6)), life: 8, target, speed: 95 });
+    bolts.push({ kind, obj: g, v: (target && target.npc ? target.npc.group.position.clone() : aimPoint.clone()).sub(g.position).normalize().multiplyScalar(40).add(vel).add(new THREE.Vector3().randomDirection().multiplyScalar(i * 6)), life: 8, target, speed: target && target.npc ? 140 + vel.length() : 95 });
     sfx.missile();
   } else if (kind === "bomb") {
     const g = new THREE.Mesh(new THREE.SphereGeometry(.05 * sz, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1a1a22, metalness: .6, roughness: .3 }));
@@ -3983,7 +4097,8 @@ function nuke(planet, at) { // one hit and the planet is gone
   planet.data.hp = 0; planet.checkDeath();
   toast(`☢ ${esc(planet.data.name)} was hit by an atom bomb!`, "boom", 3000);
 }
-const NPC_DAMAGE = { laser: 2.5, missile: 16, bomb: 30, atom: 999, troops: 0 };
+const NPC_DAMAGE = { laser: 6, missile: 45, bomb: 60, atom: 999, troops: 0 }; // you hit much harder than the aliens do
+function freeBolt(b) { scene.remove(b.obj); if (b.kind === "laser") b.obj.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
 function boltStep(dt) {
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -3995,15 +4110,16 @@ function boltStep(dt) {
         const to = n.group.position.clone().sub(p0), d = to.length();
         if (d <= Math.max(b.speed * dt * 1.05, n.info.radius)) {
           if (b.kind === "atom") { boom(n.group.position, 5); sfx.nuke(n.group.position); flashScreen("#ffffff", .7); }
+          else if (b.kind === "missile") { boom(n.group.position, 2 * Math.max(1, Math.sqrt(n.info.radius))); sfx.boom(2, n.group.position); }
           else if (b.kind !== "laser") boom(n.group.position, 1.2);
-          n.damage((NPC_DAMAGE[b.kind] || 2) * (b.dmg || 1)); scene.remove(b.obj); bolts.splice(i, 1); continue;
+          n.damage((NPC_DAMAGE[b.kind] || 2) * (b.dmg || 1)); freeBolt(b); bolts.splice(i, 1); continue;
         }
         if (b.kind === "laser") { b.v.copy(to).multiplyScalar(b.speed / d); b.obj.quaternion.setFromUnitVectors(UP, to.divideScalar(d)); }
         else { b.v.lerp(to.multiplyScalar(b.speed / d), Math.min(1, dt * 6)); b.obj.quaternion.setFromUnitVectors(FWD, b.v.clone().normalize()); }
       }
     } else if (b.target && b.target.p.alive) { // fly to the exact spot that was under the cursor
       const tw = b.target.p.mesh.localToWorld(b.target.local.clone()), to = tw.clone().sub(p0), d = to.length();
-      if (d <= b.speed * dt * 1.05 || d < .05) { impact(b, b.target.p, tw); scene.remove(b.obj); bolts.splice(i, 1); continue; }
+      if (d <= b.speed * dt * 1.05 || d < .05) { impact(b, b.target.p, tw); freeBolt(b); bolts.splice(i, 1); continue; }
       if (b.kind === "laser") { b.v.copy(to).multiplyScalar(b.speed / d); b.obj.quaternion.setFromUnitVectors(UP, to.divideScalar(d)); }
       else { b.v.lerp(to.multiplyScalar(b.speed / d), Math.min(1, dt * (d < 6 ? 12 : 3))); b.obj.quaternion.setFromUnitVectors(FWD, b.v.clone().normalize()); }
     }
@@ -4018,7 +4134,7 @@ function boltStep(dt) {
     let gone = b.life <= 0;
     if (!gone) for (const n of fighters()) { // stray shots can still hit alien ships and other players
       if (n.dead || (b.target && b.target.npc === n)) continue;
-      if (hitSphere(p0, b.obj.position, n.group.position, n.info.radius * 1.3)) { n.damage((NPC_DAMAGE[b.kind] || 2) * (b.dmg || 1)); if (b.kind !== "laser") boom(n.group.position, 1.2); gone = true; break; }
+      if (hitSphere(p0, b.obj.position, n.group.position, n.info.radius * (b.kind === "laser" ? 1.8 : 1.3))) { n.damage((NPC_DAMAGE[b.kind] || 2) * (b.dmg || 1)); if (b.kind !== "laser") boom(n.group.position, 1.2); gone = true; break; }
     }
     for (const p of planets) {
       if (gone) break;
@@ -4026,7 +4142,7 @@ function boltStep(dt) {
       const hit = hitSphere(p0, b.obj.position, p.group.position, p.R * 1.01);
       if (hit) { impact(b, p, hit); gone = true; break; }
     }
-    if (gone) { scene.remove(b.obj); bolts.splice(i, 1); }
+    if (gone) { freeBolt(b); bolts.splice(i, 1); }
   }
 }
 function flyStep(dt) {
@@ -4100,8 +4216,8 @@ function flyStep(dt) {
   if (firing && (weapon === "missile" || weapon === "bomb")) fireWeapon(weapon);
   const moving = throttle > .05 || spd > 2;
   for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, .5 + throttle * (boost ? 2.8 : 1.6) + Math.random() * .3, boost && thrust);
-  if (boost && thrust) for (let i = 0; i < 3; i++) fire.spawn(ship.position.clone().addScaledVector(fwd, -.3 * size), vel.clone().addScaledVector(fwd, -8).add(new THREE.Vector3().randomDirection()), .22, .05 * size, C(state.ship.boost || state.ship.flame, 1.6), DARK);
   const boosting = boost && thrust;
+  updateBoostFx(dt, boosting && throttle > .6);
   if (boosting && !wasBoost) sfx.boostKick();
   wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting);
   // HUD
@@ -4255,6 +4371,7 @@ function frame() {
     p.decor.traverse((o) => { if (o.userData.blink !== undefined) o.visible = Math.sin(t * 3 + o.userData.blink) > -.3; });
     p.animateAround(dt, t);
   }
+  if (mode !== "fly") boostFx.g.visible = false;
   if (mode === "fly") flyStep(dt);
   else if (mode === "warp") warpStep(realDt);
   else {
@@ -4298,7 +4415,7 @@ function startGame() {
   renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
-window.__tp = { net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head };
+window.__tp = { net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
 </script>
 </body>
 </html>
