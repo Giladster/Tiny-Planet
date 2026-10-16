@@ -144,6 +144,16 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #radioGoal { padding: 7px 9px; border-radius: 8px; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.35); color: var(--accent); font: 500 12px var(--mono); }
 #radio.min #radioText { display: none; }
 .xpbar { width: 60px; } .xpbar i { background: linear-gradient(90deg, #6fe3ff, #c8a2ff); }
+#megaBar { position: fixed; z-index: 3; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: 300px; text-align: center; font: 600 12px var(--mono); letter-spacing: .08em; color: #9fe8ff; pointer-events: none; text-shadow: 0 0 8px rgba(111,227,255,.6); }
+#megaBar .bar { height: 6px; margin-top: 5px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+#megaBar .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6fe3ff, #ff5ad8, #ffd23f); }
+#megaBar.on { color: #ffd2f6; animation: megaPulse .4s ease-in-out infinite alternate; }
+@keyframes megaPulse { to { transform: translateX(-50%) scale(1.06); } }
+#navTag { position: fixed; z-index: 3; pointer-events: none; font: 12px var(--mono); color: #6fe3ff; background: rgba(8,10,26,.6); border: 1px solid rgba(111,227,255,.35); border-radius: 7px; padding: 3px 8px; white-space: nowrap; }
+#navTag b { color: #fff; margin-left: 4px; }
+#megaFx { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at center, transparent 35%, rgba(90,40,160,.35) 70%, rgba(255,90,220,.45) 100%); }
+body.mega #megaFx { opacity: 1; }
+#mapGals { margin-bottom: 6px; }
 #flash { position: fixed; inset: 0; z-index: 6; pointer-events: none; background: #fff; opacity: 0; }
 
 .hpbar { display: inline-block; vertical-align: middle; width: 110px; height: 9px; border-radius: 5px; background: rgba(255,255,255,.1); overflow: hidden; margin: 0 4px; }
@@ -362,6 +372,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 
 <section id="p-map" class="hud panel" data-panel="map" hidden>
   <div class="ph"><span class="label">Star map · click a planet</span><button class="x" data-close="map" aria-label="Close star map">×</button></div>
+  <div class="row" id="mapGals"><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button></div>
   <svg id="mapSvg" role="img" aria-label="Star map of all planets"></svg>
   <div id="mapCard"><span class="small">Click a planet on the map to see who owns it.</span></div>
 </section>
@@ -446,6 +457,9 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div id="radioText"></div>
   <div id="radioGoal" hidden></div>
 </section>
+<div id="megaBar" hidden><span id="megaText"></span><div class="bar"><i id="megaFill"></i></div></div>
+<div id="navTag" hidden></div>
+<div id="megaFx"></div>
 <div id="tags"></div>
 <div id="toasts"></div>
 <div id="flash"></div>
@@ -928,18 +942,19 @@ const GLOW = glowTexture();
 
 // sky: the Milky Way, colored nebulas, far galaxies, twinkling stars and a blazing sun, all following the camera so they feel endlessly far
 const sky = new THREE.Group(); scene.add(sky);
-const BAND = new THREE.Vector3(.2, 1, -.35).normalize(); // the Milky Way is a glowing belt around this axis
+const BAND = new THREE.Vector3(1, .12, .3).normalize(); // the Milky Way is a glowing belt around this axis
 const NEB = sphereTexture(1024, 512, (x, y, z) => {
   const d = x * BAND.x + y * BAND.y + z * BAND.z, band = Math.exp(-d * d / .045), core = Math.exp(-d * d / .008);
   const n = fbm(x, y, z, 2.2, 3), m = fbm(x, y, z, 5, 17), dust = ss(.5, .72, fbm(x, y, z, 4.2, 29)); // dark dust lanes cut through the belt
   const glow = band * (.35 + .9 * n) * (1 - dust * .8 * band) + core * m * .6 * (1 - dust * .7);
   const red = ss(.56, .82, fbm(x, y, z, 1.6, 51)) * (.4 + band * .6), teal = ss(.6, .85, fbm(x, y, z, 1.9, 77)) * .8, faint = fbm(x, y, z, 1.1, 5) * .25;
   return [
-    Math.min(255, Math.round(3 + 52 * glow + 70 * red + 8 * faint)),
-    Math.min(255, Math.round(4 + 46 * glow + 14 * red + 34 * teal + 8 * faint)),
-    Math.min(255, Math.round(9 + 54 * glow + 34 * red + 44 * teal + 16 * faint)), 255];
+    Math.min(255, Math.round(3 + 82 * glow + 70 * red + 8 * faint)),
+    Math.min(255, Math.round(4 + 74 * glow + 14 * red + 34 * teal + 8 * faint)),
+    Math.min(255, Math.round(9 + 86 * glow + 34 * red + 44 * teal + 16 * faint)), 255];
 });
-sky.add(new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 40), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, depthWrite: false })));
+const NEB_MESH = new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 40), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, depthWrite: false, transparent: true }));
+sky.add(NEB_MESH);
 {
   const N = 9000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N), tw = new Float32Array(N), v = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
@@ -2045,7 +2060,7 @@ function buildWorld() {
   for (const p of [state.home, ...state.others]) liftAliens(p);
   for (const p of planets) scene.remove(p.group);
   home = new Planet(state.home, 40, true);
-  planets = [home, ...state.others.map((o) => new Planet(o, 26, false))];
+  planets = [home, ...state.others.map((o) => new Planet(o, 26, false)), ...FAR_PLANETS.map((f, i) => new Planet(farPlanetData(f, i), 26, false))];
   buildTags();
 }
 
@@ -2458,7 +2473,7 @@ function setPanel(name, open) { // small panels on top of any view: map, mail, c
     if (mode === "home" && view !== "main") setView("main");
   }
   ui[name] = open;
-  if (name === "map" && open) { renderMap(); renderMapCard(); }
+  if (name === "map" && open) { mapGal = shipInPrism() ? "prism" : "main"; renderMap(); renderMapCard(); }
   renderPanels(); saveUi();
 }
 function renderPanels() {
@@ -3368,9 +3383,17 @@ $("godPrank").addEventListener("click", () => {
 // ================= star map + navigation =================
 let mapSel = null, nav = null, navArrow = null;
 const mapPlanetColor = (p) => (p.data.design.pattern === "none" ? p.data.design.low : p.data.design.p1);
+let mapGal = "main";
+const shipInPrism = () => ship.position.distanceTo(prismAt()) < PRISM.r * 2;
+const onMap = (p) => (mapGal === "prism") === !!p.data.far;
+document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.addEventListener("click", () => { mapGal = b.dataset.gal; mapSel = null; renderMap(); renderMapCard(); }));
+$("mapGalNav").addEventListener("click", () => { setNav(mapGal === "prism" ? PRISM_NAV : MAIN_NAV); if (mode === "home") startFlying(); renderMap(); });
 function renderMap() {
   const svg = $("mapSvg");
-  const pts = [...planets.map((p) => p.group.position), ship.position];
+  document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.classList.toggle("on", b.dataset.gal === mapGal));
+  const here = (mapGal === "prism") === shipInPrism(), gname = mapGal === "prism" ? "Prism Galaxy" : "Main Galaxy";
+  $("mapGalNav").hidden = here; $("mapGalNav").textContent = `Navigate to ${gname}${mapGal === "prism" ? " · hold boost 10s for MEGA BOOST" : ""}`;
+  const pts = [...planets.filter(onMap).map((p) => p.group.position), ...(here ? [ship.position] : [])];
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -3381,6 +3404,7 @@ function renderMap() {
   for (let r = 100; r < w; r += 100) s += `<circle cx="0" cy="0" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
   if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
   planets.forEach((p, i) => {
+    if (!onMap(p)) return;
     const { x, z } = p.group.position, r = Math.max(fs * .7, p.R * 4), d = p.data;
     s += `<g class="mp" data-i="${i}">`;
     if (p === mapSel) s += `<circle cx="${x}" cy="${z}" r="${r * 1.7}" fill="none" stroke="#ffb547" stroke-width="${fs * .15}"/>`;
@@ -3635,7 +3659,7 @@ class Npc {
     if (this.trail) this.trail.reset();
   }
   plan() { // pick the next place to go, like a real pilot would: a trip, a stop, then the next trip
-    const live = planets.filter((p) => p.alive), any = (a) => a[(Math.random() * a.length) | 0], pos = this.group.position, r = this.role, h = this.home;
+    const live = planets.filter((p) => p.alive && !p.data.far), any = (a) => a[(Math.random() * a.length) | 0], pos = this.group.position, r = this.role, h = this.home;
     const near = (p, k) => p.group.position.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(p.R * k + this.info.radius * 2));
     const players = live.filter((p) => !p.data.npc), centre = new THREE.Vector3().sub(WORLD_OFFSET);
     let goal = null, wait = 0, p = null;
@@ -4079,7 +4103,7 @@ const dust = (() => { // space dust: tiny specks that stretch into streaks as yo
 function spaceDust(dt, spd) {
   const R = 26, c = ship.position, v = new THREE.Vector3(), ahead = vel.clone().normalize();
   dust.pts.visible = mode === "fly";
-  const len = Math.min(3.5, .02 + spd * .022), bright = Math.min(1, .25 + spd / 50);
+  const len = Math.min(3.5 + megaK * 16, .02 + spd * .022), bright = Math.min(1, .25 + spd / 50);
   for (let i = 0; i < dust.N; i++) {
     const j = i * 3, dx = dust.at[j] - c.x, dy = dust.at[j + 1] - c.y, dz = dust.at[j + 2] - c.z;
     if (!dust.ready || dx * dx + dy * dy + dz * dz > R * R) { // new specks appear mostly in front of you
@@ -4174,7 +4198,136 @@ const GALAXIES = [ // the main crowded galaxy, and far ones for explorers
   { name: "Main Galaxy", c: [0, 0, 0], r: 1100, color: "rgba(111,227,255,.55)" },
   { name: "Nebula Reach", c: [3200, 0, 900], r: 700, color: "rgba(200,162,255,.55)" },
   { name: "The Void Rim", c: [-2400, 0, -3000], r: 800, color: "rgba(255,181,71,.5)" },
+  { name: "Prism Galaxy", c: [8000, 2600, -12500], r: 1500, color: "rgba(255,90,220,.6)" }, // far away: reached with a mega boost
 ];
+// ---- the Prism Galaxy: a far, strange galaxy. Hold boost for 10 seconds to start a mega boost; 10 seconds of mega boost gets you there.
+const PRISM = GALAXIES.find((g) => g.name === "Prism Galaxy");
+const prismAt = () => V(PRISM.c).sub(WORLD_OFFSET); // where it is in your screen's world
+const MEGA_AFTER = 10, MEGA_SPEED = 1500;
+const FAR_PLANETS = [ // bizarre planets: odd shapes, wild colors, glowing seas
+  { name: "Jellyheart",    R: 5,   off: [0, 40, 0],       base: "candy", shape: "egg",    sea: "#29ffe0", shore: "#ff7af0", low: "#ff3fb4", high: "#b13cff", peak: "#ffffff", atmo: "#ff8af5", glow: .9, around: { ring: true, alien: true, alienText: "BLOOP!" } },
+  { name: "Cubix",         R: 4,   off: [380, -60, 160],  base: "disco", shape: "cube",   p1: "#6bff3a", p2: "#7a2bff", atmo: "#9dff6a", around: { sats: 6 } },
+  { name: "Spikestar",     R: 4.5, off: [-420, 90, 220],  base: "lava",  shape: "spiky",  sea: "#ffd23f", shore: "#ff8a1f", low: "#2a0a3a", high: "#14051f", atmo: "#ffb547", glow: 1.6, around: { ring: true } },
+  { name: "Eyeball Prime", R: 6,   off: [180, 160, -520], base: "melon", shape: "round",  pattern: "spots", low: "#f6f2ea", high: "#f6f2ea", peak: "#ffffff", p1: "#1a1a6a", p2: "#f6f2ea", atmo: "#ff5a6e", around: { alien: true, alienText: "I SEE YOU", moon: true } },
+  { name: "Twin Bean",     R: 4,   off: [-240, -120, -360], base: "toxic", shape: "peanut", pattern: "stripes", p1: "#ff8a1f", p2: "#7dff3a", atmo: "#c8ff9a", around: { sats: 3, rain: true } },
+  { name: "Mirror Pear",   R: 3.5, off: [520, 110, -220], base: "ice",   shape: "pear",   sea: "#e8f0ff", shore: "#c9d2ea", low: "#9aa3c5", high: "#d8deef", peak: "#ffffff", atmo: "#ffffff", glow: .3, around: { moon: true } },
+  { name: "Void Potato",   R: 5,   off: [-560, -40, -80], base: "toxic", shape: "potato", sea: "#b84dff", shore: "#1a0a2a", low: "#0a0612", high: "#05030a", peak: "#3a1a5a", atmo: "#b84dff", clouds: "", glow: 1.3, around: { ring: true, sats: 2 } },
+  { name: "Rainbow Disc",  R: 4.2, off: [60, -150, 460],  base: "candy", shape: "flat",   pattern: "stripes", p1: "#ff3f8e", p2: "#4fd8ff", atmo: "#fff36a", around: { ring: true, alien: true, alienText: "HELLO EXPLORER" } },
+];
+function farPlanetData(f, i) {
+  const t = TEMPLATES[f.base], d = { ...designFrom(f.base, 101 + i * 13) };
+  for (const k of ["sea", "shore", "low", "high", "peak", "p1", "p2", "atmo", "clouds", "glow", "pattern"]) if (f[k] !== undefined) d[k] = f[k];
+  d.shape = f.shape; d.shapeAmt = 1; d.around = structuredClone(f.around || {}); if (t.pattern === "none" && f.pattern) d.pattern = f.pattern;
+  const pos = PRISM.c.map((x, j) => x + f.off[j]);
+  return { name: f.name, owner: "Prism natives (aliens)", npc: true, far: true, R: f.R, pos, hp: 100, pop: 20000 + i * 7000, maxPop: 20000 + i * 7000, dead: false, troops: 0, design: d,
+    decor: f.around && f.around.alien ? [{ type: "alien", n: [0, .95, .3], text: f.around.alienText, size: 2 }] : [], mail: [], dmg: null };
+}
+// a glowing spiral of a billion stars around the galaxy's heart
+const prismDisc = (() => {
+  const N = 26000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N);
+  const cols = [new THREE.Color(1, .3, .85), new THREE.Color(1, .75, .3), new THREE.Color(.3, 1, .85), new THREE.Color(.6, .45, 1)];
+  for (let i = 0; i < N; i++) {
+    const arm = i % 3, r = Math.pow(Math.random(), .6) * 1700 + 40, a = r * .0042 + arm * Math.PI * 2 / 3 + (Math.random() - .5) * (.5 + 260 / r);
+    const h = (Math.random() - .5) * (90 * Math.exp(-r / 700) + 25);
+    p.set([Math.cos(a) * r, h, Math.sin(a) * r], i * 3);
+    const col = cols[(arm + (r > 900 ? 1 : 0) + (Math.random() < .2 ? 2 : 0)) % 4].clone().lerp(new THREE.Color(1, .95, .8), Math.exp(-r / 260));
+    c.set([col.r, col.g, col.b], i * 3); sz[i] = Math.random() < .03 ? rnd(30, 70) : rnd(6, 18);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(p, 3)); g.setAttribute("scol", new THREE.BufferAttribute(c, 3)); g.setAttribute("size", new THREE.BufferAttribute(sz, 1));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { op: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `attribute vec3 scol; attribute float size; varying vec3 vC; varying float vN; void main(){ vC=scol; vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; vN=smoothstep(8.,90.,-mv.z); gl_PointSize=clamp(size*260./-mv.z, 1., 14.); }`,
+    fragmentShader: `uniform float op; varying vec3 vC; varying float vN; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,r); gl_FragColor=vec4(vC*a*a*op*vN*1.4,1.); }`,
+  });
+  const grp = new THREE.Group(); grp.add(new THREE.Points(g, mat)); grp.children[0].frustumCulled = false;
+  const heart = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(3, 1.6, 2.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  heart.scale.setScalar(520); heart.material.color.setRGB(2, 1.1, 1.8); grp.add(heart); grp.rotation.set(.35, 0, .2); grp.userData = { mat, heart };
+  scene.add(grp); return grp;
+})();
+// far galaxies seen in the sky: a soft spiral that grows as you get closer
+function spiralTex(c1, c2, seed) {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 256; const gx = cv.getContext("2d"), r = seeded(seed);
+  const gr = gx.createRadialGradient(128, 128, 0, 128, 128, 50); gr.addColorStop(0, "rgba(255,248,230,1)"); gr.addColorStop(1, "rgba(255,248,230,0)"); gx.fillStyle = gr; gx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 5000; i++) {
+    const arm = i % 3, rr = Math.pow(r(), .7) * 120, a = rr * .05 + arm * 2.094 + (r() - .5) * .8;
+    gx.fillStyle = (i % 2 ? c1 : c2).replace("A", (.55 * (1 - rr / 125)).toFixed(2));
+    const s = r() < .05 ? 2.5 : 1.2; gx.fillRect(128 + Math.cos(a) * rr, 128 + Math.sin(a) * rr * .55, s, s);
+  }
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+const skyGalaxies = [
+  { g: PRISM, tex: spiralTex("rgba(255,90,220,A)", "rgba(255,200,90,A)", "prism") },
+  { g: GALAXIES[0], tex: spiralTex("rgba(120,190,255,A)", "rgba(200,230,255,A)", "main") },
+].map((s) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: s.tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, rotation: .5 })); sky.add(m); return { ...s, m }; });
+// inside the Prism Galaxy the whole sky turns pink, gold and green
+const prismSky = new THREE.Mesh(new THREE.SphereGeometry(2900, 48, 32), new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, transparent: true, opacity: 0, map: sphereTexture(512, 256, (x, y, z) => {
+  const n = fbm(x, y, z, 2.4, 61), m = fbm(x, y, z, 4.5, 83), band = Math.exp(-((x * .3 + y * .9 + z * .3) ** 2) / .06);
+  const pink = ss(.45, .8, n) * (.6 + band), gold = ss(.55, .85, m) * .8, teal = ss(.6, .9, fbm(x, y, z, 1.7, 97));
+  return [Math.min(255, 14 + 120 * pink + 90 * gold), Math.min(255, 6 + 30 * pink + 70 * gold + 90 * teal), Math.min(255, 22 + 110 * pink + 70 * teal), 255];
+}) }));
+sky.add(prismSky);
+// gigantic motherships that float slowly around the Prism Galaxy
+const farGiants = [];
+const GIANT_CFGS = [
+  { hull: "saucer", wings: "ring", engines: 4, extras: ["lights", "glow", "turret", "antenna"], body: "#3a2a5a", accent: "#ff5ad8", glow: "#ff5ad8", flame: "#ff5ad8", finish: "chrome", size: 420 },
+  { hull: "crystal", wings: "none", engines: 1, extras: ["glow", "lights"], body: "#ffd88a", accent: "#ff8a1f", glow: "#ffd23f", flame: "#ffd23f", flameShape: "ball", finish: "chrome", size: 540 },
+  { hull: "battleship", wings: "wide", engines: 4, extras: ["lights", "glow", "antenna", "turret"], body: "#2a4a5a", accent: "#29ffe0", glow: "#29ffe0", flame: "#29ffe0", finish: "metal", size: 630 },
+  { hull: "squid", wings: "none", engines: 1, extras: ["glow"], body: "#5a2a8a", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 500 },
+];
+function buildFarGiants() {
+  for (const g of farGiants) scene.remove(g.group); farGiants.length = 0;
+  GIANT_CFGS.forEach((cfg, i) => {
+    const group = new THREE.Group(), model = new THREE.Group(); group.add(model); scene.add(group);
+    const info = makeShipModel(cfg, model);
+    farGiants.push({ group, info, name: ["Mothership Lumora", "The Golden Hive", "Leviathan of Prism", "The Dream Squid"][i], orbit: 1000 + i * 320, a: i * 1.6, speed: .012 + i * .003, tilt: (i - 1.5) * .25, bob: i * 2 });
+  });
+}
+function farStep(dt, t) {
+  const c = prismAt(), d = camera.position.distanceTo(c), k = ss(5800, 2600, d);
+  prismDisc.position.copy(c); prismDisc.rotation.y += dt * .004; prismDisc.visible = k > 0;
+  prismDisc.userData.mat.uniforms.op.value = k; prismDisc.userData.heart.material.opacity = k;
+  const inside = ss(PRISM.r * 1.5, PRISM.r * .7, d);
+  prismSky.material.opacity = inside; NEB_MESH.material.opacity = 1 - inside * .85;
+  for (const s of skyGalaxies) { // the sprite shows the galaxy while it is too far for the real one
+    const gc = V(s.g.c).sub(WORLD_OFFSET), gd = camera.position.distanceTo(gc), dir = gc.sub(camera.position).normalize();
+    s.m.position.copy(dir).multiplyScalar(2400); s.m.scale.setScalar(Math.min(2600, 2400 * 2.6 * s.g.r / Math.max(1, gd)));
+    s.m.material.opacity = ss(s.g.r * 1.8, s.g.r * 3.5, gd) * (s.g === PRISM ? 1 : .8);
+  }
+  for (const g of farGiants) { // slow, lazy circles; they bob up and down
+    g.a += dt * g.speed;
+    const p = new THREE.Vector3(Math.cos(g.a) * g.orbit, Math.sin(t * .05 + g.bob) * 60 + g.tilt * g.orbit * Math.sin(g.a), Math.sin(g.a) * g.orbit).add(c);
+    const ahead = new THREE.Vector3(Math.cos(g.a + .01) * g.orbit, p.y - c.y, Math.sin(g.a + .01) * g.orbit).add(c);
+    g.group.position.copy(p); g.group.lookAt(ahead); g.group.visible = camera.position.distanceTo(p) < 5800;
+    if (g.group.visible) animateShipParts(g.info, t);
+    if (mode === "fly") { const to = ship.position.clone().sub(p), min = g.info.radius * .8 + ship.userData.radius; if (to.length() < min) { ship.position.copy(p).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
+  }
+}
+// ---- mega boost
+let boostHold = 0, mega = false, megaK = 0, megaFrom = null, megaLock = false;
+const galaxyAt = (p) => GALAXIES.find((g) => p.distanceTo(V(g.c).sub(WORLD_OFFSET)) < g.r) || null;
+function startMega() {
+  mega = true; megaFrom = galaxyAt(ship.position); sfx.warpIn(); flashScreen("#9fe8ff", .5); shake = Math.max(shake, .15);
+  toast("🌌 MEGA BOOST!", "boom", 2500); document.body.classList.add("mega");
+}
+function endMega(why) {
+  if (!mega) return; mega = false; boostHold = 0; megaLock = true; document.body.classList.remove("mega"); // let go of boost before the next one sfx.warpOut(); flashScreen("#ffffff", .35);
+  if (why) toast(why, "", 4000);
+}
+function megaStep(dt, boosting) {
+  if (!boosting) megaLock = false;
+  boostHold = boosting && !megaLock ? boostHold + dt : mega ? 0 : Math.max(0, boostHold - dt * 4);
+  if (!mega && boostHold >= MEGA_AFTER) startMega();
+  if (mega && !boosting) endMega();
+  if (mega) { const g = galaxyAt(ship.position); if (g && g !== megaFrom) { endMega(`🌌 Welcome to ${g.name}!`); vel.setLength(150); if (g === PRISM) { missionEvent("galaxy"); if (typeof radio === "function") radio("Whoa… look at this place, explorer. Giant ships, weird planets. Bolt is impressed. 🤖✨"); } } else megaFrom = megaFrom || g; }
+  megaK += ((mega ? 1 : 0) - megaK) * Math.min(1, dt * (mega ? .9 : 2.5));
+  const el = $("megaBar"), charge = Math.min(1, boostHold / MEGA_AFTER);
+  el.hidden = mode !== "fly" || (!mega && boostHold < 1.5);
+  if (!el.hidden) { $("megaFill").style.width = (mega ? 100 : charge * 100) + "%"; $("megaText").textContent = mega ? "MEGA BOOST · let go of Shift to stop" : `MEGA BOOST CHARGING · ${Math.ceil(MEGA_AFTER - boostHold)}s`; el.classList.toggle("on", mega); }
+}
+const MAIN_NAV = { group: { get position() { return V(GALAXIES[0].c).sub(WORLD_OFFSET); } }, R: 150, data: { name: "Main Galaxy" }, galaxy: true };
+const PRISM_NAV = { group: { get position() { return prismAt(); } }, R: 150, data: { name: "Prism Galaxy" }, galaxy: true };
+
 const mm = $("minimap"), mmg = mm.getContext("2d");
 function drawMinimap() {
   const show = mode === "fly" || (mode === "home" && view === "main"); mm.hidden = !show || document.body.classList.contains("joining"); if (mm.hidden) return;
@@ -4205,6 +4358,7 @@ function drawMinimap() {
     if (n.T && n.T.big) mmg.fillRect(x - r, y - r, r * 2, r * 2); else { mmg.beginPath(); mmg.arc(x, y, r, 0, 7); mmg.fill(); }
     if (threat) { mmg.strokeStyle = "#ff3b52"; mmg.lineWidth = 2; mmg.beginPath(); mmg.arc(x, y, 13 + pulse * 5, 0, 7); mmg.stroke(); }
   }
+  for (const g of farGiants) { const [x, y] = toMap(g.group.position); if (Math.hypot(x - Rr, y - Rr) > Rr) continue; mmg.fillStyle = "#ff8af5"; mmg.fillRect(x - 9, y - 9, 18, 18); }
   // you
   let [sx, sy] = fly ? [Rr, Rr] : toMap(ship.position);
   mmg.fillStyle = "#6fe3ff"; mmg.beginPath(); mmg.moveTo(sx, sy - 11); mmg.lineTo(sx + 8, sy + 8); mmg.lineTo(sx, sy + 4); mmg.lineTo(sx - 8, sy + 8); mmg.closePath(); mmg.fill();
@@ -4581,8 +4735,9 @@ function flyStep(dt) {
   const headUp = UP.clone().applyQuaternion(head), fwd = FWD.clone().applyQuaternion(head), right = new THREE.Vector3(-1, 0, 0).applyQuaternion(head);
   // engines: power builds up and fades out instead of switching on and off
   throttle += ((thrust ? (boost ? 1 : .55) : 0) - throttle) * Math.min(1, dt * (thrust ? 2.2 : 3));
-  const max = boost ? 150 : 28;
-  vel.addScaledVector(fwd, throttle * (boost ? 300 : 47) * dt);
+  megaStep(dt, boost && thrust);
+  const max = mega ? MEGA_SPEED : boost ? 150 : 28;
+  vel.addScaledVector(fwd, throttle * (mega ? MEGA_SPEED * 1.2 : boost ? 300 : 47) * dt);
   const strafe = (k("KeyD") ? 1 : 0) - (k("KeyA") ? 1 : 0);
   const lift = (k("Space") ? 1 : 0) - (k("ControlLeft") || k("ControlRight") || k("MetaLeft") || k("MetaRight") || k("KeyX") ? 1 : 0);
   if (lift) { // climb or dive, with small thruster flames
@@ -4597,6 +4752,8 @@ function flyStep(dt) {
   if (fv < -12) vel.addScaledVector(fwd, -12 - fv); // reverse is slow
   if (!thrust && !k("KeyS")) vel.multiplyScalar(Math.exp(-.18 * dt)); // coasting: slows down only a little
   if (vel.length() > max) vel.lerp(vel.clone().setLength(max), Math.min(1, dt * 1.5));
+  if (mega && vel.length() > MEGA_SPEED) vel.setLength(MEGA_SPEED);
+  if (!mega && vel.length() > 170) vel.multiplyScalar(Math.exp(-dt * 3)); // dropping out of mega boost slows you down fast
   ship.position.addScaledVector(vel, dt);
   for (const p of planets) { // bump off planets
     if (!p.alive) continue;
@@ -4612,7 +4769,7 @@ function flyStep(dt) {
   if (boostShake) camera.position.add(new THREE.Vector3(Math.sin(clock() * 61) * boostShake, Math.sin(clock() * 47) * boostShake, 0).applyQuaternion(head));
   camera.up.copy(headUp);
   camera.lookAt(ship.position.clone().addScaledVector(fwd, dist * 3.2).addScaledVector(headUp, dist * .2));
-  const fovWant = 58 + Math.min(14, spd / 10); if (Math.abs(fovWant - camera.fov) > .01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
+  const fovWant = 58 + Math.min(14, spd / 10) + megaK * 28; if (Math.abs(fovWant - camera.fov) > .01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
   camera.updateMatrixWorld();
   spaceDust(dt, spd);
   updateAim(); // after the camera moves, so shots go exactly under the cursor
@@ -4633,6 +4790,7 @@ function flyStep(dt) {
     navArrow.visible = true;
     navArrow.position.copy(ship.position).addScaledVector(headUp, ship.userData.len * .7 + .08);
     navArrow.lookAt(nav.group.position); navArrow.scale.setScalar(.45 + size * .3);
+    { const tp = navArrow.position.clone().project(camera), el = $("navTag"); el.hidden = tp.z > 1; el.style.left = (tp.x + 1) / 2 * innerWidth + 30 + "px"; el.style.top = (1 - tp.y) / 2 * innerHeight - 14 + "px"; el.innerHTML = `🧭 ${esc(nav.data.name)} <b>${fmt(dd * 1000)} km</b>`; }
     if (dd < nav.R * 5 && !nav.quiet) { toast(`🎯 You reached ${esc(nav.data.name)}!`); setNav(null); }
   }
   const tgt = currentTarget(); $("target").hidden = !tgt;
@@ -4793,7 +4951,9 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); npcStep(dt, t); tutStep(dt, t); junkStep(dt); remoteStep(dt, t);
+  boltStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t);
+  if (mode !== "fly" || !nav) $("navTag").hidden = true;
+  if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
   animateShipParts(ship.userData, t);
   fire.update(dt); smoke.update(dt); chunks.update(dt);
@@ -4819,10 +4979,10 @@ function startGame() {
   if (gameStarted) return; gameStarted = true; document.body.classList.remove("joining");
   buildWorld(); buildShip(); spawnNpcs(); renderDesign(); renderHangar(); renderMail(); renderChat(); renderInfo(); renderPanels(); applyQuality();
   { const dist = viewDistance(); camera.position.set(0, dist * .22, dist); }
-  renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter();
+  buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
-window.__tp = { get tut() { return { tut, tutS }; }, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
+window.__tp = { get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
 </script>
 </body>
 </html>
