@@ -190,6 +190,12 @@ body.mega #megaFx { opacity: 1; }
 .shop { display: grid; gap: 6px; }
 .shop button { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; }
 .shop button span { font-size: 11px; opacity: .75; }
+.shop .slot { font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; opacity: .6; margin-top: 6px; }
+.shop .arm { display: grid; grid-template-columns: 1fr auto; gap: 4px; }
+.shop .arm .up { align-items: center; justify-content: center; min-width: 74px; }
+.shop .arm.locked button { opacity: .45; }
+.shop .mk { color: var(--cyan); font-weight: 700; }
+.shop button.on .mk, #weapons button.on .mk { color: inherit; }
 .wakebar { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
 .wakebar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), #9cf); transition: width .4s; }
 #minimap { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); left: 16px; width: 180px; height: 180px; border-radius: 50%; background: rgba(8, 10, 26, .72); border: 1px solid var(--line); z-index: 3; pointer-events: none; }
@@ -224,6 +230,7 @@ body.mega #megaFx { opacity: 1; }
 #weapons button { position: relative; overflow: hidden; display: grid; gap: 1px; padding: 5px 10px; text-align: center; min-width: 74px; }
 #weapons button small { font: 10px var(--mono); color: inherit; opacity: .7; }
 #weapons .cd { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--cyan); }
+#weapons .mk { color: var(--cyan); font-weight: 700; }
 #p-help { right: 16px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); width: 250px; }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; }
 kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); background: rgba(255,255,255,.06); justify-self: start; }
@@ -371,7 +378,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   </div>
   <div class="group" data-tab="weapons"><span class="label">Weapons shop · 💰 <b id="credits">0</b> credits</span>
     <div class="shop" id="shop"></div>
-    <span class="small">Earn credits by beating enemy ships and attacking other planets.</span>
+    <span class="small">Earn credits by beating enemy ships and attacking other planets. Level up to unlock new weapons.</span>
   </div>
   <div class="row"><button class="go" id="goFly">Fly it</button></div>
 </section>
@@ -459,9 +466,10 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
     <kbd>Q / E</kbd><span>roll</span>
     <kbd>Space</kbd><span>fly up</span>
     <kbd>Ctrl / ⌘ / X</kbd><span>fly down</span>
-    <kbd>L</kbd><span>lasers (or hold the mouse button)</span>
+    <kbd>L</kbd><span>fire your gun (or hold the mouse button) · rail gun: hold to charge, let go to fire</span>
     <kbd>I</kbd><span>talk to the ship you aim at</span>
-    <kbd>F</kbd><span>missile (or right click) · flies to a locked target</span>
+    <kbd>F</kbd><span>heavy weapon (or right click): torpedo, drones or gravity bomb</span>
+    <kbd>G</kbd><span>gadget: shield, EMP blast or cloak</span>
     <kbd>B</kbd><span>drop bomb</span>
     <kbd>T</kbd><span>send troops</span>
     <kbd>M</kbd><span>mailbox of the planet you look at</span>
@@ -504,7 +512,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 
 <div id="pad" aria-hidden="true">
   <button data-k="KeyW">GO</button><button data-k="ShiftLeft">BOOST</button>
-  <button data-k="KeyL">LASER</button><button data-k="KeyF">MISSILE</button>
+  <button data-k="KeyL">FIRE</button><button data-k="KeyF">HEAVY</button><button data-k="KeyG">GADGET</button>
   <button data-k="Space">UP</button><button data-k="KeyX">DOWN</button>
   <button data-k="KeyB">BOMB</button><button data-k="KeyT">TROOPS</button>
 </div>
@@ -591,20 +599,37 @@ const HULLS = { interceptor: "Interceptor", stealth: "Stealth", manta: "Manta", 
 const WINGS = { none: "None", swept: "Swept", delta: "Delta", forward: "Forward swept", bat: "Bat", xwing: "X-wings", booms: "Twin booms", wide: "Wide", ring: "Ring" };
 const EXTRAS = { siren: "Police siren", flag: "Pirate flag", drill: "Drill", glow: "Glow strips", lights: "Wing lights", fins: "Tail fins", cannons: "Side cannons", turret: "Turret", spikes: "Spikes", antenna: "Antenna", spoiler: "Spoiler", shield: "Shield bubble", hat: "Party hat", eyes: "Googly eyes" };
 const FLAMES = { cone: "Cone", long: "Long jet", wide: "Wide", ball: "Plasma ball", twin: "Split", ring: "Ring" };
-const GUNS = { // weapons you can buy: they change the look of your ship and make it stronger
-  twin:    { label: "Twin cannons",  cost: 120, info: "2 lasers at once" },
-  gatling: { label: "Gatling gun",   cost: 300, info: "shoots much faster" },
-  heavy:   { label: "Heavy laser",   cost: 450, info: "thick beams, +60% damage" },
-  pods:    { label: "Missile pods",  cost: 400, info: "2 missiles at once" },
-  plasma:  { label: "Plasma cannon", cost: 900, info: "green plasma, double damage" },
+const ARMS = { // weapons: one gun (click / L), one heavy weapon (F / right click) and one gadget (G). Levels unlock them, credits buy them, Mk 2 and Mk 3 make them stronger
+  pulse:   { slot: "gun",    label: "Pulse cannon",   icon: "🔴", lv: 1, cost: 0,    up: [120, 400],  cd: .1,  info: "fast energy bolts · Mk 2 twin barrels · Mk 3 three barrels" },
+  gatling: { slot: "gun",    label: "Gatling plasma", icon: "🟢", lv: 2, cost: 250,  up: [300, 700],  cd: .04, info: "spins up into a storm of plasma · don't let it overheat" },
+  rail:    { slot: "gun",    label: "Rail gun",       icon: "🔵", lv: 3, cost: 500,  up: [450, 900],  cd: .5,  info: "hold to charge, let go: one huge shot that goes through ships" },
+  arc:     { slot: "gun",    label: "Arc lightning",  icon: "⚡", lv: 5, cost: 900,  up: [700, 1400], cd: .11, info: "lightning that jumps from enemy to enemy" },
+  torpedo: { slot: "heavy",  label: "Plasma torpedo", icon: "🌀", lv: 1, cost: 0,    up: [300, 700],  cd: .9,  info: "a ball of plasma that hunts your lock · Mk 2 fires two · Mk 3 three" },
+  drones:  { slot: "heavy",  label: "Seeker drones",  icon: "🛸", lv: 3, cost: 600,  up: [500, 1000], cd: 10,  info: "attack drones that hunt enemies on their own" },
+  gravity: { slot: "heavy",  label: "Gravity bomb",   icon: "⚫", lv: 4, cost: 1000, up: [800, 1500], cd: 7,   info: "makes a black hole that pulls ships in and crushes them" },
+  shield:  { slot: "gadget", label: "Energy shield",  icon: "🛡", lv: 2, cost: 300,  up: [300, 700],  cd: 18,  info: "blocks all damage for a few seconds" },
+  emp:     { slot: "gadget", label: "EMP blast",      icon: "💠", lv: 4, cost: 700,  up: [500, 1000], cd: 16,  info: "shuts down every enemy ship near you" },
+  cloak:   { slot: "gadget", label: "Cloak",          icon: "👻", lv: 6, cost: 1200, up: [700, 1400], cd: 22,  info: "turn invisible so enemies lose you · shooting shows you again" },
 };
+const SLOTS = { gun: "Gun · click or L", heavy: "Heavy · F or right click", gadget: "Gadget · G" };
 const WALLETKEY = "tinyplanets.wallet";
 const wallet = (() => { try { return JSON.parse(localStorage.getItem(WALLETKEY)) || { credits: 150, owned: [] }; } catch { return { credits: 150, owned: [] }; } })();
-function saveWallet() { try { localStorage.setItem(WALLETKEY, JSON.stringify(wallet)); } catch {} }
-function gunStats() {
-  const g = new Set(state.ship.guns || []);
-  return { bolts: g.has("twin") ? 2 : 1, cd: g.has("gatling") ? .5 : 1, dmg: (wallet.style === "lava" ? 1.15 : 1) * (g.has("heavy") ? 1.6 : 1) * (g.has("plasma") ? 2 : 1) * (godOn("oneshot") ? 999 : 1), thick: g.has("heavy") ? 2.2 : g.has("plasma") ? 3 : 1, color: g.has("plasma") ? new THREE.Color(.6, 3.5, .8) : g.has("heavy") ? new THREE.Color(3.5, 1.4, .3) : new THREE.Color(4, .5, .8), missiles: g.has("pods") ? 2 : 1 };
+function armsFrom(owned) { // the old shop sold upgrades; they become the new weapons
+  const o = new Set(owned || []), a = { pulse: o.has("twin") ? 2 : 1, torpedo: o.has("pods") ? 2 : 1 };
+  if (o.has("gatling")) a.gatling = 1; if (o.has("heavy")) a.rail = 1; if (o.has("plasma")) a.arc = 1;
+  return a;
 }
+if (!wallet.arms) wallet.arms = armsFrom(wallet.owned);
+function saveWallet() { try { localStorage.setItem(WALLETKEY, JSON.stringify(wallet)); } catch {} }
+const mkOf = (k) => (k && wallet.arms[k]) || 0;
+function loadout() { // what is fitted on your ship right now
+  const s = state.ship, a = s.arms || (s.arms = {});
+  for (const [slot, def] of [["gun", "pulse"], ["heavy", "torpedo"]]) if (!a[slot] || !mkOf(a[slot])) a[slot] = def;
+  if (a.gadget && !mkOf(a.gadget)) a.gadget = null;
+  return a;
+}
+function syncArmsLook() { const a = loadout(); state.ship.armsMk = { gun: mkOf(a.gun), heavy: mkOf(a.heavy) }; } // other players see how big your guns are
+const dmgBoost = () => (wallet.style === "lava" ? 1.15 : 1) * (godOn("oneshot") ? 999 : 1); // lava civilizations hit harder
 const FINISHES = { metal: "Metal", chrome: "Chrome", matte: "Matte", carbon: "Carbon", neon: "Neon glow" };
 const PRESETS = {
   fighter:   { label: "Fighter", hull: "interceptor", wings: "xwing", engines: 2, extras: ["cannons", "glow", "lights"], body: "#d8deef", accent: "#ff5a6e", glow: "#6fe3ff", flame: "#6fe3ff", finish: "metal", size: 1 },
@@ -625,13 +650,16 @@ const PRESETS = {
   toaster:   { label: "Toaster", hull: "toaster", wings: "swept", engines: 2, extras: ["eyes", "spoiler"], body: "#c9d2ea", accent: "#e8b878", glow: "#ffb547", flame: "#ffb547", finish: "chrome", size: 1.2 },
   random:    { label: "Surprise me" },
 };
-const WEAPONS = {
-  laser:   { label: "Lasers",   keyLabel: "L / click", cd: .1 },
-  missile: { label: "Missiles", keyLabel: "F", cd: .45 },
-  bomb:    { label: "Bombs",    keyLabel: "B", cd: 1.1 },
-  troops:  { label: "Troops",   keyLabel: "T", cd: 2.5 },
-  atom:    { label: "Atom bomb", keyLabel: "N", cd: 6 },
+const WEAPONS = { // the weapon bar: your fitted gun, heavy weapon and gadget, then the tools for attacking planets
+  gun:    { keyLabel: "L / click" },
+  heavy:  { keyLabel: "F" },
+  gadget: { keyLabel: "G" },
+  bomb:   { label: "Bombs",    keyLabel: "B", cd: 1.1 },
+  troops: { label: "Troops",   keyLabel: "T", cd: 2.5 },
+  atom:   { label: "Atom bomb", keyLabel: "N", cd: 6 },
 };
+const slotArm = (k) => (WEAPONS[k] && !WEAPONS[k].cd ? loadout()[k] : null);
+const weaponCd = (k) => { const a = slotArm(k); return a ? ARMS[a].cd : WEAPONS[k].cd; };
 const DAMAGE = { // size = blast radius on the planet (radians), hp = health lost, pop = share of people lost
   laser:   { size: .05, dmg: .45, hp: .5, pop: .004, power: 1 },
   missile: { size: .17, dmg: .9,  hp: 5,  pop: .045, power: 2.2 },
@@ -714,7 +742,7 @@ const saveUi = () => store(UIKEY, ui);
 
 // ================= sound (all made in the browser, no files) =================
 const sfx = (() => {
-  let ac = null, master = null, dry = null, verb = null, nbuf = null, lastLaser = 0, eng = null;
+  let ac = null, master = null, dry = null, verb = null, nbuf = null, lastLaser = 0, eng = null, rc = null, lastArc = 0, lastGat = 0;
   const ctx = () => {
     if (ac) return ac;
     try {
@@ -820,6 +848,60 @@ const sfx = (() => {
       const o = osc("sawtooth", 55, 160, t, .5), og = env(gain(), t, .01, .6); o.connect(filt("lowpass", 900, 900, t, 1)).connect(shaper(4)).connect(og); out(og, .1, .2);
       const s = osc("sine", 70, 38, t, .35), sg = env(gain(), t, .005, .35); s.connect(sg); out(sg, .22, .1);
     },
+    gatling() { // a fast, chunky plasma rattle
+      if (!ok()) return; const t = ac.currentTime; if (t - lastGat < .035) return; lastGat = t;
+      const o = osc("square", 260 + Math.random() * 40, 90, t, .06), g = env(gain(), t, .001, .06); o.connect(filt("lowpass", 2400, 500, t, .06, 3)).connect(shaper(4)).connect(g); out(g, .05, .1);
+      const n = noise(t, .04, 1.6), nb = filt("bandpass", 3500, 1800, t, .04, 1.2), ng = env(gain(), t, .001, .04); n.connect(nb).connect(ng); out(ng, .07, .1);
+    },
+    overheat() { if (!ok()) return; const t = ac.currentTime, n = noise(t, .9, 1.4), b = filt("highpass", 3000, 6000, t, .9), g = env(gain(), t, .02, .85); n.connect(b).connect(g); out(g, .08, .2); const o = osc("sine", 900, 300, t, .4), og = env(gain(), t, .005, .4); o.connect(og); out(og, .05, .2); },
+    railCharge(k) { // a rising electric whine while you hold the rail gun
+      if (!ac || !ok()) { if (rc && k <= 0) { try { rc.o.stop(); rc.o2.stop(); } catch {} rc = null; } return; }
+      const t = ac.currentTime;
+      if (!rc && k > 0) { rc = { o: osc("sawtooth", 120, 120, t, 600), o2: osc("sine", 300, 300, t, 600), f: filt("bandpass", 800, 800, t, 1, 4), g: gain() }; rc.g.gain.value = 0; rc.o.connect(rc.f); rc.o2.connect(rc.f); rc.f.connect(rc.g); out(rc.g, 1, .2); }
+      if (!rc) return;
+      if (k <= 0) { rc.g.gain.setTargetAtTime(0, t, .02); const r = rc; setTimeout(() => { try { r.o.stop(); r.o2.stop(); } catch {} }, 250); rc = null; return; }
+      rc.o.frequency.setTargetAtTime(120 + 600 * k, t, .05); rc.o2.frequency.setTargetAtTime(300 + 2600 * k * k, t, .05); rc.f.frequency.setTargetAtTime(600 + 3200 * k, t, .05); rc.g.gain.setTargetAtTime((.015 + .05 * k) * (k >= 1 ? .8 + .2 * Math.sin(t * 60) : 1), t, .03);
+    },
+    rail(c) { // a huge supersonic crack, a metal ring and a deep punch
+      if (!ok()) return; const t = ac.currentTime, v = .5 + c * .7;
+      const s = osc("sine", 140, 28, t, .6), sg = env(gain(), t, .002, .6); s.connect(sg); out(sg, .45 * v, .3);
+      const n = noise(t, .3, 1.8), nh = filt("highpass", 4000, 900, t, .3), ng = env(gain(), t, .001, .3); n.connect(nh).connect(shaper(5)).connect(ng); out(ng, .22 * v, .5);
+      const z = osc("sine", 4200, 160, t, .55), zg = env(gain(), t, .001, .55); z.connect(zg); out(zg, .06 * v, .6);
+      for (const f of [1480, 2210]) { const o = osc("triangle", f, f * .96, t, 1.2), og = env(gain(), t, .002, 1.2); o.connect(og); out(og, .025 * v, .8); }
+    },
+    arc() { // crackling, buzzing electricity
+      if (!ok()) return; const t = ac.currentTime; if (t - lastArc < .1) return; lastArc = t;
+      const n = noise(t, .13, 2), b = filt("bandpass", 2500 + Math.random() * 2000, 1200, t, .13, 2), g = env(gain(), t, .001, .12); n.connect(b).connect(shaper(8)).connect(g); out(g, .1, .25);
+      const o = osc("sawtooth", 60, 55, t, .13), og = env(gain(), t, .002, .12); o.connect(filt("lowpass", 900, 900, t, 1)).connect(shaper(6)).connect(og); out(og, .06, .1);
+    },
+    torpedo() { // a heavy plasma launch
+      if (!ok()) return; const t = ac.currentTime;
+      const s = osc("sine", 90, 40, t, .4), sg = env(gain(), t, .003, .4); s.connect(sg); out(sg, .3, .2);
+      const o = osc("sawtooth", 200, 900, t, .5), og = env(gain(), t, .02, .5); o.connect(filt("bandpass", 600, 2400, t, .5, 3)).connect(og); out(og, .06, .4);
+      const n = noise(t, .6, 1), nb = filt("bandpass", 500, 2600, t, .6, 1), ng = env(gain(), t, .02, .55); n.connect(nb).connect(ng); out(ng, .12, .4);
+    },
+    plasmaBoom(at, s = 1) { explosion(1.8 * s, at, .9); if (!ok()) return; const t = ac.currentTime, v = near(at); const o = osc("sine", 1600, 180, t, .5), g = env(gain(), t, .002, .5); o.connect(g); out(g, .08 * v, .6); },
+    drones() { if (!ok()) return; const t = ac.currentTime; [0, .08, .16].forEach((d, i) => { const o = osc("triangle", 700 + i * 300, 1100 + i * 300, t + d, .07), g = env(gain(), t + d, .002, .07); o.connect(g); out(g, .05, .2); }); },
+    droneShot(at) { if (!ok()) return; const t = ac.currentTime, v = near(at); if (v < .1) return; const o = osc("square", 1500, 500, t, .07), g = env(gain(), t, .001, .07); o.connect(filt("lowpass", 3000, 800, t, .07)).connect(g); out(g, .03 * v, .2); },
+    gravityThrow() { if (!ok()) return; const t = ac.currentTime; const o = osc("sine", 110, 45, t, .6), g = env(gain(), t, .01, .6); o.connect(g); out(g, .3, .3); const w = osc("sine", 300, 120, t, .6), wg = env(gain(), t, .01, .6); w.connect(wg); out(wg, .05, .6); },
+    blackHole(at, dur) { // a deep, growing rumble while the black hole feeds
+      if (!ok()) return; const t = ac.currentTime, v = Math.max(.25, near(at));
+      const o = osc("sawtooth", 32, 22, t, dur), lp = filt("lowpass", 180, 420, t, dur, 4), g = gain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .4); g.gain.setValueAtTime(1, t + dur - .3); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      const l = osc("sine", 6, 11, t, dur), lg = gain(); lg.gain.value = 120; l.connect(lg).connect(lp.frequency);
+      o.connect(lp).connect(shaper(3)).connect(g); out(g, .16 * v, .5);
+      const n = noise(t, dur, .5), nb = filt("bandpass", 2400, 200, t, dur, 2), ng = gain(); ng.gain.setValueAtTime(.0001, t); ng.gain.exponentialRampToValueAtTime(1, t + dur * .8); ng.gain.exponentialRampToValueAtTime(.0001, t + dur); n.connect(nb).connect(ng); out(ng, .08 * v, .6);
+    },
+    gravityBoom(at) { explosion(4, at, 1.6); if (!ok()) return; const t = ac.currentTime, o = osc("sine", 60, 20, t, 1.2), g = env(gain(), t, .003, 1.2); o.connect(g); out(g, .5 * near(at), .3); },
+    shieldUp() { if (!ok()) return; const t = ac.currentTime; const o = osc("sine", 220, 880, t, .35), g = env(gain(), t, .01, .4); o.connect(g); out(g, .08, .5); const n = noise(t, .4, 1), b = filt("bandpass", 800, 4000, t, .4, 2), ng = env(gain(), t, .02, .38); n.connect(b).connect(ng); out(ng, .06, .4); },
+    shieldHit() { if (!ok()) return; const t = ac.currentTime; const o = osc("sine", 520 + Math.random() * 80, 300, t, .25), g = env(gain(), t, .002, .25); o.connect(g); out(g, .08, .4); const n = noise(t, .1, 1.5), b = filt("bandpass", 3000, 3000, t, 1, 3), ng = env(gain(), t, .001, .1); n.connect(b).connect(ng); out(ng, .06, .2); },
+    emp() { // a deep electric whomp
+      if (!ok()) return; const t = ac.currentTime;
+      const s = osc("sine", 160, 30, t, .9), sg = env(gain(), t, .003, .9); s.connect(sg); out(sg, .45, .5);
+      const n = noise(t, .8, 1.6), b = filt("bandpass", 6000, 300, t, .8, 2), ng = env(gain(), t, .003, .8); n.connect(b).connect(shaper(7)).connect(ng); out(ng, .14, .7);
+      const z = osc("square", 2400, 80, t, .5), zg = env(gain(), t, .002, .5); z.connect(filt("lowpass", 4000, 400, t, .5)).connect(zg); out(zg, .04, .5);
+    },
+    cloak(on) { if (!ok()) return; const t = ac.currentTime; const o = osc("sine", on ? 900 : 200, on ? 150 : 900, t, .6), g = env(gain(), t, .02, .6); o.connect(g); out(g, .06, .8); const n = noise(t, .6, 1), b = filt("bandpass", on ? 4000 : 500, on ? 400 : 4000, t, .6, 3), ng = env(gain(), t, .05, .55); n.connect(b).connect(ng); out(ng, .06, .6); },
+    equip() { if (!ok()) return; const t = ac.currentTime; for (const [d, f] of [[0, 300], [.07, 150]]) { const n = noise(t + d, .06, 1.4), b = filt("bandpass", 2000, 2000, t + d, 1, 2), g = env(gain(), t + d, .001, .06); n.connect(b).connect(g); out(g, .12, .1); const o = osc("square", f, f * .7, t + d, .06), og = env(gain(), t + d, .001, .06); o.connect(filt("lowpass", 900, 900, t, 1)).connect(og); out(og, .06, .1); } },
     laser() { // heavy laser cannon: a deep punch, a snarling energy blast, a plasma crack and a sizzle
       if (!ok()) return; const t = ac.currentTime; if (t - lastLaser < .06) return; lastLaser = t;
       const th = osc("sine", 170, 38, t, .2), tg = env(gain(), t, .002, .2); th.connect(tg); out(tg, .32, .08);
@@ -2407,12 +2489,26 @@ function makeShipParts(c, root) {
   if (ex.has("flag")) { add(new THREE.CylinderGeometry(.003, .003, .16, 6), dark, [0, top + .08, back + .06]); const fl = add(new THREE.PlaneGeometry(.09, .06), new THREE.MeshStandardMaterial({ color: 0x111111, side: THREE.DoubleSide, roughness: .9 }), [0, top + .13, back + .015], [0, H, 0]); fl.add(new THREE.Mesh(new THREE.CircleGeometry(.014, 16), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }))); fl.children[0].position.z = .001; }
   if (ex.has("drill")) { const d = add(new THREE.ConeGeometry(.045, .13, 12), dark, [0, 0, nose + .06], [H, 0, 0]); d.name = "drill"; add(new THREE.TorusGeometry(.045, .008, 8, 20), trim, [0, 0, nose]); }
   // ---- bought weapons
-  const guns = new Set(c.guns || []);
-  if (guns.has("twin")) for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(.01, .01, .2, 10), dark, [s * (side + .03), -.04, .04], [H, 0, 0]); add(new RoundedBoxGeometry(.03, .03, .06, 2, .008), trim, [s * (side + .03), -.04, -.04]); muzzles.push([s * (side + .03), -.04, .15]); }
-  if (guns.has("gatling")) { const gg = new THREE.Group(); gg.position.set(0, -top * .6 - .03, nose * .45); gg.name = "gatling"; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, b = new THREE.Mesh(new THREE.CylinderGeometry(.005, .005, .16, 6), dark); b.rotation.x = H; b.position.set(Math.cos(a) * .014, Math.sin(a) * .014, .04); gg.add(b); } gg.add(new THREE.Mesh(new THREE.CylinderGeometry(.022, .022, .04, 12).rotateX(H), trim)); root.add(gg); muzzles.push([0, -top * .6 - .03, nose * .45 + .12]); }
-  if (guns.has("heavy")) { add(new THREE.CylinderGeometry(.018, .024, .3, 14), dark, [0, top + .02, .02], [H, 0, 0]); add(new THREE.TorusGeometry(.022, .006, 8, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 1, .2) }), [0, top + .02, .17]); muzzles.push([0, top + .02, .18]); }
-  if (guns.has("pods")) for (const s of [-1, 1]) { add(new RoundedBoxGeometry(.05, .04, .12, 2, .01), trim, [s * (side + .07), .0, -.02]); for (const y of [-.008, .008]) for (const x of [-.012, .012]) add(new THREE.ConeGeometry(.006, .02, 8), new THREE.MeshStandardMaterial({ color: 0xff4040 }), [s * (side + .07) + x, y, .05], [H, 0, 0]); }
-  if (guns.has("plasma")) { add(new THREE.CylinderGeometry(.014, .014, .2, 12), dark, [0, -top * .5 - .05, .06], [H, 0, 0]); add(new THREE.SphereGeometry(.03, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 2.5, .6) }), [0, -top * .5 - .05, .17]); muzzles.push([0, -top * .5 - .05, .2]); }
+  const A = c.arms || {}, AM = c.armsMk || {}, gmk = AM.gun || 1, hmk = AM.heavy || 1, Hm = [];
+  const coil = new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 1.6, 3.5) }), redGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.5, .5, .5) });
+  let gunMuzzle = null;
+  if (A.gun === "pulse" && gmk >= 2) for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(.01, .01, .2, 10), dark, [s * (side + .03), -.04, .04], [H, 0, 0]); add(new RoundedBoxGeometry(.03, .03, .06, 2, .008), trim, [s * (side + .03), -.04, -.04]); add(new THREE.TorusGeometry(.011, .003, 6, 14), redGlow, [s * (side + .03), -.04, .13]); muzzles.push([s * (side + .03), -.04, .15]); }
+  if (A.gun === "pulse" && gmk >= 3) { add(new THREE.CylinderGeometry(.016, .022, .28, 14), dark, [0, top + .02, .02], [H, 0, 0]); add(new THREE.TorusGeometry(.02, .005, 8, 16), redGlow, [0, top + .02, .16]); muzzles.push([0, top + .02, .17]); }
+  if (A.gun === "gatling") { const gg = new THREE.Group(); gg.position.set(0, -top * .6 - .03, nose * .45); gg.name = "gatling"; for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, b = new THREE.Mesh(new THREE.CylinderGeometry(.005, .005, .16, 6), dark); b.rotation.x = H; b.position.set(Math.cos(a) * .014, Math.sin(a) * .014, .04); gg.add(b); } gg.add(new THREE.Mesh(new THREE.CylinderGeometry(.022, .022, .04, 12).rotateX(H), trim)); const gr = new THREE.Mesh(new THREE.TorusGeometry(.02, .004, 6, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(.6, 3.2, 1) })); gr.position.z = .1; gg.add(gr); root.add(gg); gunMuzzle = [0, -top * .6 - .03, nose * .45 + .12]; }
+  if (A.gun === "rail") { // two long rails with glowing coils between them
+    for (const s of [-1, 1]) add(new THREE.BoxGeometry(.008, .014, .36), dark, [s * .02, top + .03, .05]);
+    for (let i = 0; i < 2 + gmk; i++) add(new THREE.TorusGeometry(.027, .004, 6, 20), coil, [0, top + .03, -.08 + i * .26 / (1 + gmk)]);
+    add(new RoundedBoxGeometry(.06, .03, .08, 2, .008), trim, [0, top + .015, -.12]); gunMuzzle = [0, top + .03, .24];
+  }
+  if (A.gun === "arc") { // a tesla coil on the back
+    add(new THREE.CylinderGeometry(.007, .014, .08, 10), dark, [0, top + .04, -.04]);
+    for (let i = 0; i < 1 + gmk; i++) add(new THREE.TorusGeometry(.018 - i * .003, .003, 6, 16), coil, [0, top + .025 + i * .018, -.04], [H, 0, 0]);
+    const ball = add(new THREE.SphereGeometry(.022, 16, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 2.6, 4) }), [0, top + .09, -.04]); ball.name = "navlight"; ball.userData.phase = 1; ball.userData.fast = true;
+    gunMuzzle = [0, top + .09, -.04];
+  }
+  if (A.heavy === "torpedo") for (const s of hmk >= 2 ? [-1, 1] : [0]) { const x = s * (side + .045), y = s ? -.02 : -top * .6 - .04; add(new THREE.CylinderGeometry(.02, .022, .17, 14), trim, [x, y, -.01], [H, 0, 0]); add(new THREE.SphereGeometry(.017, 14, 10), coil, [x, y, .075]); Hm.push([x, y, .09]); }
+  if (A.heavy === "drones") for (const s of [-1, 1]) { const d = add(new THREE.ConeGeometry(.035, .08, 3), dark, [s * (side + .06), .01, -.03], [H, 0, 0]); d.add(new THREE.Mesh(new THREE.SphereGeometry(.009, 8, 6), redGlow)); d.children[0].position.set(0, .03, .012); Hm.push([s * (side + .06), .01, 0]); }
+  if (A.heavy === "gravity") { add(new THREE.TorusGeometry(.045, .006, 8, 24), dark, [0, -top - .02, -.02], [H, 0, 0]); add(new THREE.SphereGeometry(.033, 18, 12), new THREE.MeshBasicMaterial({ color: 0x050008 }), [0, -top - .02, -.02]); add(new THREE.TorusGeometry(.037, .004, 6, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, .6, 3.5) }), [0, -top - .02, -.02], [H, 0, 0]); Hm.push([0, -top - .05, -.02]); }
   if (ex.has("shield")) add(new THREE.SphereGeometry(.36 * W, 48, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(.25, .7, 1), transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthWrite: false }));
   // ---- engines: nozzle, glowing ring, flame
   const n = c.engines || 1;
@@ -2424,7 +2520,7 @@ function makeShipParts(c, root) {
   }
   root.traverse((o) => { if (o.name === "navlight" && !o.children.length) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: o.material.color.clone().multiplyScalar(.5), blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(.09); o.add(h); } }); // blinking lights glow into the dark
   root.scale.setScalar(c.size);
-  const info = { muzzles: muzzles.map((m) => V(m)), len: (nose - back) * c.size * 1.05, radius: (side + .1) * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
+  const info = { muzzles: muzzles.map((m) => V(m)), gunMuzzle: gunMuzzle && V(gunMuzzle), heavyMuzzles: Hm.map((m) => V(m)), len: (nose - back) * c.size * 1.05, radius: (side + .1) * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
   collectParts(root, info);
   return info;
 }
@@ -2498,10 +2594,10 @@ function collectParts(root, info) { // find flames, lights and turrets (also aft
   return info;
 }
 const ship = new THREE.Group(), model = new THREE.Group(); ship.add(model); scene.add(ship);
-function buildShip() { ship.userData = makeShipModel(state.ship, model); }
+function buildShip() { syncArmsLook(); ship.userData = makeShipModel(state.ship, model); }
 function animateShipParts(info, t) {
   for (const l of info.lights) l.visible = Math.sin(t * (l.userData.fast ? 13 : 4) + (l.userData.phase || 0)) > .2;
-  for (const sp of info.spinners) sp.rotation.z = t * (sp.name === "gatling" ? (firing ? 30 : 2) : 8);
+  for (const sp of info.spinners) sp.rotation.z = sp.name === "gatling" ? (sp.rotation.z + .016 * (2 + gat.spin * 40)) : t * 8;
   if (info.turret) info.turret.rotation.y = Math.sin(t * .7) * .6;
 }
 
@@ -2885,18 +2981,32 @@ function renderHangar() {
 }
 let hangarBoost = false;
 function renderShop() {
-  const s = state.ship, el = $("shop"); $("credits").textContent = Math.floor(wallet.credits); el.innerHTML = "";
-  for (const [k, g] of Object.entries(GUNS)) {
-    const owned = wallet.owned.includes(k), on = (s.guns || []).includes(k), b = document.createElement("button");
-    const cost = godOn("free") ? 0 : Math.round(g.cost * priceK()), need = GUN_LEVEL[k] || 1, locked = !owned && lvl() < need;
-    b.classList.toggle("on", on); b.innerHTML = `<b>${locked ? "🔒 " : ""}${g.label}</b><span>${owned ? (on ? "✓ on your ship · click to take off" : "yours · click to put on") : locked ? `unlocks at level ${need}` : `💰 ${cost}`} · ${g.info}</span>`;
-    b.addEventListener("click", () => {
-      if (locked && needLevel(need, g.label)) return;
-      if (!owned) { if (wallet.credits < cost) return toast(`You need ${Math.ceil(cost - wallet.credits)} more credits for the ${g.label}.`); wallet.credits -= cost; wallet.owned.push(k); saveWallet(); toast(`🛒 You bought the ${g.label}!`); }
-      const set = new Set(s.guns || []); if (owned && on) set.delete(k); else set.add(k); s.guns = [...set];
-      buildShip(); renderHangar(); save();
-    });
-    el.append(b);
+  const el = $("shop"), lv = lvl(), A = loadout(); $("credits").textContent = Math.floor(wallet.credits); el.innerHTML = "";
+  const price = (n) => (godOn("free") ? 0 : Math.round(n * priceK()));
+  const pay = (n, what) => { if (wallet.credits < n) { toast(`You need ${Math.ceil(n - wallet.credits)} more credits for ${what}.`); return false; } wallet.credits -= n; return true; };
+  for (const [slot, title] of Object.entries(SLOTS)) {
+    el.insertAdjacentHTML("beforeend", `<div class="slot">${title}</div>`);
+    for (const [k, w] of Object.entries(ARMS)) {
+      if (w.slot !== slot) continue;
+      const mk = mkOf(k), on = A[slot] === k, locked = !mk && lv < w.lv && !godOn("free"), row = document.createElement("div"); row.className = "arm" + (locked ? " locked" : "");
+      const b = document.createElement("button"); b.classList.toggle("on", on);
+      b.innerHTML = `<b>${w.icon} ${w.label}${mk ? ` <span class="mk">Mk ${mk}</span>` : ""}</b><span>${locked ? `🔒 unlocks at level ${w.lv}` : mk ? (on ? "✓ fitted" : slot === "gadget" ? "yours · click to fit" : "yours · click to fit") : `💰 ${price(w.cost)}`} · ${w.info}</span>`;
+      b.addEventListener("click", () => {
+        if (locked) return toast(`🔒 The ${w.label} unlocks at level ${w.lv}. You're level ${lv}.`);
+        if (!mk) { if (!pay(price(w.cost), `the ${w.label}`)) return; wallet.arms[k] = 1; toast(`🛒 You bought the ${w.label}!`); sfx.equip?.(); }
+        else if (on && slot === "gadget") A.gadget = null;
+        else sfx.equip?.();
+        if (!(on && slot === "gadget")) A[slot] = k;
+        saveWallet(); syncArmsLook(); buildShip(); renderHangar(); save(); if (mode === "fly") renderWeapons();
+      });
+      row.append(b);
+      if (mk && mk < 3) {
+        const u = document.createElement("button"), cost = price(w.up[mk - 1]); u.className = "up"; u.innerHTML = `<b>Mk ${mk + 1}</b><span>💰 ${cost}</span>`;
+        u.addEventListener("click", () => { if (!pay(cost, `the ${w.label} Mk ${mk + 1}`)) return; wallet.arms[k] = mk + 1; saveWallet(); syncArmsLook(); buildShip(); renderHangar(); save(); toast(`⬆ ${w.label} is now Mk ${mk + 1}!`); sfx.equip?.(); });
+        row.append(u);
+      }
+      el.append(row);
+    }
   }
 }
 function earn(n, why) { // credits for fighting
@@ -3166,7 +3276,7 @@ function hailOptions(t) {
   if (role === "trader" && type !== "racer") o.push(
     ["🔧 Repair my ship · 💰20", () => buy(20, () => { shipHp = 100; say("All fixed. Fly safe! 🔧"); })],
     ["📦 Buy a mystery crate · 💰40", () => buy(40, () => { const r = Math.random(), win = r < .35 ? 0 : r < .8 ? 70 : 160; if (win) earn(win, "mystery crate"); say(win ? `Lucky you! The crate had ${win} credits inside. 🎉` : "Oops… it was full of rubber ducks. 🦆"); })],
-    ...((wallet.owned || []).includes("twin") ? [] : [["🔫 Buy Twin cannons for my ship · 💰120", () => buy(120, () => { wallet.owned.push("twin"); saveWallet(); state.ship.guns = [...new Set([...(state.ship.guns || []), "twin"])]; buildShip(); save(); say("Fitted! Two lasers at once. Go get 'em! 🔫"); toast("🛒 You bought the Twin cannons!"); renderHail(); })]]),
+    ...(mkOf("pulse") >= 2 ? [] : [["🔫 Fit twin barrels on my Pulse cannon (Mk 2) · 💰120", () => buy(120, () => { wallet.arms.pulse = 2; saveWallet(); syncArmsLook(); buildShip(); save(); say("Fitted! Twin barrels, double the bolts. Go get 'em! 🔫"); toast("🛒 Pulse cannon Mk 2!"); renderHail(); })]]),
     ["🗺 Ask for a tip", () => { const c = planets.filter((p) => p !== home && p.alive && !p.data.npc); const p = c[(Math.random() * c.length) | 0]; if (!p) return say("Quiet galaxy today."); setNav(p); say(`Psst… ${p.data.name} has ${fmt(p.data.pop)} people and nobody has pranked them in ages. 😈 I put it on your nav.`); }]);
   if (type === "miner") o.push(["⛏ Hire them to mine for you · 💰50", () => buy(50, () => { say("Deal! Back in 90 seconds with crystals. ⛏"); setTimeout(() => earn(130, "your miner brought crystals"), 90000); })]);
   if (type === "tourist") o.push(["📸 Take a selfie together", () => { flashScreen("#ffffff", .5); earn(5, "the tourists tipped you"); missionEvent("selfie"); say("Cheese! 📸 They love it."); }]);
@@ -3365,14 +3475,14 @@ const TUT = [
     },
     on: (ev, key, s) => !s.target || (ev === "visit" && key === s.target),
     after() { radio("They love you already! Everyone here is so friendly. Well… almost everyone."); addXp(20); } },
-  { goal: () => "Find a trader, press I to talk, and buy Twin cannons", fly: true,
+  { goal: () => "Find a trader, press I to talk, and buy twin barrels", fly: true,
     enter(s) {
-      radio("Traders fly all over the galaxy. Follow the arrow to one, aim at it and press I to talk. Let's buy our ship some Twin cannons! 🔫");
+      radio("Traders fly all over the galaxy. Follow the arrow to one, aim at it and press I to talk. Let's buy twin barrels for our Pulse cannon! 🔫");
       s.pick = () => { const tr = npcs.filter((n) => !n.dead && n.role === "trader" && n.type !== "racer"); return tr.sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position))[0]; };
       s.trader = s.pick(); s.nav = { get group() { return (s.trader || home).group; }, R: .3, data: { name: "Space trader" }, quiet: true }; setNav(s.nav);
     },
     update(s, dt) {
-      if ((wallet.owned || []).includes("twin")) return true;
+      if (mkOf("pulse") >= 2) return true;
       if ((s.tick = (s.tick || 0) + dt) > 2) { s.tick = 0; if (!s.trader || s.trader.dead) s.trader = s.pick(); }
     },
     after() { setNav(null); radio("Ooh, shiny! Our ship looks way cooler now. 😎"); addXp(30); } },
@@ -3432,7 +3542,9 @@ const TIPS = [
   "Tip: aim at any ship and press I to talk. Some sell stuff, some just want a selfie. 📸",
   "Tip: hold Shift to boost. Space and X fly up and down.",
   "Tip: open 🗺 Map, click a planet and press Navigate. I'll draw you an arrow.",
-  "Tip: press F when your lock is ready and a missile chases the enemy down. 🚀",
+  "Tip: press F when your lock is ready and a plasma torpedo hunts the enemy down. 🌀",
+  "Tip: level up to unlock the Rail gun, Gravity bomb and more in Hangar → Weapons. ⚡",
+  "Tip: press G to use your gadget, like a shield or an EMP blast. 🛡",
   "Tip: 📋 Missions has new jobs every day. Free credits, explorer!",
   "Tip: the 🚀 Hangar sells better guns. Our ship deserves it.",
   "Tip: 😈 Pranks are fun. Toilet paper on a planet never gets old.",
@@ -3458,13 +3570,12 @@ $("freePlayBtn").addEventListener("click", () => {
 });
 wallet.stats ||= {}; wallet.friends ||= [];
 // ---- level rewards: every level unlocks something real
-var GUN_LEVEL = { twin: 1, gatling: 3, heavy: 4, pods: 5, plasma: 7 };
 var DECOR_LEVEL = { base: 2, turret: 2, castle: 3, pisa: 4, eiffel: 5, magic: 6 };
 var PRESET_LEVEL = { stealth: 2, burger: 2, toaster: 2, manta: 3, viper: 3, hammer: 3, corvette: 4, falcon: 4, shark: 4, crystal: 5, cop: 6, battleship: 8 };
 var FEATURE_LEVEL = { style: 3, pvp: 5 };
 function unlocksAt(lv) {
   const out = [];
-  for (const [k, l] of Object.entries(GUN_LEVEL)) if (l === lv) out.push("🔫 " + GUNS[k].label);
+  for (const w of Object.values(ARMS)) if (w.lv === lv && w.lv > 1) out.push(`${w.icon} ${w.label}`);
   for (const [k, l] of Object.entries(PRESET_LEVEL)) if (l === lv && PRESETS[k]) out.push("🚀 " + PRESETS[k].label + " ship");
   for (const [k, l] of Object.entries(DECOR_LEVEL)) if (l === lv) out.push("🏗 " + DECOR[k]);
   if (lv === FEATURE_LEVEL.style) out.push("🎨 Civilization style");
@@ -3555,13 +3666,13 @@ function renderGameInfo() { // planet panel: what your planet makes, your fame a
 }
 // ---- saving your progress on the server (it lives in the database when the server has one)
 let walletSent = "";
-function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY) }; }
+function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY) }; }
 function syncWallet() { if (!net.me || !gameStarted) return; const s = JSON.stringify(walletSnapshot()); if (s === walletSent) return; walletSent = s; net.send({ t: "wallet", wallet: JSON.parse(s) }); }
 setInterval(syncWallet, 4000);
 function restoreWallet(w) { // you joined from another browser, or this one was cleared: the server remembers you
   if (!w || typeof w !== "object") return;
   if ((w.xp | 0) < (wallet.xp | 0) && load(WALLETKEY)) return; // this browser is ahead
-  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now() });
+  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now() });
   saveWallet();
   if (typeof w.tut === "number") { tut = { step: Math.min(TUT.length, w.tut), n: 0 }; store(TUTKEY, tut); }
   if (w.missions && w.missions.day) { store(MISSIONKEY, w.missions); missions = null; }
@@ -3910,7 +4021,7 @@ $("godBtn").addEventListener("click", () => {
   net.send({ t: "godKey", key: key.trim() });
 });
 $("godMoney").addEventListener("click", () => earn(100000, "God mode"));
-$("godUnlock").addEventListener("click", () => { wallet.owned = Object.keys(GUNS); saveWallet(); renderHangar(); toast("⚡ All weapons unlocked. Put them on in Hangar → Weapons."); });
+$("godUnlock").addEventListener("click", () => { for (const k in ARMS) wallet.arms[k] = 3; saveWallet(); syncArmsLook(); buildShip(); renderHangar(); toast("⚡ All weapons unlocked at Mk 3. Fit them in Hangar → Weapons."); });
 $("godPirates").addEventListener("click", () => {
   const at = mode === "fly" ? ship.position : home.group.position;
   for (const n of npcs.filter((x) => x.role === "pirate")) { if (n.dead) n.spawn(); n.group.position.copy(at).add(new THREE.Vector3().randomDirection().multiplyScalar(rnd(30, 45))); n.trail.reset(); n.hostile = true; }
@@ -4036,7 +4147,7 @@ canvas.addEventListener("pointerdown", (e) => {
   down = [e.clientX, e.clientY];
   if (mode === "fly") {
     if (!locked && e.pointerType === "mouse" && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
-    setAimFromEvent(e); if (e.button === 2) fireWeapon("missile"); else { firing = true; if (weapon !== "laser" && weapon !== "troops") fireWeapon(weapon); else if (weapon === "troops") fireWeapon("troops"); } return;
+    setAimFromEvent(e); if (e.button === 2) fireWeapon("heavy"); else { firing = true; if (weapon !== "gun") fireWeapon(weapon); } return;
   }
   if (mode === "home" && BRUSHES.includes(tool) && home.alive) {
     aim(e);
@@ -4285,7 +4396,8 @@ class Npc {
   update(dt, t) {
     if (this.dead && this.wreck) { this.crash(dt); return; }
     if (this.dead) { this.trail.update(this.group.position, dt, false); if ((this.respawnAt -= dt) <= 0) this.spawn(); return; }
-    const pos = this.group.position, toPlayer = mode === "fly" && !playerDead ? ship.position.distanceTo(pos) : Infinity;
+    const pos = this.group.position, toPlayer = mode === "fly" && !playerDead && !cloaked() ? ship.position.distanceTo(pos) : Infinity; // a cloaked ship can't be seen
+    const zapped = clock() < (this.stunUntil || 0), stunned = zapped || clock() < (this.pulledUntil || 0);
     const h = this.home, peaceful = this.role === "trader" || this.role === "orbit";
     // decide who to fight
     if (this.role === "pirate" && toPlayer < 35) this.hostile = true;
@@ -4300,7 +4412,10 @@ class Npc {
     if (clock() < (this.peaceUntil || 0)) this.hostile = false; // you paid them off
     const hired = mode === "fly" && clock() < (this.escortUntil || 0);
     const help = !hired && !this.hostile && this.role === "patrol" && mode === "fly" ? this.pirateNear() : null;
-    if (hired) { this.hostile = false; this.wingman(dt, t); }
+    if (stunned) { // knocked out by an EMP: drifting, sparking, no engines, no guns
+      this.vel.multiplyScalar(1 - dt * .8);
+      if (zapped && Math.random() < dt * 10) fire.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(this.info.radius * .6)), _hp.randomDirection().multiplyScalar(2), .2, .06 * Math.max(1, this.info.radius), CYAN, BLUE, 0, 2);
+    } else if (hired) { this.hostile = false; this.wingman(dt, t); }
     else if (help) this.fight(help, dt, t, .9); // police help you fight pirates
     else if (peaceful && clock() < this.fleeUntil) { // run away from you
       this.steer(pos.clone().add(pos.clone().sub(ship.position).setLength(50)), this.speed * (this.T.big ? 1.6 : 2.6), dt);
@@ -4330,7 +4445,7 @@ class Npc {
     this.model.position.set(0, 0, 0); if (jolt < .15) this.model.position.randomDirection().multiplyScalar(this.info.radius * .12 * (1 - jolt / .15));
     if (hk < .6 && Math.random() < dt * (hk < .3 ? 40 : 14)) smoke.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(this.info.radius * .4)), this.vel.clone().multiplyScalar(.3), rnd(.8, 1.5), .1 * this.info.radius + .05, SMOKE0, SMOKE1, 2.5, 1);
     if (hk < .3 && Math.random() < dt * 30) fire.spawn(pos.clone().add(_hp.randomDirection().multiplyScalar(this.info.radius * .3)), this.vel.clone().multiplyScalar(.3), rnd(.2, .4), .06 * this.info.radius + .03, HOT, ORANGE, 1, 1);
-    for (const f of this.info.flames) f.visible = moving; setFlames(this.info, .7 + this.vel.length() / 30 + Math.random() * .3, false);
+    for (const f of this.info.flames) f.visible = moving && !stunned; setFlames(this.info, .7 + this.vel.length() / 30 + Math.random() * .3, false);
     animateShipParts(this.info, t + this.phase);
   }
   crash(dt) { // a burning wreck tumbling through space, small blasts going off, then it breaks apart
@@ -4428,6 +4543,7 @@ function hitDirection(from) { // a red arc around the middle of the screen point
 function hurtPlayer(amount, by) {
   if (by && by.group) { attackers.set(by, clock() + 6); if (mode === "fly") hitDirection(by.group.position); }
   if (godOn("inv")) return;
+  if (shieldUp()) { if (shieldFx) shieldFx.material.uniforms.hit.value = 1; spark(ship.position.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(ship.userData.radius * 1.6)), .4, BLUE); sfx.shieldHit(); return; } // the shield takes the hit
   shipHp = Math.max(0, shipHp - amount); lastPlayerHit = clock(); shake = Math.max(shake, .04);
   flashScreen("#ff3040", .18); sfx.hit();
   if (shipHp <= 0 && !playerDead) { // your ship blows up and is rebuilt at home
@@ -4523,11 +4639,13 @@ setInterval(() => { // tell the server where you are, 10 times a second
   if (!net.me || !gameStarted) return;
   net.send({ t: "pos", p: ship.position.clone().add(WORLD_OFFSET).toArray().map(r3), q: ship.quaternion.toArray().map(r3), f: mode === "fly", hp: Math.round(shipHp), lv: lvl() });
 }, 100);
-function remoteShot(m) { // draw other players' lasers
-  const from = V(m.from).sub(WORLD_OFFSET), to = V(m.to).sub(WORLD_OFFSET), dir = to.clone().sub(from); const L = dir.length(); if (!L || from.distanceTo(camera.position) > 150) return;
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(.014, .014, .7, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(.6, 2.5, 4) }));
+function remoteShot(m) { // draw other players' shots
+  const from = V(m.from).sub(WORLD_OFFSET), to = V(m.to).sub(WORLD_OFFSET), dir = to.clone().sub(from); const L = dir.length(); if (!L || from.distanceTo(camera.position) > (m.kind === "rail" ? 400 : 150)) return;
+  if (m.kind === "rail") { railFx(from, to, .7); sfx.rail(.5 * Math.min(1, 30 / Math.max(1, from.distanceTo(camera.position)))); return; }
+  if (m.kind === "arc") { zap(from, to, .8); return; }
+  const gt = m.kind === "gat", mesh = new THREE.Mesh(new THREE.CylinderGeometry(gt ? .02 : .014, gt ? .02 : .014, .7, 6), new THREE.MeshBasicMaterial({ color: gt ? new THREE.Color(.6, 3.5, 1) : new THREE.Color(.6, 2.5, 4) }));
   mesh.position.copy(from); mesh.quaternion.setFromUnitVectors(UP, dir.normalize()); scene.add(mesh);
-  addFx(Math.min(1.5, L / 260), (k) => mesh.position.lerpVectors(from, to, k), () => scene.remove(mesh));
+  addFx(Math.min(1.5, L / 260), (k) => mesh.position.lerpVectors(from, to, k), () => { scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); });
 }
 // ---- messages from the server
 function setupNet() {
@@ -5034,7 +5152,7 @@ function updateLock(dt, fwd) { // weapons lock onto the enemy you are fighting; 
   const shrink = show === lockTarget ? 1 : 2.2 - Math.min(1, lockT / .6) * 1.2;
   box.style.left = (v.x + 1) / 2 * innerWidth + "px"; box.style.top = (1 - v.y) / 2 * innerHeight + "px";
   box.style.width = box.style.height = r * shrink + "px";
-  $("lockText").innerHTML = show === lockTarget ? `🔒 LOCKED · ${esc(show.name)}<br><b>F · FIRE MISSILE</b>` : `LOCKING ${Math.round(Math.min(1, lockT / .6) * 100)}%`;
+  $("lockText").innerHTML = show === lockTarget ? `🔒 LOCKED · ${esc(show.name)}<br><b>F · FIRE</b>` : `LOCKING ${Math.round(Math.min(1, lockT / .6) * 100)}%`;
 }
 let roll = null, lastHitNpc = null, aimNpc = null;
 const rolling = () => !!roll;
@@ -5044,7 +5162,7 @@ function barrelRoll() {
   roll = { t: 0, dur: .65, dir };
   vel.addScaledVector(new THREE.Vector3(1, 0, 0).applyQuaternion(head), dir * 16); sfx.roll();
 }
-let wasBoost = false, orbitT = 0, weapon = "laser", aimPlanet = null, lastHitPlanet = null, lastHitAt = -99, warp = null;
+let wasBoost = false, orbitT = 0, weapon = "gun", aimPlanet = null, lastHitPlanet = null, lastHitAt = -99, warp = null;
 const lastShot = {}, aimPoint = new THREE.Vector3(), bolts = [];
 function startFlying() { // only switches to flight; the ship waits until you press W
   if (mode !== "home") return;
@@ -5124,7 +5242,8 @@ addEventListener("keydown", (e) => {
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
   if (e.code.startsWith("Digit")) { const w = Object.keys(WEAPONS)[+e.code.slice(5) - 1]; if (w) { weapon = w; renderWeapons(); } }
   if (!e.repeat) {
-    if (e.code === "KeyF") fireWeapon("missile");
+    if (e.code === "KeyF") fireWeapon("heavy");
+    if (e.code === "KeyG") fireWeapon("gadget");
     if (e.code === "KeyB") fireWeapon("bomb");
     if (e.code === "KeyT") fireWeapon("troops");
     if (e.code === "KeyN") fireWeapon("atom");
@@ -5140,18 +5259,30 @@ addEventListener("blur", () => { keys.clear(); firing = false; });
 document.querySelectorAll("#pad button").forEach((b) => {
   b.addEventListener("pointerdown", (e) => {
     e.preventDefault(); e.stopPropagation(); keys.add(b.dataset.k);
-    const once = { KeyF: "missile", KeyB: "bomb", KeyT: "troops" }[b.dataset.k]; if (once) fireWeapon(once);
+    const once = { KeyF: "heavy", KeyG: "gadget", KeyB: "bomb", KeyT: "troops" }[b.dataset.k]; if (once) fireWeapon(once);
   });
   for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, () => keys.delete(b.dataset.k));
 });
 function renderWeapons() {
   const el = $("weapons"); el.innerHTML = "";
   Object.entries(WEAPONS).forEach(([k, w], i) => {
-    const b = document.createElement("button"); b.classList.toggle("on", weapon === k);
-    b.innerHTML = `${w.label}<small>${i + 1} · ${w.keyLabel}</small><span class="cd" data-w="${k}"></span>`;
+    const arm = slotArm(k), a = arm && ARMS[arm], b = document.createElement("button"); b.classList.toggle("on", weapon === k);
+    const label = `<span>${w.label || (a ? `${a.icon} ${a.label}${mkOf(arm) > 1 ? ` <span class="mk">Mk${mkOf(arm)}</span>` : ""}` : "No gadget")}</span>`;
+    b.innerHTML = `${label}<small>${i + 1} · ${w.keyLabel}</small><span class="cd" data-w="${k}"></span>`;
     b.addEventListener("click", () => { weapon = k; renderWeapons(); });
     el.append(b);
   });
+}
+function weaponBars() { // cooldowns, gatling heat and rail gun charge
+  const A = loadout();
+  for (const kk of Object.keys(WEAPONS)) {
+    const el = document.querySelector(`.cd[data-w="${kk}"]`); if (!el) continue;
+    let k = Math.min(1, (clock() - (lastShot[kk] || -9)) / weaponCd(kk)), col = "";
+    if (kk === "gun" && A.gun === "gatling") { k = gat.heat; col = gat.hot || gat.heat > .75 ? "var(--danger)" : "#ffb547"; }
+    if (kk === "gun" && A.gun === "rail" && rail.charge) { k = rail.charge; col = rail.charge >= 1 ? "#ffffff" : ""; }
+    if (kk === "gadget" && (shieldUp() || cloaked())) { k = ((shieldUp() ? shieldUntil : cloakUntil) - clock()) / 8; col = "#7dffcf"; }
+    el.style.width = Math.max(0, Math.min(100, k * 100)) + "%"; el.style.background = col;
+  }
 }
 function placeOrbit(a) {
   const r = home.R * 1.75 + state.ship.size * .3;
@@ -5194,30 +5325,17 @@ function currentTarget() {
 }
 function muzzleWorld() { const u = ship.userData; u.mi = (u.mi + 1) % u.muzzles.length; return model.localToWorld(u.muzzles[u.mi].clone()); }
 function fireWeapon(kind) {
-  if (mode !== "fly") return;
-  const G = gunStats(), t = clock(); if (t - (lastShot[kind] || -9) < WEAPONS[kind].cd * (kind === "laser" ? G.cd : 1)) return; lastShot[kind] = t;
+  if (mode !== "fly" || playerDead) return;
+  if (kind === "laser") kind = "gun"; else if (kind === "missile") kind = "heavy";
+  const arm = slotArm(kind), t = clock();
+  if (WEAPONS[kind] && !WEAPONS[kind].cd && !arm) { if (kind === "gadget" && t - (lastShot.noGadget || -9) > 2) { lastShot.noGadget = t; toast("No gadget fitted yet. Buy one in Hangar → Weapons."); } return; }
+  if (arm === "rail") return; // the rail gun charges while you hold the trigger (see gunHold)
+  const cd = arm === "gatling" ? ARMS.gatling.cd / (.25 + .75 * gat.spin) : weaponCd(kind);
+  if (t - (lastShot[kind] || -9) < cd || (arm === "gatling" && gat.hot)) return; lastShot[kind] = t;
+  if (arm) { if (kind !== "gadget") uncloak(); ARM_FIRE[arm](Math.max(1, mkOf(arm))); return; }
+  uncloak();
   const fwd = FWD.clone().applyQuaternion(ship.quaternion), sz = Math.sqrt(state.ship.size);
-  if (kind === "laser") {
-    let from;
-    for (let i = 0; i < G.bolts; i++) {
-      from = muzzleWorld(); const tgt = aimTarget() || (lockTarget && !lockTarget.dead ? { npc: lockTarget } : null); // locked on: your lasers find the target
-      const dir = (tgt && tgt.npc ? tgt.npc.group.position.clone() : aimPoint.clone()).sub(from).normalize(), w = .03 * sz * G.thick;
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(w * .45, w * .45, 1.9, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.5, 4.5) })); // white-hot core
-      m.add(new THREE.Mesh(new THREE.CylinderGeometry(w, w, 2.1, 8), new THREE.MeshBasicMaterial({ color: G.color, transparent: true, opacity: .75, blending: THREE.AdditiveBlending, depthWrite: false }))); // colored glow
-      m.position.copy(from); m.quaternion.setFromUnitVectors(UP, dir); scene.add(m);
-      bolts.push({ kind, obj: m, v: dir.multiplyScalar(600), speed: 600, life: 1.2, target: tgt, dmg: G.dmg });
-    }
-    if (net.me && Math.random() < .5) net.send({ t: "shot", kind, from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: aimPoint.clone().add(WORLD_OFFSET).toArray().map(r3) });
-    sfx.laser();
-  } else if (kind === "missile") for (let i = 0; i < G.missiles; i++) {
-    const g = new THREE.Group();
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(.02, .02, .16, 12), mats.metal); b.rotation.x = Math.PI / 2; g.add(b);
-    const n = new THREE.Mesh(new THREE.ConeGeometry(.02, .06, 12), mats.flag); n.rotation.x = Math.PI / 2; n.position.z = .11; g.add(n);
-    g.position.copy(muzzleWorld()); g.quaternion.copy(ship.quaternion); g.scale.setScalar(sz); scene.add(g);
-    const target = lockTarget && !lockTarget.dead ? { npc: lockTarget } : aimTarget();
-    bolts.push({ kind, obj: g, v: (target && target.npc ? target.npc.group.position.clone() : aimPoint.clone()).sub(g.position).normalize().multiplyScalar(40).add(vel).add(new THREE.Vector3().randomDirection().multiplyScalar(i * 6)), life: 8, target, speed: target && target.npc ? 140 + vel.length() : 95 });
-    sfx.missile();
-  } else if (kind === "bomb") {
+  if (kind === "bomb") {
     const g = new THREE.Mesh(new THREE.SphereGeometry(.05 * sz, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1a1a22, metalness: .6, roughness: .3 }));
     const fuse = new THREE.Mesh(new THREE.SphereGeometry(.015, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2, .5) })); fuse.position.y = .05 * sz; g.add(fuse);
     const upv = UP.clone().applyQuaternion(head);
@@ -5248,6 +5366,7 @@ function impact(b, planet, point) {
   const nrm = surf.clone().sub(planet.group.position).normalize();
   lastHitPlanet = planet; lastHitAt = clock(); planet.welcomed = true;
   if (b.kind === "laser") { spark(surf, .5); planet.hitAt(n, "laser"); if (Math.random() < .3) sfx.boom(.35, surf); }
+  else if (b.arm === "torpedo") { plasmaBurst(surf, 1.3); planet.hitAt(n, "missile"); }
   else if (b.kind === "missile") { boom(surf, 1.4); ring(surf, nrm, .6, .6, new THREE.Color(2, 1.4, .8)); sfx.boom(1.5, surf); planet.hitAt(n, "missile"); }
   else if (b.kind === "atom") nuke(planet, surf);
   else if (b.kind === "bomb") {
@@ -5283,7 +5402,13 @@ function nuke(planet, at) { // one hit and the planet is gone
   toast(`☢ ${esc(planet.data.name)} was hit by an atom bomb!`, "boom", 3000);
 }
 const NPC_DAMAGE = { laser: 6, missile: 45, bomb: 60, atom: 999, troops: 0 }; // you hit much harder than the aliens do
-function freeBolt(b) { scene.remove(b.obj); if (b.kind === "laser") b.obj.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+function freeBolt(b) { scene.remove(b.obj); if (b.kind === "laser" || b.arm === "torpedo") b.obj.traverse((o) => { if (o.geometry && o.geometry !== UNIT_CYL) o.geometry.dispose(); o.material?.dispose(); }); }
+function plasmaBurst(at, s = 1) { // a torpedo hit: a blue-white flash, a ring and a cloud of plasma
+  const v = new THREE.Vector3();
+  flashAt(at, new THREE.Color(3, 4, 6), 4 * s, .35); ring(at, camera.position.clone().sub(at).normalize(), 3.5 * s, .5, new THREE.Color(1, 2.2, 4.5), .08);
+  for (let i = 0; i < 90 * s; i++) fire.spawn(at, v.randomDirection().multiplyScalar(rnd(1, 6) * s), rnd(.3, .8), rnd(.1, .3) * s, PLASMA_HOT, i % 2 ? BLUE : CYAN, 1.8, 2.2);
+  shake = Math.max(shake, .06 * s * Math.max(0, 1 - camera.position.distanceTo(at) / 40)); sfx.plasmaBoom(at, s);
+}
 function boltStep(dt) {
   for (let i = bolts.length - 1; i >= 0; i--) {
     const b = bolts[i]; b.life -= dt;
@@ -5295,6 +5420,7 @@ function boltStep(dt) {
         const to = n.group.position.clone().sub(p0), d = to.length();
         if (d <= Math.max(b.speed * dt * 1.05, n.info.radius)) {
           if (b.kind === "atom") { boom(n.group.position, 5); sfx.nuke(n.group.position); flashScreen("#ffffff", .7); }
+          else if (b.arm === "torpedo") plasmaBurst(n.group.position, 1.2 * Math.max(1, Math.sqrt(n.info.radius)));
           else if (b.kind === "missile") { boom(n.group.position, 2 * Math.max(1, Math.sqrt(n.info.radius))); sfx.boom(2, n.group.position); }
           else if (b.kind !== "laser") boom(n.group.position, 1.2);
           n.damage((NPC_DAMAGE[b.kind] || 2) * (b.dmg || 1)); freeBolt(b); bolts.splice(i, 1); continue;
@@ -5309,7 +5435,10 @@ function boltStep(dt) {
       else { b.v.lerp(to.multiplyScalar(b.speed / d), Math.min(1, dt * (d < 6 ? 12 : 3))); b.obj.quaternion.setFromUnitVectors(FWD, b.v.clone().normalize()); }
     }
     if (b.kind === "atom") { fire.spawn(p0, new THREE.Vector3().randomDirection().multiplyScalar(.3), .5, .12, C(0xd8ff60, 2.5), C(0xff8020, 1), 1, 1); smoke.spawn(p0, new THREE.Vector3(), 1.2, .15, SMOKE0, SMOKE1, 2, 1); }
-    if (b.kind === "missile") { smoke.spawn(p0, new THREE.Vector3().randomDirection().multiplyScalar(.2), rnd(.6, 1.2), rnd(.06, .12), SMOKE0, SMOKE1, 3, 1); fire.spawn(p0, b.v.clone().multiplyScalar(-.05), .15, .08, HOT, ORANGE); }
+    if (b.arm === "torpedo") { // a crackling plasma ball leaving a glowing trail
+      const k = clock() * 25 + i; b.obj.getObjectByName("halo").scale.setScalar(Math.sqrt(state.ship.size) * (1.4 + Math.sin(k) * .3)); b.obj.getObjectByName("core").material.rotation = k;
+      for (let j = 0; j < 3; j++) fire.spawn(p0.clone().addScaledVector(b.v, -dt * j / 3), new THREE.Vector3().randomDirection().multiplyScalar(.4), rnd(.25, .45), rnd(.12, .22), CYAN, BLUE, -.5, 1);
+    } else if (b.kind === "missile") { smoke.spawn(p0, new THREE.Vector3().randomDirection().multiplyScalar(.2), rnd(.6, 1.2), rnd(.06, .12), SMOKE0, SMOKE1, 3, 1); fire.spawn(p0, b.v.clone().multiplyScalar(-.05), .15, .08, HOT, ORANGE); }
     if (b.kind === "bomb") {
       const np = nearestPlanet(80);
       if (np) b.v.addScaledVector(np.group.position.clone().sub(p0).normalize(), 30 * dt);
@@ -5329,6 +5458,295 @@ function boltStep(dt) {
     }
     if (gone) { freeBolt(b); bolts.splice(i, 1); }
   }
+}
+// ================= weapons: guns, heavy weapons and gadgets =================
+const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 8, 1, true), BLUE = C(0x5ab8ff, 2.4), CYAN = C(0x9fe8ff, 3), PURPLE = C(0xa040ff, 2.2), VIOLET = C(0xff60e0, 2.4), PLASMA_HOT = C(0xe8f6ff, 3.5);
+const gat = { spin: 0, heat: 0, hot: false }, rail = { charge: 0, glow: null };
+let shieldUntil = 0, cloakUntil = 0, shieldFx = null, cloakOn = false;
+const shieldUp = () => clock() < shieldUntil, cloaked = () => clock() < cloakUntil;
+const drones = [], holes = [];
+function gunFrom() { const u = ship.userData; return u.gunMuzzle ? model.localToWorld(u.gunMuzzle.clone()) : muzzleWorld(); }
+function heavyFrom(i = 0) { const u = ship.userData, h = u.heavyMuzzles || []; return h.length ? model.localToWorld(h[i % h.length].clone()) : muzzleWorld(); }
+function lockedNpc() { return lockTarget && !lockTarget.dead ? lockTarget : null; }
+function shotDir(from) { const tgt = aimNpc && !aimNpc.dead ? aimNpc : lockedNpc(); return { tgt, dir: (tgt ? tgt.group.position.clone() : aimPoint.clone()).sub(from).normalize() }; }
+function laserMesh(w, len, color) { // a white-hot core inside a colored glow
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(w * .45, w * .45, len * .9, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.6, 4.6) }));
+  m.add(new THREE.Mesh(new THREE.CylinderGeometry(w, w, len, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .75, blending: THREE.AdditiveBlending, depthWrite: false })));
+  return m;
+}
+function shootBolt(from, dir, target, o) { // a fast energy bolt that flies to the crosshair (or chases a ship)
+  const m = laserMesh(o.w, o.len, o.color); m.position.copy(from); m.quaternion.setFromUnitVectors(UP, dir); scene.add(m);
+  bolts.push({ kind: "laser", arm: o.arm, obj: m, v: dir.clone().multiplyScalar(o.speed), speed: o.speed, life: o.life || 1.2, target, dmg: o.dmg });
+}
+function beam(a, b, r, mat, parent = scene) { // a cylinder stretched from a to b
+  const d = b.clone().sub(a), L = d.length(), m = new THREE.Mesh(UNIT_CYL, mat);
+  m.position.copy(a).addScaledVector(d, .5); m.scale.set(r, L, r); if (L) m.quaternion.setFromUnitVectors(UP, d.divideScalar(L)); parent.add(m); return m;
+}
+function glowSprite(color, scale) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); s.scale.setScalar(scale); return s; }
+function flashAt(at, color, size, dur = .3) { const s = glowSprite(color, size); s.position.copy(at); scene.add(s); addFx(dur, (k) => { s.scale.setScalar(size * (.6 + k * 1.6)); s.material.opacity = (1 - k) ** 2; }, () => { scene.remove(s); s.material.dispose(); }); }
+const enemyish = (n) => !n.dead && (n.hostile || attackers.has(n) || n === lastHitNpc || (n.T && outlaw(n)) || n instanceof RemoteShip);
+
+// ---- guns
+const ARM_FIRE = {
+  pulse(mk) {
+    const sz = Math.sqrt(state.ship.size); let from;
+    for (let i = 0; i < mk; i++) { from = muzzleWorld(); const { tgt, dir } = shotDir(from); shootBolt(from, dir, tgt ? { npc: tgt } : aimTarget(), { w: .03 * sz * (mk >= 3 ? 1.3 : 1), len: 2.1, color: new THREE.Color(4, .5, .8), speed: 600, dmg: (1 + .25 * (mk - 1)) * dmgBoost(), arm: "pulse" }); }
+    if (net.me && Math.random() < .5) net.send({ t: "shot", kind: "laser", from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: aimPoint.clone().add(WORLD_OFFSET).toArray().map(r3) });
+    sfx.laser();
+  },
+  gatling(mk) {
+    const sz = Math.sqrt(state.ship.size), from = gunFrom(), { tgt, dir } = shotDir(from);
+    dir.add(new THREE.Vector3().randomDirection().multiplyScalar(.012 + gat.heat * .02)).normalize();
+    shootBolt(from, dir, null, { w: .022 * sz, len: 1.3, color: new THREE.Color(.6, 3.6, 1.1), speed: 520, dmg: (.5 + .12 * mk) * dmgBoost(), arm: "gatling", life: 1 });
+    if (tgt && aimNpc === tgt) bolts[bolts.length - 1].target = { npc: tgt }; // bullets under the crosshair find the ship
+    fire.spawn(from, dir.clone().multiplyScalar(4).add(vel), .06, .12 * sz, PLASMA_HOT, C(0x60ff90, 2));
+    gat.heat = Math.min(1, gat.heat + .022 - .005 * (mk - 1)); if (gat.heat >= 1) { gat.hot = true; sfx.overheat(); toast("🔥 Gatling overheated! Let it cool down.", "", 1400); }
+    if (net.me && Math.random() < .3) net.send({ t: "shot", kind: "gat", from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: aimPoint.clone().add(WORLD_OFFSET).toArray().map(r3) });
+    sfx.gatling();
+  },
+  arc(mk) {
+    const range = 60 + 10 * mk, from = gunFrom(), fwd = FWD.clone().applyQuaternion(ship.quaternion), hit = new Set();
+    const inRange = (n) => n && !n.dead && n.group.position.distanceTo(from) < range + n.info.radius;
+    let cur = inRange(aimNpc) ? aimNpc : inRange(lockedNpc()) ? lockedNpc() : null;
+    if (!cur) { let best = Math.cos(.32); for (const n of fighters()) { if (!inRange(n) || !enemyish(n)) continue; const c = n.group.position.clone().sub(from).normalize().dot(fwd); if (c > best) { best = c; cur = n; } } }
+    sfx.arc();
+    if (!cur) { // nothing to hit: lightning crackles ahead (and scorches a planet if you aim at one)
+      const end = aimPlanet && aimPoint.distanceTo(from) < range ? aimPoint.clone() : from.clone().addScaledVector(fwd, 14).add(new THREE.Vector3().randomDirection().multiplyScalar(3));
+      zap(from, end, .7);
+      if (aimPlanet && aimPoint.distanceTo(from) < range && Math.random() < .35) { const n = aimPlanet.mesh.worldToLocal(aimPoint.clone()).normalize(); spark(aimPoint, .5, BLUE); aimPlanet.hitAt(n, "laser"); lastHitPlanet = aimPlanet; lastHitAt = clock(); }
+      return;
+    }
+    let prev = from; const dmg = 5 * (1 + .3 * (mk - 1)) * dmgBoost();
+    for (let h = 0; h < 1 + mk && cur; h++) {
+      zap(prev, cur.group.position, h ? .8 : 1); hit.add(cur); cur.damage(dmg * (h ? .8 : 1));
+      prev = cur.group.position.clone(); let next = null, bd = 25;
+      for (const n of fighters()) { if (hit.has(n) || !enemyish(n)) continue; const d = n.group.position.distanceTo(prev); if (d < bd) { bd = d; next = n; } }
+      cur = next;
+    }
+    if (net.me && Math.random() < .4) net.send({ t: "shot", kind: "arc", from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: [...hit][0].group.position.clone().add(WORLD_OFFSET).toArray().map(r3) });
+  },
+  // ---- heavy weapons
+  torpedo(mk) {
+    const sz = Math.sqrt(state.ship.size), target = lockedNpc() ? { npc: lockedNpc() } : aimTarget();
+    for (let i = 0; i < mk; i++) {
+      const g = new THREE.Group(), core = glowSprite(new THREE.Color(3, 4, 5), .55 * sz), halo = glowSprite(new THREE.Color(.5, 1.3, 4), 1.6 * sz);
+      core.name = "core"; halo.name = "halo"; g.add(halo, core); g.position.copy(heavyFrom(i)); scene.add(g);
+      const to = (target && target.npc ? target.npc.group.position.clone() : aimPoint.clone()).sub(g.position).normalize();
+      bolts.push({ kind: "missile", arm: "torpedo", obj: g, v: to.multiplyScalar(45).add(vel).add(new THREE.Vector3().randomDirection().multiplyScalar(i * 8)), life: 8, target, speed: target && target.npc ? 150 + vel.length() : 100, dmg: (1 + .3 * (mk - 1)) * dmgBoost(), born: clock() });
+      flashAt(g.position, new THREE.Color(1, 2.5, 5), 1.2 * sz, .2);
+    }
+    sfx.torpedo();
+  },
+  drones(mk) {
+    for (let i = 0; i < 2 + mk; i++) {
+      const d = { obj: droneMesh(), vel: vel.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(14)), life: 12 + 3 * mk, cd: rnd(.3, .8), target: null, phase: i / (2 + mk) * Math.PI * 2, mk, retarget: 0 };
+      d.obj.position.copy(heavyFrom(i)); scene.add(d.obj); drones.push(d);
+    }
+    sfx.drones(); toast(`🛸 ${2 + mk} seeker drones launched`, "", 1400);
+  },
+  gravity(mk) {
+    const sz = Math.sqrt(state.ship.size), g = new THREE.Group(), fwd = FWD.clone().applyQuaternion(ship.quaternion);
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(.09 * sz, 18, 12), new THREE.MeshBasicMaterial({ color: 0x030005 })), glowSprite(new THREE.Color(1.6, .4, 3), .9 * sz));
+    g.position.copy(heavyFrom()); scene.add(g);
+    const { dir } = shotDir(g.position);
+    holes.push({ obj: g, v: dir.lerp(fwd, .3).normalize().multiplyScalar(65).add(vel), t: 0, mk, open: false });
+    sfx.gravityThrow();
+  },
+  // ---- gadgets
+  shield(mk) {
+    shieldUntil = clock() + 3 + mk; sfx.shieldUp(); toast(`🛡 Shield up for ${3 + mk} seconds`, "", 1400);
+    if (!shieldFx) {
+      shieldFx = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.ShaderMaterial({
+        uniforms: { t: { value: 0 }, hit: { value: 0 }, fade: { value: 0 }, col: { value: new THREE.Color(.25, .9, 2.2) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        vertexShader: `varying vec3 vN; varying vec3 vV; varying vec3 vP; void main(){ vP=position; vec4 mv=modelViewMatrix*vec4(position,1.); vN=normalize(normalMatrix*normal); vV=normalize(-mv.xyz); gl_Position=projectionMatrix*mv; }`,
+        fragmentShader: `uniform float t; uniform float hit; uniform float fade; uniform vec3 col; varying vec3 vN; varying vec3 vV; varying vec3 vP;
+          void main(){ float f=pow(1.-abs(dot(vN,vV)),3.); vec2 h=vec2(atan(vP.z,vP.x)*6., vP.y*10.); vec2 g=abs(fract(h+vec2(0.,mod(floor(h.x),2.)*.5))-.5); float hex=smoothstep(.44,.5,max(g.x,g.y));
+            float sweep=smoothstep(.9,1.,sin(vP.y*7.-t*5.)); gl_FragColor=vec4(col*(f*.9+hex*f*.6+sweep*f*.3+.01+hit*(.15+f*.8))*fade,1.); }`,
+      }));
+      ship.add(shieldFx);
+    }
+  },
+  emp(mk) {
+    const R = 35 + 10 * mk, stun = 2.5 + mk, at = ship.position.clone(); let n0 = 0;
+    for (const n of npcs) {
+      if (n.dead || n.group.position.distanceTo(at) > R + n.info.radius) continue;
+      n.stunUntil = clock() + stun; n0++; spark(n.group.position, .8 * Math.max(1, Math.sqrt(n.info.radius)), BLUE);
+      if (enemyish(n)) n.damage(10 * dmgBoost());
+    }
+    for (let i = npcBolts.length - 1; i >= 0; i--) if (npcBolts[i].obj.position.distanceTo(at) < R) { spark(npcBolts[i].obj.position, .3, BLUE); scene.remove(npcBolts[i].obj); npcBolts[i].obj.geometry.dispose(); npcBolts.splice(i, 1); }
+    const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 1.4, 3.5), wireframe: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const sh2 = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(.15, .5, 1.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }));
+    sh.position.copy(at); sh2.position.copy(at); scene.add(sh, sh2);
+    addFx(.7, (k) => { const r = R * (1 - (1 - k) ** 3); sh.scale.setScalar(r); sh2.scale.setScalar(r); sh.rotation.y = k * 2; sh.material.opacity = (1 - k) ** 1.5; sh2.material.opacity = (1 - k) ** 2 * .6; }, () => { scene.remove(sh, sh2); sh.geometry.dispose(); sh.material.dispose(); sh2.geometry.dispose(); sh2.material.dispose(); });
+    ring(at, UP.clone().applyQuaternion(head), R, .8, new THREE.Color(.6, 1.8, 4), .04); ring(at, FWD.clone().applyQuaternion(head), R * .8, .7, new THREE.Color(.4, 1.2, 3), .03);
+    flashScreen("#9fe8ff", .3); shake = Math.max(shake, .08); sfx.emp();
+    toast(n0 ? `💠 EMP! ${n0} ship${n0 > 1 ? "s" : ""} shut down for ${stun} seconds` : "💠 EMP blast · no ships close enough", "", 1600);
+  },
+  cloak(mk) { cloakUntil = clock() + 4 + 2 * mk; for (const n of npcs) if (n.hostile) n.hostile = false; attackers.clear(); sfx.cloak(true); toast(`👻 Cloaked for ${4 + 2 * mk} seconds · shooting shows you`, "", 1600); },
+};
+function uncloak() { if (cloaked()) { cloakUntil = 0; sfx.cloak(false); } }
+const cloakMats = [];
+function setCloakLook(on) { // a ghostly see-through hull with a blue shimmer
+  model.traverse((o) => {
+    if (!o.isMesh || o.name === "flame") return;
+    if (on && !o.userData.realMat) { o.userData.realMat = o.material; const m = o.material.clone(); m.transparent = true; m.opacity = .2; m.depthWrite = false; if (m.emissive) { m.emissive.set(0x3fa8ff); m.emissiveIntensity = .5; } o.material = m; cloakMats.push(m); }
+    else if (!on && o.userData.realMat) { o.material = o.userData.realMat; delete o.userData.realMat; }
+  });
+  if (!on) { for (const m of cloakMats) m.dispose(); cloakMats.length = 0; }
+  for (const f of ship.userData.flames || []) f.material.opacity = on ? .15 : .92;
+  cloakOn = on;
+}
+function zap(a, b, k = 1) { // a jagged bolt of lightning from a to b, with a fork now and then
+  if (!zap.core) { zap.core = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 3.6, 5) }); zap.glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(.5, 1.2, 4), transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false }); }
+  const g = new THREE.Group(), d = b.clone().sub(a), L = d.length(), n = Math.max(4, Math.min(16, Math.round(L / 2.5))), side = new THREE.Vector3(), pts = [a.clone()];
+  for (let i = 1; i < n; i++) pts.push(a.clone().addScaledVector(d, i / n).add(side.randomDirection().multiplyScalar(L * .06 * Math.sin(Math.PI * i / n) + .1)));
+  pts.push(b.clone());
+  const r = (.03 + L * .0012) * k;
+  for (let i = 0; i < pts.length - 1; i++) { beam(pts[i], pts[i + 1], r, zap.core, g); beam(pts[i], pts[i + 1], r * 4, zap.glow, g); }
+  if (Math.random() < .6) { const i = 1 + ((Math.random() * (n - 2)) | 0), e = pts[i].clone().add(side.randomDirection().multiplyScalar(L * .15 + 1)); beam(pts[i], e, r * .6, zap.core, g); beam(pts[i], e, r * 2.5, zap.glow, g); }
+  scene.add(g); flashAt(b, new THREE.Color(1.5, 2.4, 5), 1.6 * k, .12);
+  for (let i = 0; i < 6; i++) fire.spawn(b, side.randomDirection().multiplyScalar(rnd(1, 4)), rnd(.15, .35), rnd(.04, .09), CYAN, BLUE, 0, 2);
+  addFx(.09, () => {}, () => scene.remove(g));
+}
+function railShot(c) { // hold to charge, let go: a hyper-fast slug that rips through every ship in the line
+  const mk = mkOf("rail"), from = gunFrom(), { dir } = shotDir(from), end = from.clone().addScaledVector(dir, 450);
+  let stop = end, hitP = null;
+  for (const p of planets) { if (!p.alive) continue; const h = hitSphere(from, end, p.group.position, p.R * 1.01); if (h && h.distanceTo(from) < stop.distanceTo(from)) { stop = h; hitP = p; } }
+  const dmg = (25 + 95 * c) * (1 + .35 * (mk - 1)) * dmgBoost();
+  for (const n of fighters()) if (!n.dead && hitSphere(from, stop, n.group.position, n.info.radius * 1.6)) { n.damage(dmg); flashAt(n.group.position, new THREE.Color(2, 3, 5), 3 * Math.max(1, n.info.radius), .25); for (let i = 0; i < 30; i++) fire.spawn(n.group.position, dir.clone().multiplyScalar(rnd(4, 12)).add(new THREE.Vector3().randomDirection().multiplyScalar(3)), rnd(.2, .5), rnd(.05, .12), PLASMA_HOT, BLUE, 0, 1.5); }
+  if (hitP) impact({ kind: c > .55 ? "missile" : "laser" }, hitP, stop);
+  railFx(from, stop, c);
+  vel.addScaledVector(dir, -8 * c); camFx.kick += 3 + 7 * c; shake = Math.max(shake, .05 + .1 * c); flashScreen("#bfe4ff", .05 + .07 * c);
+  sfx.rail(c);
+  if (net.me) net.send({ t: "shot", kind: "rail", from: from.clone().add(WORLD_OFFSET).toArray().map(r3), to: stop.clone().add(WORLD_OFFSET).toArray().map(r3) });
+}
+function railFx(from, to, c) {
+  const core = beam(from, to, .03 + .05 * c, new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 4.6, 5), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  const glow = beam(from, to, .15 + .3 * c, new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 1.1, 3.6), transparent: true, opacity: .6, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false }));
+  core.renderOrder = glow.renderOrder = 5; // drawn over your own hull, so you always see the shot leave the rails
+  const r0 = core.scale.x, g0 = glow.scale.x;
+  addFx(.6, (k) => { core.scale.x = core.scale.z = r0 * (1 - k); glow.scale.x = glow.scale.z = g0 * (1 + k * 2); core.material.opacity = 1 - k; glow.material.opacity = .6 * (1 - k) ** 2; }, () => { scene.remove(core, glow); core.material.dispose(); glow.material.dispose(); });
+  const d = to.clone().sub(from), L = d.length(); d.divideScalar(L || 1);
+  const a = Math.abs(d.y) < .9 ? UP : FWD, u = new THREE.Vector3().crossVectors(d, a).normalize(), w = new THREE.Vector3().crossVectors(d, u), p = new THREE.Vector3(), o = new THREE.Vector3();
+  const N = Math.min(320, Math.round(L * 2)), rr = .25 + .3 * c;
+  for (let i = 0; i < N; i++) { // a spiral of plasma rings around the shot, like in the movies
+    const s = 1.5 + i / N * (L - 1.5), ang = s * 1.4; o.copy(u).multiplyScalar(Math.cos(ang) * rr).addScaledVector(w, Math.sin(ang) * rr);
+    p.copy(from).addScaledVector(d, s).add(o); fire.spawn(p, o.clone().multiplyScalar(2), rnd(.5, .9), .12 + .08 * c, CYAN, BLUE, 1, 1.5);
+  }
+  flashAt(from, new THREE.Color(2, 3, 5), .6 + 1.2 * c, .18); ring(from.clone().addScaledVector(d, 1.5), d, .4 + .8 * c, .3, new THREE.Color(.5, 1.2, 3), .15);
+  flashAt(to, new THREE.Color(2.5, 3, 5), 2 + 3 * c, .35);
+}
+function droneMesh() {
+  if (!droneMesh.t) {
+    const g = new THREE.Group(), dark = new THREE.MeshStandardMaterial({ color: 0x23272f, metalness: .8, roughness: .3 });
+    g.add(new THREE.Mesh(new THREE.ConeGeometry(.06, .2, 3).rotateX(Math.PI / 2), dark));
+    for (const s of [-1, 1]) { const w = new THREE.Mesh(new THREE.BoxGeometry(.14, .008, .06), dark); w.position.set(s * .08, 0, -.04); w.rotation.z = s * .25; g.add(w); }
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(.018, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, .3, .3) })); eye.position.set(0, .02, .05); g.add(eye);
+    const eng = glowSprite(new THREE.Color(1, 2, 4), .18); eng.position.z = -.11; g.add(eng);
+    droneMesh.t = g;
+  }
+  const m = droneMesh.t.clone(); m.scale.setScalar(Math.sqrt(state.ship.size) * 1.4); return m;
+}
+function droneStep(dt) {
+  for (let i = drones.length - 1; i >= 0; i--) {
+    const d = drones[i], pos = d.obj.position; d.life -= dt;
+    if (d.life <= 0 || mode !== "fly") { flashAt(pos, new THREE.Color(1, 2, 4), .6, .2); spark(pos, .3, BLUE); scene.remove(d.obj); drones.splice(i, 1); continue; }
+    if ((d.retarget -= dt) <= 0 || (d.target && d.target.dead)) { // pick an enemy near you: your lock first, then whoever is fighting you
+      d.retarget = .5; let best = lockedNpc(), bd = 130;
+      if (!best) for (const n of fighters()) { if (!enemyish(n) || n instanceof RemoteShip && !attackers.has(n)) continue; const dd = n.group.position.distanceTo(ship.position); if (dd < bd) { bd = dd; best = n; } }
+      d.target = best;
+    }
+    const t = clock() * 1.3 + d.phase, T = d.target;
+    const goal = T ? T.group.position.clone().add(new THREE.Vector3(Math.cos(t), Math.sin(t * .7) * .5, Math.sin(t)).multiplyScalar(3 + T.info.radius * 2.2))
+      : ship.position.clone().add(new THREE.Vector3(Math.cos(t), .5 + Math.sin(t * 1.7) * .3, Math.sin(t)).multiplyScalar(1.8 + state.ship.size));
+    const want = goal.sub(pos).multiplyScalar(3); const top = 60 + vel.length(); if (want.length() > top) want.setLength(top);
+    d.vel.lerp(want, Math.min(1, dt * 4)); pos.addScaledVector(d.vel, dt);
+    if (d.vel.lengthSq() > .01) d.obj.quaternion.slerp(_q.setFromUnitVectors(FWD, d.vel.clone().normalize()), Math.min(1, dt * 8));
+    if (T && (d.cd -= dt) <= 0 && pos.distanceTo(T.group.position) < 45) {
+      d.cd = rnd(.4, .6); const dir = T.group.position.clone().sub(pos).normalize();
+      shootBolt(pos.clone(), dir, { npc: T }, { w: .018, len: .9, color: new THREE.Color(4, .6, .5), speed: 300, dmg: (.7 + .15 * d.mk) * dmgBoost(), arm: "drone" }); sfx.droneShot(pos);
+    }
+  }
+}
+function holeStep(dt) { // gravity bombs fly, then open into black holes that pull ships in and crush them
+  for (let i = holes.length - 1; i >= 0; i--) {
+    const h = holes[i], pos = h.obj.position; h.t += dt;
+    if (!h.open) {
+      const p0 = pos.clone(); pos.addScaledVector(h.v, dt);
+      let near = h.t > 1.1; for (const n of fighters()) if (!n.dead && n.group.position.distanceTo(pos) < 4 + n.info.radius) near = true;
+      for (const p of planets) if (p.alive && hitSphere(p0, pos, p.group.position, p.R * 1.3 + 3)) { near = true; pos.copy(p0); }
+      if (Math.random() < .6) fire.spawn(pos, new THREE.Vector3(), .3, .12, VIOLET, PURPLE);
+      if (h.t > .25 && near) openHole(h);
+      continue;
+    }
+    const k = h.t / h.dur, grow = Math.min(1, h.t / .35) * (k > .9 ? 1 - (k - .9) * 6 : 1), R = h.R;
+    h.core.scale.setScalar(Math.max(.01, 1.3 * grow)); h.disk.scale.setScalar(Math.max(.01, 4.6 * grow)); h.halo.scale.setScalar(12 * grow);
+    h.disk.rotateZ(dt * 2.5); h.disk2.rotateZ(-dt * 4); h.halo.material.opacity = .8 + Math.sin(h.t * 9) * .2;
+    const v = new THREE.Vector3(), tang = new THREE.Vector3();
+    for (let j = 0; j < 8; j++) { // matter spiraling in
+      const p = pos.clone().add(v.randomDirection().multiplyScalar(R * rnd(.3, .9))), to = pos.clone().sub(p), dd = to.length(); tang.crossVectors(to, h.axis).normalize();
+      fire.spawn(p, to.multiplyScalar(1.6).addScaledVector(tang, dd * 1.4), rnd(.5, .8), rnd(.15, .35), j % 2 ? VIOLET : C(0xff9040, 2), PURPLE, -.6, 0);
+    }
+    h.tick -= dt; const tick = h.tick <= 0; if (tick) h.tick = .35;
+    for (const n of fighters()) {
+      if (n.dead) continue; const to = pos.clone().sub(n.group.position), dd = to.length(); if (dd > R + n.info.radius) continue;
+      if (n instanceof Npc) { const pull = (70 * (1 - dd / R) + 18) * (n.T.big ? .15 : 1); n.vel.addScaledVector(to.normalize(), pull * dt); n.group.position.addScaledVector(to, Math.min(dd * .9, (n.T.big ? 1 : 7) * dt)); n.pulledUntil = clock() + .2; }
+      if (tick && dd < R * .55) n.damage((4 + 2 * h.mk) * dmgBoost());
+    }
+    if (mode === "fly" && !playerDead) { const to = pos.clone().sub(ship.position), dd = to.length(); if (dd < R * .8 && dd > 3) vel.addScaledVector(to.normalize(), 12 * (1 - dd / R) * dt); }
+    if (h.t >= h.dur) { // it collapses with a huge blast
+      const dmg = (40 + 25 * h.mk) * dmgBoost();
+      for (const n of fighters()) if (!n.dead && n.group.position.distanceTo(pos) < R * .6 + n.info.radius) n.damage(dmg);
+      flashAt(pos, new THREE.Color(5, 3, 6), 18, .5); ring(pos, h.axis, R * 1.2, 1, new THREE.Color(2.4, 1, 3.6), .06); ring(pos, camera.position.clone().sub(pos).normalize(), R * .8, .7, new THREE.Color(3, 2.6, 4), .1);
+      for (let j = 0; j < 220; j++) fire.spawn(pos, v.randomDirection().multiplyScalar(rnd(4, 20)), rnd(.4, 1), rnd(.15, .4), j % 3 ? VIOLET : HOT, PURPLE, 1.5, 1.6);
+      const near = Math.max(0, 1 - camera.position.distanceTo(pos) / 90); shake = Math.max(shake, .25 * near); if (near) flashScreen("#e8c8ff", .3 * near); sfx.gravityBoom(pos);
+      scene.remove(h.obj); holes.splice(i, 1);
+    }
+  }
+}
+function openHole(h) {
+  const pos = h.obj.position.clone(); scene.remove(h.obj);
+  const g = new THREE.Group(); g.position.copy(pos); scene.add(g);
+  if (!openHole.disk) { // a glowing accretion disk texture: hot orange inside, purple outside
+    const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"), gr = x.createRadialGradient(128, 128, 30, 128, 128, 128);
+    gr.addColorStop(0, "rgba(0,0,0,0)"); gr.addColorStop(.22, "rgba(255,240,210,1)"); gr.addColorStop(.35, "rgba(255,150,60,.95)"); gr.addColorStop(.6, "rgba(190,60,255,.6)"); gr.addColorStop(1, "rgba(60,0,120,0)");
+    x.fillStyle = gr; x.fillRect(0, 0, 256, 256); x.globalCompositeOperation = "destination-out";
+    for (let i = 0; i < 40; i++) { x.beginPath(); x.arc(128, 128, 40 + Math.random() * 85, Math.random() * 6, Math.random() * 6 + .5); x.lineWidth = Math.random() * 3; x.strokeStyle = "rgba(0,0,0,.5)"; x.stroke(); }
+    openHole.disk = new THREE.CanvasTexture(c); openHole.disk.colorSpace = THREE.SRGBColorSpace;
+  }
+  const dm = (o) => new THREE.MeshBasicMaterial({ map: openHole.disk, color: new THREE.Color(2.2, 1.6, 2.4), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  h.halo = glowSprite(new THREE.Color(1.2, .4, 2.2), 1); h.disk = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dm(1)); h.disk2 = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), dm(.6));
+  h.core = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  h.axis = new THREE.Vector3().randomDirection().lerp(UP, .6).normalize(); h.disk.lookAt(h.axis); h.disk2.scale.setScalar(1.4); h.disk.add(h.disk2);
+  g.add(h.halo, h.disk, h.core); h.obj = g; h.open = true; h.t = 0; h.dur = 3.5 + .5 * h.mk; h.R = 28 + 6 * h.mk; h.tick = 0;
+  ring(pos, h.axis, 10, .5, new THREE.Color(2, .8, 3.5), .1); sfx.blackHole(pos, h.dur);
+}
+function gunHold(dt, held) { // what your trigger finger does each frame
+  const A = loadout(), k = (c) => keys.has(c);
+  gat.spin = THREE.MathUtils.clamp(gat.spin + (held && A.gun === "gatling" && !gat.hot ? dt / .8 : -dt / .6), 0, 1);
+  gat.heat = Math.max(0, gat.heat - dt * (held && !gat.hot ? .12 : .45)); if (gat.hot && gat.heat < .25) gat.hot = false;
+  if (A.gun === "rail") {
+    const mk = mkOf("rail"), ready = clock() - (lastShot.gun || -9) > ARMS.rail.cd;
+    if (held && ready && mode === "fly" && !playerDead) {
+      rail.charge = Math.min(1, rail.charge + dt / (1.15 - .15 * mk)); sfx.railCharge(rail.charge);
+      if (!rail.glow) { rail.glow = glowSprite(new THREE.Color(1.2, 2.6, 5), .1); scene.add(rail.glow); }
+      const from = gunFrom(); rail.glow.position.copy(from); rail.glow.scale.setScalar(.3 + rail.charge * 1.6 + Math.random() * .2);
+      if (Math.random() < .3 + rail.charge) { const v = new THREE.Vector3().randomDirection().multiplyScalar(.6 + rail.charge); fire.spawn(from.clone().add(v), v.multiplyScalar(-1.8).add(vel), .3, .05, CYAN, BLUE); }
+    } else if (rail.charge > 0) { const c = Math.max(.15, rail.charge); rail.charge = 0; sfx.railCharge(0); if (rail.glow) { scene.remove(rail.glow); rail.glow = null; } if (mode === "fly" && !playerDead) { lastShot.gun = clock(); uncloak(); railShot(c); } }
+  } else { if (rail.charge) { rail.charge = 0; sfx.railCharge(0); } if (rail.glow) { scene.remove(rail.glow); rail.glow = null; } if (held) fireWeapon("gun"); }
+}
+function armsStep(dt) {
+  droneStep(dt); holeStep(dt);
+  const on = shieldUp(), u = ship.userData;
+  if (shieldFx) {
+    const m = shieldFx.material.uniforms, left = shieldUntil - clock();
+    m.t.value = clock(); m.hit.value = Math.max(0, m.hit.value - dt * 4); m.fade.value = THREE.MathUtils.clamp(m.fade.value + (on ? dt * 6 : -dt * 3), 0, 1) * (on && left < 1 ? .6 + .4 * Math.sin(clock() * 30) : 1);
+    shieldFx.scale.set((u.radius || .4) * 1.5, (u.radius || .4) * 1.1, (u.len || 1) * .62); shieldFx.visible = m.fade.value > .01;
+  }
+  const cl = cloaked() && mode === "fly";
+  if (cl !== cloakOn) { if (!cl && cloakUntil) { cloakUntil = 0; sfx.cloak(false); } setCloakLook(cl); }
+  else if (cl) { let h = null; model.traverse((o) => { if (!h && o.isMesh && o.name !== "flame") h = o; }); if (h && !h.userData.realMat) setCloakLook(true); } // the ship was rebuilt
+  if (cl) { const o = .14 + .1 * Math.sin(clock() * 9) + (cloakUntil - clock() < 1 && Math.random() < .3 ? .4 : 0); for (const m of cloakMats) m.opacity = o; } // shimmers, and flickers before it wears off
 }
 function flyStep(dt) {
   const k = (c) => keys.has(c);
@@ -5406,8 +5824,8 @@ function flyStep(dt) {
   spaceDust(dt, spd);
   updateAim(); // after the camera moves, so shots go exactly under the cursor
   updateLock(dt, fwd);
-  if ((firing && weapon === "laser") || k("KeyL")) fireWeapon("laser");
-  if (firing && (weapon === "missile" || weapon === "bomb")) fireWeapon(weapon);
+  gunHold(dt, (firing && weapon === "gun") || k("KeyL"));
+  if (firing && (weapon === "heavy" || weapon === "bomb")) fireWeapon(weapon);
   const moving = throttle > .05 || spd > 2;
   for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, .5 + throttle * (boost ? 2.8 : 1.6) + Math.random() * .3, boost && thrust);
   const boosting = boost && thrust;
@@ -5443,7 +5861,7 @@ function flyStep(dt) {
     if (lp.length) $("tPranks").textContent = `${lp.map((k) => PRANKS[k.type].icon).join("")} · next fades in ${fmtLeft(Math.min(...lp.map((k) => k.until)) - Date.now())}`;
   }
   if (!tgt || !tgt.data) $("tPrankRow").hidden = true;
-  for (const [kk, w] of Object.entries(WEAPONS)) { const el = document.querySelector(`.cd[data-w="${kk}"]`); if (el) el.style.width = Math.min(100, (clock() - (lastShot[kk] || -9)) / w.cd * 100) + "%"; }
+  weaponBars();
   // planets welcome you when you come close in peace
   for (const p of planets) {
     if (!p.alive || p === home) continue;
@@ -5518,7 +5936,7 @@ $("resetAsk").addEventListener("click", () => { $("resetConfirm").hidden = false
 $("resetNo").addEventListener("click", () => { $("resetConfirm").hidden = true; $("resetAskRow").hidden = false; });
 $("resetAll").addEventListener("click", () => { setView("planet"); $("resetConfirm").hidden = false; $("resetAskRow").hidden = true; });
 function resetPlayerStuff() { // money, weapons, missions, and everyone's anger at you
-  Object.assign(wallet, { credits: 150, owned: [], xp: 0, style: null, stats: {}, lastIncome: Date.now() }); saveWallet();
+  Object.assign(wallet, { credits: 150, owned: [], arms: armsFrom([]), xp: 0, style: null, stats: {}, lastIncome: Date.now() }); saveWallet();
   if (raid) raid = null; bounties.length = 0; gameEvents.forEach((e) => e.objs.forEach((m) => scene.remove(m))); gameEvents.length = 0; arena = null; renderEvents(); try { localStorage.removeItem(JOBDAY); } catch {}
   try { localStorage.removeItem(MISSIONKEY); localStorage.removeItem(SEENKEY); } catch {}
   tut = { step: 0, n: 0 }; store(TUTKEY, tut); radioQ = []; renderLevel(); tutEnter();
@@ -5584,7 +6002,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t);
+  boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t);
   if (mode !== "fly" || !nav) $("navTag").hidden = true;
   if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
