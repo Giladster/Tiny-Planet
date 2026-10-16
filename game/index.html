@@ -534,7 +534,7 @@ function shapeK(x, y, z, s, amt, seed) { // how far the ground is from the centr
 const PATTERNS = { none: "None", stripes: "Stripes", checker: "Checks", holes: "Holes", spots: "Spots" };
 const designFrom = (key, seed = 1) => ({ template: key, seed, ...structuredClone(TEMPLATES[key]) });
 
-const HULLS = { interceptor: "Interceptor", stealth: "Stealth", manta: "Manta", hammerhead: "Hammerhead", corvette: "Corvette", dart: "Dart", rocket: "Rocket", saucer: "Saucer", battleship: "Battleship", warden: "Spiral Warden", falcon: "Falcon", shark: "Shark", beetle: "Beetle", needle: "Racer", hauler: "Hauler", crystal: "Crystal", cruiser: "Cruiser", squid: "Squid", van: "Space van", duck: "Rubber duck", toaster: "Toaster", burger: "Burger" };
+const HULLS = { interceptor: "Interceptor", stealth: "Stealth", manta: "Manta", hammerhead: "Hammerhead", corvette: "Corvette", dart: "Dart", rocket: "Rocket", saucer: "Saucer", battleship: "Battleship", warden: "Spiral Warden", raptor: "Spiral Raptor", falcon: "Falcon", shark: "Shark", beetle: "Beetle", needle: "Racer", hauler: "Hauler", crystal: "Crystal", cruiser: "Cruiser", squid: "Squid", van: "Space van", duck: "Rubber duck", toaster: "Toaster", burger: "Burger" };
 const WINGS = { none: "None", swept: "Swept", delta: "Delta", forward: "Forward swept", bat: "Bat", xwing: "X-wings", booms: "Twin booms", wide: "Wide", ring: "Ring" };
 const EXTRAS = { siren: "Police siren", flag: "Pirate flag", drill: "Drill", glow: "Glow strips", lights: "Wing lights", fins: "Tail fins", cannons: "Side cannons", turret: "Turret", spikes: "Spikes", antenna: "Antenna", spoiler: "Spoiler", shield: "Shield bubble", hat: "Party hat", eyes: "Googly eyes" };
 const FLAMES = { cone: "Cone", long: "Long jet", wide: "Wide", ball: "Plasma ball", twin: "Split", ring: "Ring" };
@@ -562,6 +562,7 @@ const PRESETS = {
   corvette:  { label: "Corvette", hull: "corvette", wings: "booms", engines: 3, extras: ["turret", "lights", "antenna"], body: "#9aa3b5", accent: "#3a5a8a", glow: "#8fd0ff", flame: "#6fe3ff", finish: "metal", size: 1.8 },
   battleship:{ label: "Battleship", hull: "battleship", wings: "wide", engines: 4, extras: ["cannons", "antenna", "turret", "lights"], body: "#7d8799", accent: "#ffb547", glow: "#ffb547", flame: "#ff8a3a", finish: "metal", size: 2.2 },
   warden:    { label: "Spiral Warden", hull: "warden", wings: "none", engines: 4, extras: [], body: "#7a8292", accent: "#c41a1c", glow: "#ff3b1e", flame: "#ff5030", finish: "metal", size: 2 },
+  raptor:    { label: "Spiral Raptor", hull: "raptor", wings: "none", engines: 2, extras: [], body: "#565d6b", accent: "#c4161c", glow: "#ff3b1f", flame: "#ff6a30", finish: "metal", size: 1.3 },
   duck:      { label: "Funny duck", hull: "duck", wings: "none", engines: 1, extras: ["hat", "eyes"], body: "#ffd23f", accent: "#ff8a1f", glow: "#ff5ab4", flame: "#ff5ab4", finish: "matte", size: 1.3 },
   falcon:    { label: "Falcon", hull: "falcon", wings: "none", engines: 1, extras: ["antenna", "lights"], body: "#b9bcc4", accent: "#6a6e78", glow: "#8fd0ff", flame: "#8fd0ff", finish: "matte", size: 1.4 },
   shark:     { label: "Shark", hull: "shark", wings: "none", engines: 2, extras: ["eyes"], body: "#5a7a9a", accent: "#ffffff", glow: "#6fe3ff", flame: "#6fe3ff", finish: "matte", size: 1.3 },
@@ -2073,7 +2074,8 @@ function bar(a, b, r, mat) { // a thin rod between two points
   m.position.copy(A).add(B).multiplyScalar(.5); m.quaternion.setFromUnitVectors(UP, B.clone().sub(A).normalize()); return m;
 }
 function makeShipModel(c, root) {
-  if (c.hull === "warden") { if (WARDEN) return makeWarden(c, root); c = { ...c, hull: "battleship" }; } // built-in shape until the model has loaded
+  const bm = BLENDER_SHIPS[c.hull];
+  if (bm) { if (bm.scene) return makeBlenderShip(bm, c, root); c = { ...c, hull: bm.fallback }; } // built-in shape until the model has loaded
   root.clear();
   const fin = c.finish || "metal", F = { metal: [.6, .3, .7], chrome: [.95, .1, .75], matte: [.05, .8, .25], carbon: [.45, .45, .4], neon: [.35, .4, .4] }[fin];
   const body = new THREE.MeshStandardMaterial({ color: c.body, metalness: F[0], roughness: F[1], envMapIntensity: F[2] * 1.1 });
@@ -2307,31 +2309,41 @@ function makeShipModel(c, root) {
   collectParts(root, info);
   return info;
 }
-// ---- Spiral Warden: a heavy warship made in Blender (art/spiral-warden), loaded from models/spiral_warden.glb
-let WARDEN = null;
-new GLTFLoader().load("models/spiral_warden.glb", (g) => {
-  WARDEN = g.scene;
-  if (state.ship.hull === "warden") buildShip();
-  for (const k in npcTemplates) if (NPC_TYPES[k].cfg.hull === "warden") delete npcTemplates[k];
-  for (const r of remotes.values()) if (r.cfgKey.includes('"warden"')) { const k = r.cfgKey; r.cfgKey = ""; r.setCfg(JSON.parse(k)); }
-}, undefined, (e) => console.warn("Spiral Warden model did not load, using the built-in shape", e));
-function makeWarden(c, root) {
+// ---- ships made in Blender (art/<name>), loaded from models/*.glb; your body / trim / glow colors paint them
+const BLENDER_SHIPS = {
+  warden: { file: "spiral_warden.glb", fallback: "battleship", tint: { Plate: "body", Red: "accent", Neon: "glow" }, lights: ["SensorTip"],
+    flames: [[-.04, .018, -.3, .75], [.04, .018, -.3, .75], [-.04, -.022, -.3, .75], [.04, -.022, -.3, .75], [-.185, -.025, -.25, .9], [.185, -.025, -.25, .9]],
+    muzzles: [[-.185, -.012, .3], [.185, -.012, .3], [0, 0, .32], [-.185, -.038, .3], [.185, -.038, .3]], len: .62, radius: .3 },
+  raptor: { file: "spiral_raptor.glb", fallback: "interceptor", tint: { Armor: "body", Red: "accent", Neon: "glow" }, lights: [],
+    flames: [[-.055, -.004, -.31, .95], [.055, -.004, -.31, .95], [0, .02, -.295, .55]],
+    muzzles: [[-.19, -.03, .19], [.19, -.03, .19]], len: .65, radius: .34 },
+};
+for (const [hull, bm] of Object.entries(BLENDER_SHIPS)) {
+  bm.scene = null;
+  new GLTFLoader().load("models/" + bm.file, (g) => {
+    bm.scene = g.scene;
+    if (state.ship.hull === hull) buildShip();
+    for (const k in npcTemplates) if (NPC_TYPES[k].cfg.hull === hull) delete npcTemplates[k];
+    for (const r of remotes.values()) if (r.cfgKey.includes(`"${hull}"`)) { const k = r.cfgKey; r.cfgKey = ""; r.setCfg(JSON.parse(k)); }
+  }, undefined, (e) => console.warn(`${bm.file} did not load, using the built-in shape`, e));
+}
+function makeBlenderShip(bm, c, root) {
   root.clear();
-  const m = WARDEN.clone(true), tint = { Plate: c.body, Red: c.accent, Neon: c.glow }, mats = {};
-  m.traverse((o) => { // your body / trim / glow colors paint the model
+  const m = bm.scene.clone(true), mats = {};
+  m.traverse((o) => {
     if (!o.isMesh) return;
-    const t = tint[o.material.name];
-    if (t) { if (!mats[o.material.name]) { mats[o.material.name] = o.material.clone(); mats[o.material.name].color.set(t); if (o.material.name === "Neon") mats.Neon.emissive.set(t); } o.material = mats[o.material.name]; }
-    if (o.name === "SensorTip") { o.name = "navlight"; o.userData.phase = 0; }
+    const name = o.material.name, key = bm.tint[name];
+    if (key) { if (!mats[name]) { mats[name] = o.material.clone(); mats[name].color.set(c[key]); if (key === "glow") mats[name].emissive.set(c[key]); } o.material = mats[name]; }
+    if (bm.lights.includes(o.name)) { o.name = "navlight"; o.userData.phase = 0; }
   });
   root.add(m);
   const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.flame).multiplyScalar(1.6), transparent: true, opacity: .92, depthWrite: false });
-  for (const [x, y, z, s] of [[-.04, .018, -.3, .75], [.04, .018, -.3, .75], [-.04, -.022, -.3, .75], [.04, -.022, -.3, .75], [-.185, -.025, -.25, .9], [.185, -.025, -.25, .9]]) {
+  for (const [x, y, z, s] of bm.flames) {
     const f = new THREE.Mesh(flameGeo(c.flameShape), fireMat); f.position.set(x, y, z); f.rotation.x = -Math.PI / 2; f.name = "flame"; f.userData.fs = (c.flameSize || 1) * s; f.scale.setScalar(f.userData.fs); root.add(f);
   }
   root.traverse((o) => { if (o.name === "navlight" && !o.children.length) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: o.material.color.clone().multiplyScalar(.5), blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(.09); o.add(h); } });
   root.scale.setScalar(c.size);
-  const info = { muzzles: [[-.185, -.012, .3], [.185, -.012, .3], [0, 0, .32], [-.185, -.038, .3], [.185, -.038, .3]].map((p) => V(p)), len: .62 * c.size * 1.05, radius: .3 * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
+  const info = { muzzles: bm.muzzles.map((p) => V(p)), len: bm.len * c.size * 1.05, radius: bm.radius * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
   collectParts(root, info);
   return info;
 }
