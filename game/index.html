@@ -2272,7 +2272,79 @@ function buildWorld() {
   for (const p of planets) scene.remove(p.group);
   home = new Planet(state.home, 40, true);
   planets = [home, ...state.others.map((o) => new Planet(o, 26, false)), ...FAR_PLANETS.map((f, i) => new Planet(farPlanetData(f, i), 26, false))];
-  buildTags();
+  buildTags(); buildBusyGalaxy();
+}
+// ---- a busy galaxy: space lanes with streams of little ships between neighbor planets, and rocky asteroid belts
+const busy = { group: null, lanes: [], belts: [] };
+function busyRockGeo() {
+  const g = mergeVertices(new THREE.IcosahedronGeometry(1, 1)), pa = g.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i); v.multiplyScalar(.7 + .5 * noise(v.x * 1.7 + 3, v.y * 1.7, v.z * 1.7)); pa.setXYZ(i, v.x, v.y, v.z); }
+  g.computeVertexNormals(); return g;
+}
+let TRAFFIC_GEO, TRAFFIC_MAT, TRAFFIC_GLOW_GEO, TRAFFIC_GLOW_MAT, TRAFFIC_COLS, ROCK_GEO, ROCK_MAT;
+function buildBusyGalaxy() {
+  if (!TRAFFIC_GEO) {
+    TRAFFIC_GEO = mergeGeometries([new THREE.CapsuleGeometry(.18, .7, 4, 10).rotateX(Math.PI / 2), new THREE.BoxGeometry(.9, .06, .3).translate(0, 0, -.12)]);
+    TRAFFIC_MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: .6, roughness: .35 });
+    TRAFFIC_GLOW_GEO = new THREE.SphereGeometry(.16, 10, 8).scale(1, 1, 2.2).translate(0, 0, -.62);
+    TRAFFIC_GLOW_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    TRAFFIC_COLS = ["#e8ecf4", "#ffb547", "#6fe3ff", "#ff5a6e", "#9dff6a", "#c8a2ff", "#f2f5fb"].map((c) => new THREE.Color(c));
+    ROCK_GEO = busyRockGeo(); ROCK_MAT = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .95, metalness: 0, flatShading: true });
+  }
+  if (busy.group) scene.remove(busy.group);
+  busy.group = new THREE.Group(); busy.lanes = []; busy.belts = []; scene.add(busy.group);
+  const live = planets.filter((p) => !p.data.far), used = new Set();
+  // lanes: each planet links to its nearest neighbor, like highways between cities
+  for (const a of live) {
+    const b = live.filter((x) => x !== a).sort((x, y) => x.group.position.distanceTo(a.group.position) - y.group.position.distanceTo(a.group.position))[0];
+    if (!b) continue; const key = [a.data.name, b.data.name].sort().join("|"); if (used.has(key) || busy.lanes.length >= 10) continue; used.add(key);
+    const p0 = a.group.position, p2 = b.group.position, L = p0.distanceTo(p2); if (L > 600) continue;
+    const mid = p0.clone().add(p2).multiplyScalar(.5).add(new THREE.Vector3().randomDirection().multiplyScalar(L * .18));
+    const curve = new THREE.QuadraticBezierCurve3(p0.clone(), mid, p2.clone());
+    const N = Math.min(26, Math.max(10, Math.round(L / 14)));
+    const hull = new THREE.InstancedMesh(TRAFFIC_GEO, TRAFFIC_MAT, N), glow = new THREE.InstancedMesh(TRAFFIC_GLOW_GEO, TRAFFIC_GLOW_MAT, N);
+    hull.frustumCulled = glow.frustumCulled = false;
+    const cars = [];
+    for (let i = 0; i < N; i++) {
+      hull.setColorAt(i, TRAFFIC_COLS[(Math.random() * TRAFFIC_COLS.length) | 0]); glow.setColorAt(i, i % 2 ? new THREE.Color(1.6, 1.1, .5) : new THREE.Color(.5, 1.2, 1.8));
+      cars.push({ t: Math.random(), dir: i % 2 ? 1 : -1, speed: rnd(.5, 1.1) * 9 / L, lane: rnd(-1, 1), size: rnd(.12, .3) });
+    }
+    // the lane itself: a faint glowing dotted line you can follow
+    const lg = new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.round(L / 2)));
+    const line = new THREE.Points(lg, new THREE.PointsMaterial({ color: new THREE.Color(.35, .6, 1), size: .5, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false }));
+    busy.group.add(hull, glow, line); busy.lanes.push({ curve, hull, glow, cars, L });
+  }
+  // asteroid belts around a few big planets
+  const ringed = live.filter((p) => p !== home).sort((x, y) => y.R - x.R).slice(0, 3);
+  for (const p of ringed) {
+    const N = ui.low ? 260 : 700, im = new THREE.InstancedMesh(ROCK_GEO, ROCK_MAT, N), g = new THREE.Group(), m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+    const r0 = p.R * 2.6, r1 = p.R * 3.8, col = new THREE.Color();
+    for (let i = 0; i < N; i++) {
+      const ang = Math.random() * Math.PI * 2, r = r0 + (r1 - r0) * Math.pow(Math.random(), .8), h = (Math.random() - .5) * p.R * .18;
+      e.set(Math.random() * 6, Math.random() * 6, Math.random() * 6); q.setFromEuler(e);
+      const sc = p.R * .02 * Math.pow(Math.random(), 2.2) * 3 + p.R * .006;
+      m.compose(new THREE.Vector3(Math.cos(ang) * r, h, Math.sin(ang) * r), q, new THREE.Vector3(sc, sc * rnd(.6, 1), sc * rnd(.7, 1.2)));
+      im.setMatrixAt(i, m); im.setColorAt(i, col.setHSL(.07 + Math.random() * .05, .18 + Math.random() * .2, .32 + Math.random() * .22));
+    }
+    g.add(im); g.position.copy(p.group.position); g.rotation.set(rnd(-.5, .5), 0, rnd(-.4, .4)); busy.group.add(g);
+    busy.belts.push({ g, speed: rnd(.006, .014) });
+  }
+}
+function busyStep(dt) {
+  if (!busy.group) return;
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), tan = new THREE.Vector3(), side = new THREE.Vector3(), s = new THREE.Vector3();
+  for (const B of busy.belts) B.g.rotation.y += dt * B.speed;
+  for (const ln of busy.lanes) {
+    const near = camera.position.distanceTo(ln.curve.v1) < ln.L * 1.4 + 200; ln.hull.visible = ln.glow.visible = near; if (!near) continue;
+    ln.cars.forEach((c, i) => {
+      c.t += c.dir * c.speed * dt; if (c.t > 1) c.t -= 1; if (c.t < 0) c.t += 1;
+      ln.curve.getPointAt(c.t, p); ln.curve.getTangentAt(c.t, tan); if (c.dir < 0) tan.negate();
+      side.crossVectors(tan, UP).normalize(); p.addScaledVector(side, c.lane * 3 + c.dir * 2.2); // two-way traffic, each way on its own side
+      const k = Math.min(1, c.t * 12, (1 - c.t) * 12); // ships shrink into the planets at both ends
+      q.setFromUnitVectors(FWD, tan); m.compose(p, q, s.setScalar(c.size * 6 * k)); ln.hull.setMatrixAt(i, m); ln.glow.setMatrixAt(i, m);
+    });
+    ln.hull.instanceMatrix.needsUpdate = ln.glow.instanceMatrix.needsUpdate = true;
+  }
 }
 
 // ================= ships =================
@@ -6082,7 +6154,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t);
+  boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t); busyStep(dt);
   if (mode !== "fly" || !nav) $("navTag").hidden = true;
   if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
