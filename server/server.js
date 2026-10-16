@@ -11,7 +11,7 @@ import { createStore } from "./store.js";
 
 const PORT = process.env.PORT || 3000;
 const GAME_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "game");
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".json": "application/json" };
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".svg": "image/svg+xml", ".json": "application/json", ".glb": "model/gltf-binary" };
 
 // Same numbers as the game, so everyone agrees on how much a hit hurts.
 const DAMAGE = { laser: { hp: .5, pop: .004 }, missile: { hp: 5, pop: .045 }, bomb: { hp: 14, pop: .14 } };
