@@ -64,6 +64,7 @@ function uniqueName(name) {
   while (taken.has(out.toLowerCase())) out = `${name} ${i++}`;
   return out;
 }
+const levelOf = (xp) => { let lv = 1; while (xp >= 100 * (lv + 1) * lv) lv++; return lv; };
 const publicPlayer = (p) => ({ id: p.id, name: p.name, planetId: p.planetId, ship: p.ship });
 const snapshot = () => ({ planets: Object.values(world.planets), players: Object.values(world.players).map(publicPlayer), chat: world.chat });
 function stat(p) { return { t: "stat", id: p.id, hp: p.hp, pop: p.pop, dead: !!p.dead, troops: p.troops || 0 }; }
@@ -119,7 +120,7 @@ function handle(ws, c, m) {
       if (p && world.planets[p.planetId]) { c.player = p; p.lastSeen = Date.now(); markPlayer(p); }
       if (process.env.ADMIN_KEY && typeof m.god === "string" && m.god === process.env.ADMIN_KEY) { c.god = true; send(ws, { t: "god" }); } // only the game owner knows this key
       if (c.player && c.player.pending) { send(ws, { t: "paid", amount: c.player.pending, from: "Ransoms" }); c.player.pending = 0; markPlayer(c.player); }
-      send(ws, { t: "welcome", you: c.player ? publicPlayer(c.player) : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId) });
+      send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId) });
       break;
     }
     case "seed": { // the very first visitor fills the empty galaxy with the starting planets
@@ -157,7 +158,7 @@ function handle(ws, c, m) {
       break;
     }
     case "ship": { if (!me) return; me.ship = m.ship; markPlayer(me); broadcast({ t: "shipCfg", pid: me.id, ship: m.ship }, ws); break; }
-    case "pos": { if (!me) return; c.ship = { pid: me.id, name: me.name, p: m.p, q: m.q, f: !!m.f, hp: m.hp }; break; }
+    case "pos": { if (!me) return; c.ship = { pid: me.id, name: me.name, p: m.p, q: m.q, f: !!m.f, hp: m.hp, lv: Math.min(999, m.lv | 0) || 1 }; break; }
     case "hit": { // someone hit a planet: everyone sees the crater and the new health
       const p = world.planets[m.id]; if (!p || p.dead || !KINDS.includes(m.kind) || !Array.isArray(m.n)) return;
       if (p.shield) return; // god mode shield
@@ -206,7 +207,17 @@ function handle(ws, c, m) {
       break;
     }
     case "godConquer": { if (!c.god || !mine) return; mine.conqueredBy = { id: "bot", name: "Test Bot" }; markPlanet(mine); broadcast({ t: "conquer", id: mine.id, by: mine.conqueredBy }); break; }
-    case "wave": { if (!me) return; const to = socketOf(m.to); if (to) send(to, { t: "wave", from: me.name, kind: ["wave", "duel", "msg"].includes(m.kind) ? m.kind : "wave", text: text(m.text || "", 120) }); break; }
+    case "wallet": { // your credits, level and progress, so they follow you to any browser
+      if (!me || !m.wallet || typeof m.wallet !== "object") return;
+      if (JSON.stringify(m.wallet).length > 30000) return;
+      me.wallet = m.wallet; markPlayer(me); break;
+    }
+    case "top": { // the Galaxy Top 100, ranked by fame
+      const list = Object.values(world.players).filter((p) => p.wallet && p.wallet.fame > 0).sort((a, b) => b.wallet.fame - a.wallet.fame).slice(0, 100)
+        .map((p) => ({ id: p.id, name: p.name, planet: world.planets[p.planetId]?.name || "", lv: levelOf(p.wallet.xp | 0), fame: Math.round(p.wallet.fame) }));
+      send(ws, { t: "top", list }); break;
+    }
+    case "wave": { if (!me) return; const to = socketOf(m.to); if (to) send(to, { t: "wave", from: me.name, fromId: me.id, kind: ["wave", "duel", "msg", "invite"].includes(m.kind) ? m.kind : "wave", text: text(m.text || "", 120) }); break; }
     case "ransom": { // the owner pays to get their planet back
       if (!mine || !mine.conqueredBy) return;
       const by = mine.conqueredBy, amount = Math.max(0, Math.min(5000, +m.amount || 0)), boss = world.players[by.id];

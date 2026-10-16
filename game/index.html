@@ -141,6 +141,14 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #radio.talk .bolt { animation: boltTalk .3s ease-in-out infinite alternate; }
 @keyframes boltTalk { to { transform: scale(1.12); background: rgba(111,227,255,.35); } }
 #radioText { min-height: 18px; }
+#radioEvents { display: grid; gap: 4px; }
+#radioEvents .evline { display: flex; align-items: center; gap: 6px; justify-content: space-between; font-size: 12px; padding: 5px 8px; border-radius: 8px; background: rgba(255,90,110,.1); border: 1px solid rgba(255,90,110,.35); }
+#radioEvents .evline button { padding: 2px 10px; font-size: 11px; }
+#lvPop { position: fixed; z-index: 20; left: 50%; top: 22%; transform: translateX(-50%); width: min(340px, calc(100% - 32px)); padding: 16px 18px; text-align: center; border: 1px solid rgba(255,214,90,.6); box-shadow: 0 0 40px rgba(255,200,80,.35); }
+#lvPop h2 { margin: 0 0 6px; color: #ffd24a; }
+#lvPop ul { text-align: left; margin: 8px 0 12px; padding-left: 20px; font-size: 13px; line-height: 1.6; }
+.prank-row.me { background: rgba(125,255,155,.08); }
+#styleRow { display: flex; flex-wrap: wrap; gap: 5px; }
 #radioGoal { padding: 7px 9px; border-radius: 8px; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.35); color: var(--accent); font: 500 12px var(--mono); }
 #radio.min #radioText { display: none; }
 .xpbar { width: 60px; } .xpbar i { background: linear-gradient(90deg, #6fe3ff, #c8a2ff); }
@@ -251,6 +259,8 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="stat"><span class="k">PEOPLE</span><span id="popText">0</span></div>
   <div class="row"><button id="rebuildHome" class="go" hidden>Rebuild my planet</button><button id="newHome" hidden>Start a new planet</button></div>
   <div class="group" id="conqBox" hidden><span class="label" id="conqTitle">🏴 Conquered!</span><span class="small" id="conqText"></span><div class="row"><button class="go" id="payRansom">Pay ransom</button></div></div>
+  <div class="group" id="gameInfo"></div>
+  <div class="group"><span class="label">Civilization style</span><span class="small" id="styleNote"></span><div id="styleRow"></div></div>
   <div class="group"><span class="label">Game</span>
     <div class="row" id="resetAskRow"><button class="danger" id="resetAsk">Reset game</button></div>
     <div class="group" id="resetConfirm" hidden><span class="small">Start over? Your money, ship, weapons, missions, your planet and everyone's anger at you go back to the start.</span><div class="row"><button class="danger" id="reset">Yes, reset</button><button id="resetNo">No, keep playing</button></div></div>
@@ -372,7 +382,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 
 <section id="p-map" class="hud panel" data-panel="map" hidden>
   <div class="ph"><span class="label">Star map · click a planet</span><button class="x" data-close="map" aria-label="Close star map">×</button></div>
-  <div class="row" id="mapGals"><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button></div>
+  <div class="row" id="mapGals"><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
   <svg id="mapSvg" role="img" aria-label="Star map of all planets"></svg>
   <div id="mapCard"><span class="small">Click a planet on the map to see who owns it.</span></div>
 </section>
@@ -407,7 +417,17 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="ph"><span class="label">📋 Galactic mission board</span><button class="x" data-close="missions" aria-label="Close missions">×</button></div>
   <span class="small">New missions every day. Finish them for credits.</span>
   <div id="missionList"></div>
+  <div id="wantedList" class="group"></div>
   <span class="small" id="missionReset"></span>
+</section>
+<section id="p-friends" class="hud panel side" data-panel="friends" hidden>
+  <div class="ph"><span class="label">👥 Friends</span><button class="x" data-close="friends" aria-label="Close friends">×</button></div>
+  <div id="friendsList"></div>
+</section>
+<section id="p-top" class="hud panel side" data-panel="top" hidden>
+  <div class="ph"><span class="label">🏆 Galaxy Top 100</span><button class="x" data-close="top" aria-label="Close Top 100">×</button></div>
+  <span class="small" id="topMe"></span>
+  <div id="topList" style="max-height:52vh;overflow-y:auto"></div>
 </section>
 <section id="p-help" class="hud panel" data-panel="help" hidden>
   <div class="ph"><span class="label">Flight controls</span><button class="x" data-close="help" aria-label="Close flight controls">×</button></div>
@@ -456,7 +476,9 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="rhead"><span class="bolt">🤖</span><b>BOLT</b><span class="small">· ship radio</span><span id="radioLv" class="small"></span><button id="radioMin" aria-label="Shrink radio">–</button></div>
   <div id="radioText"></div>
   <div id="radioGoal" hidden></div>
+  <div id="radioEvents" hidden></div>
 </section>
+<section id="lvPop" class="hud panel" hidden><h2 id="lvPopTitle"></h2><span class="small">You unlocked:</span><ul id="lvPopList"></ul><button class="go" id="lvPopOk">Awesome!</button></section>
 <div id="megaBar" hidden><span id="megaText"></span><div class="bar"><i id="megaFill"></i></div></div>
 <div id="navTag" hidden></div>
 <div id="megaFx"></div>
@@ -483,8 +505,9 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <button data-open="map">🗺 Map</button>
   <button data-open="prank" data-fly>😈 Prank</button>
   <button data-open="missions">📋 Missions</button>
+  <button data-open="top">🏆 Top 100</button>
   <div class="dd"><button class="ddb">💬 Talk ▾</button><div class="ddm" hidden>
-    <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button>
+    <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button>
   </div></div>
   <div class="dd"><button class="ddb" aria-label="Settings">⚙ ▾</button><div class="ddm" hidden>
     <button data-open="help" data-fly>Flight controls</button><button id="soundBtn">Sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button>
@@ -564,7 +587,7 @@ const wallet = (() => { try { return JSON.parse(localStorage.getItem(WALLETKEY))
 function saveWallet() { try { localStorage.setItem(WALLETKEY, JSON.stringify(wallet)); } catch {} }
 function gunStats() {
   const g = new Set(state.ship.guns || []);
-  return { bolts: g.has("twin") ? 2 : 1, cd: g.has("gatling") ? .5 : 1, dmg: (g.has("heavy") ? 1.6 : 1) * (g.has("plasma") ? 2 : 1) * (godOn("oneshot") ? 999 : 1), thick: g.has("heavy") ? 2.2 : g.has("plasma") ? 3 : 1, color: g.has("plasma") ? new THREE.Color(.6, 3.5, .8) : g.has("heavy") ? new THREE.Color(3.5, 1.4, .3) : new THREE.Color(4, .5, .8), missiles: g.has("pods") ? 2 : 1 };
+  return { bolts: g.has("twin") ? 2 : 1, cd: g.has("gatling") ? .5 : 1, dmg: (wallet.style === "lava" ? 1.15 : 1) * (g.has("heavy") ? 1.6 : 1) * (g.has("plasma") ? 2 : 1) * (godOn("oneshot") ? 999 : 1), thick: g.has("heavy") ? 2.2 : g.has("plasma") ? 3 : 1, color: g.has("plasma") ? new THREE.Color(.6, 3.5, .8) : g.has("heavy") ? new THREE.Color(3.5, 1.4, .3) : new THREE.Color(4, .5, .8), missiles: g.has("pods") ? 2 : 1 };
 }
 const FINISHES = { metal: "Metal", chrome: "Chrome", matte: "Matte", carbon: "Carbon", neon: "Neon glow" };
 const PRESETS = {
@@ -2468,7 +2491,7 @@ function setView(v) {
   if (mode !== "home") return;
   view = v;
   for (const [vv, panel] of Object.entries(VIEWS)) ui[panel] = vv === v;
-  if (v !== "main") ui.mail = ui.chat = ui.map = ui.help = ui.prank = ui.pranks = ui.god = ui.hail = ui.missions = false; // only one menu open at a time
+  if (v !== "main") ui.mail = ui.chat = ui.map = ui.help = ui.prank = ui.pranks = ui.god = ui.hail = ui.missions = ui.friends = ui.top = false; // only one menu open at a time
   $("renameRow").hidden = true;
   setTool(null); frameCamera(); renderPanels(); saveUi();
 }
@@ -2480,10 +2503,12 @@ function goMain() { // Esc and the Home button: straight back to the normal view
 }
 function setPanel(name, open) { // small panels on top of any view: map, mail, chat, flight controls
   if (open) { // opening a menu closes the one that was open
-    for (const k of ["mail", "chat", "map", "help", "prank", "pranks", "god", "hail", "missions"]) if (k !== name) ui[k] = false;
+    for (const k of ["mail", "chat", "map", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top"]) if (k !== name) ui[k] = false;
     if (mode === "home" && view !== "main") setView("main");
   }
   ui[name] = open;
+  if (name === "friends" && open) renderFriends();
+  if (name === "top" && open) requestTop();
   if (name === "map" && open) { mapGal = shipInPrism() ? "prism" : "main"; renderMap(); renderMapCard(); }
   renderPanels(); saveUi();
 }
@@ -2492,8 +2517,8 @@ function renderPanels() {
   document.querySelectorAll("[data-panel]").forEach((el) => {
     const name = el.dataset.panel;
     let show = !!ui[name];
-    if (fly) show = show && ["map", "mail", "help", "prank", "pranks", "god", "hail", "missions"].includes(name);
-    else show = show && !["help", "prank", "hail"].includes(name) && !(view !== "main" && ["mail", "chat", "pranks", "god", "missions"].includes(name));
+    if (fly) show = show && ["map", "mail", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top"].includes(name);
+    else show = show && !["help", "prank", "hail"].includes(name) && !(view !== "main" && ["mail", "chat", "pranks", "god", "missions", "friends", "top"].includes(name));
     el.hidden = !show;
   });
   document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", !fly && view === b.dataset.view));
@@ -2756,6 +2781,7 @@ function renderHangar() {
   $("shipName").value = s.name; $("shipSize").value = s.size;
   const pick = (key) => (v) => { s[key] = key === "engines" ? +v : v; buildShip(); renderHangar(); save(); };
   choiceRow($("presets"), PRESETS, () => false, (k) => {
+    if (PRESET_LEVEL[k] && needLevel(PRESET_LEVEL[k], PRESETS[k].label + " ship")) return;
     if (k === "random") {
       const keys = (o) => Object.keys(o), any = (a) => a[(Math.random() * a.length) | 0];
       Object.assign(s, { hull: any(keys(HULLS)), wings: any(keys(WINGS)), engines: 1 + ((Math.random() * 4) | 0), extras: keys(EXTRAS).filter((e) => Math.random() < (["hat", "eyes", "shield"].includes(e) ? .12 : .4)), finish: any(keys(FINISHES)),
@@ -2764,6 +2790,7 @@ function renderHangar() {
     } else { const { label, ...p } = structuredClone(PRESETS[k]); Object.assign(s, p); }
     buildShip(); renderHangar(); save();
   });
+  [...$("presets").children].forEach((b, i) => { const k = Object.keys(PRESETS)[i], need = PRESET_LEVEL[k]; if (need && lvl() < need) b.textContent = `🔒 ${PRESETS[k].label} · Lv ${need}`; });
   choiceRow($("hulls"), HULLS, (k) => s.hull === k, pick("hull"));
   choiceRow($("wings"), WINGS, (k) => s.wings === k, pick("wings"));
   choiceRow($("engines"), { 1: "One", 2: "Two", 3: "Three", 4: "Four" }, (k) => +k === s.engines, pick("engines"));
@@ -2780,9 +2807,10 @@ function renderShop() {
   const s = state.ship, el = $("shop"); $("credits").textContent = Math.floor(wallet.credits); el.innerHTML = "";
   for (const [k, g] of Object.entries(GUNS)) {
     const owned = wallet.owned.includes(k), on = (s.guns || []).includes(k), b = document.createElement("button");
-    const cost = godOn("free") ? 0 : g.cost;
-    b.classList.toggle("on", on); b.innerHTML = `<b>${g.label}</b><span>${owned ? (on ? "✓ on your ship · click to take off" : "yours · click to put on") : `💰 ${cost}`} · ${g.info}</span>`;
+    const cost = godOn("free") ? 0 : Math.round(g.cost * priceK()), need = GUN_LEVEL[k] || 1, locked = !owned && lvl() < need;
+    b.classList.toggle("on", on); b.innerHTML = `<b>${locked ? "🔒 " : ""}${g.label}</b><span>${owned ? (on ? "✓ on your ship · click to take off" : "yours · click to put on") : locked ? `unlocks at level ${need}` : `💰 ${cost}`} · ${g.info}</span>`;
     b.addEventListener("click", () => {
+      if (locked && needLevel(need, g.label)) return;
       if (!owned) { if (wallet.credits < cost) return toast(`You need ${Math.ceil(cost - wallet.credits)} more credits for the ${g.label}.`); wallet.credits -= cost; wallet.owned.push(k); saveWallet(); toast(`🛒 You bought the ${g.label}!`); }
       const set = new Set(s.guns || []); if (owned && on) set.delete(k); else set.add(k); s.guns = [...set];
       buildShip(); renderHangar(); save();
@@ -2847,7 +2875,7 @@ const SEENKEY = "tinyplanets.seenPranks";
 const prankDraft = { type: "sign", hours: 48, img: "" };
 const livePranks = (d) => (d.pranks || []).filter((k) => k.until > Date.now());
 const isMyPrank = (k) => (net.me ? k.byId === net.me.id : !!k.byMe);
-const prankCost = (type = prankDraft.type, hours = prankDraft.hours) => (godOn("free") ? 0 : Math.round(PRANKS[type].cost * HOUR_PRICE[hours]));
+const prankCost = (type = prankDraft.type, hours = prankDraft.hours) => (godOn("free") ? 0 : Math.round(PRANKS[type].cost * HOUR_PRICE[hours] * (wallet.style === "toxic" ? .7 : 1)));
 const cleanCost = (k) => (godOn("free") ? 0 : Math.round(PRANKS[k.type].cost * .6));
 function fmtLeft(ms) { const m = Math.max(0, Math.floor(ms / 60000)), h = Math.floor(m / 60), d = Math.floor(h / 24); return d ? `${d}d ${h % 24}h` : h ? `${h}h ${m % 60}m` : `${m}m`; }
 function seeded(str) { let h = 1779033703; for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); } return () => { h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); return ((h ^= h >>> 16) >>> 0) / 4294967296; }; }
@@ -2971,6 +2999,7 @@ function doPrank() {
   if (mode !== "fly") return toast("Fly to a planet first, then prank it!");
   const tp = aimPlanet || nearestPlanet(60);
   if (!tp) return toast("Fly closer to a planet and aim at it to prank it.");
+  if (!canHitPlanet(tp)) return;
   if (tp === home && !godAllowed()) return toast("That's your own planet! Prank someone else 😈");
   if (!tp.alive) return toast("That planet is destroyed. Nothing left to prank.");
   if (prankDraft.type === "photo" && !prankDraft.img) { setPanel("prank", true); return toast("Add a picture first: open 😈 Prank and press Add picture."); }
@@ -3042,7 +3071,7 @@ function openHail() {
   setPanel("hail", true); renderHail(); missionEvent("hail"); sfx.lock();
 }
 function say(text) { $("hailSay").textContent = text; }
-function buy(cost, fn) { if (godOn("free")) cost = 0; if (wallet.credits < cost) return say(`(You need ${Math.ceil(cost - wallet.credits)} more credits.)`); wallet.credits -= cost; saveWallet(); earn(0); fn(); }
+function buy(cost, fn) { cost = Math.round(cost * priceK()); if (godOn("free")) cost = 0; if (wallet.credits < cost) return say(`(You need ${Math.ceil(cost - wallet.credits)} more credits.)`); wallet.credits -= cost; saveWallet(); earn(0); fn(); }
 const packOf = (n) => { const L = n.opts && n.opts.leader || n; return npcs.filter((x) => x === L || (x.opts && x.opts.leader === L)); };
 const wanted = () => clock() - lastPlayerAttack < 20;
 function hailOptions(t) {
@@ -3098,7 +3127,7 @@ function M() {
   if (missions && missions.day === today()) return missions;
   missions = load(MISSIONKEY);
   if (!missions || missions.day !== today()) { // 4 new missions each day
-    const r = seeded(today() + (net.me ? net.me.id : "")), pool = Object.keys(MISSION_TYPES), list = [];
+    const r = seeded(today() + (net.me ? net.me.id : "")), pool = Object.keys(MISSION_TYPES).filter((k) => (MISSION_TYPES[k].minLv || 1) <= lvl()), list = [];
     while (list.length < 4 && pool.length) { const id = pool.splice(Math.floor(r() * pool.length), 1)[0], mt = MISSION_TYPES[id]; list.push({ id, n: mt.n[Math.floor(r() * mt.n.length)], got: 0, keys: [], claimed: false }); }
     missions = { day: today(), list }; saveMissions();
   }
@@ -3112,7 +3141,7 @@ function missionEvent(ev, key) {
     const mt = MISSION_TYPES[m.id]; if (!mt || mt.ev !== ev || m.got >= m.n) continue;
     if (mt.unique) { if (!key || m.keys.includes(key)) continue; m.keys.push(key); }
     m.got++; changed = true;
-    if (m.got >= m.n) { toast(`📋 Mission done: ${mt.text.replace("{n}", m.n)}! Claim ${mt.reward} credits in 📋 Missions.`, "", 4000); sfx.cheer(); }
+    if (m.got >= m.n) { toast(`📋 Mission done: ${mt.text.replace("{n}", m.n)}! Claim ${mt.reward} credits in 📋 Missions.`, "", 4000); sfx.cheer(); if (tut.step >= TUT.length) radio(`Job done: ${mt.text.replace("{n}", m.n)}! Claim your ${mt.reward} credits in 📋 Missions. 🤖`); }
   }
   if (changed) { saveMissions(); if (ui.missions) renderMissions(); }
 }
@@ -3123,9 +3152,10 @@ function renderMissions() {
     row.className = "mission" + (done ? " done" : "");
     row.innerHTML = `<span><b>${esc(mt.text.replace("{n}", m.n))}</b><br>${Math.min(m.got, m.n)} / ${m.n} · 💰${mt.reward}</span>`;
     const b = document.createElement("button"); b.textContent = m.claimed ? "✓ Claimed" : done ? "Claim" : "…"; b.disabled = m.claimed || !done; b.className = done && !m.claimed ? "go" : "";
-    b.addEventListener("click", () => { if (m.claimed || m.got < m.n) return; m.claimed = true; saveMissions(); earn(mt.reward, "mission complete"); addXp(Math.round(mt.reward / 2)); renderMissions(); });
+    b.addEventListener("click", () => { if (m.claimed || m.got < m.n) return; m.claimed = true; saveMissions(); earn(Math.round(mt.reward * styleBonus("jobs")), "mission complete"); addXp(Math.round(mt.reward / 2)); renderMissions(); });
     row.append(b); const bar = document.createElement("div"); bar.className = "bar"; bar.innerHTML = `<i style="width:${Math.min(100, m.got / m.n * 100)}%"></i>`; row.append(bar); el.append(row);
   }
+  renderWanted();
   const mid = new Date(); mid.setHours(24, 0, 0, 0); $("missionReset").textContent = `New missions in ${fmtLeft(mid - Date.now())}`;
 }
 const visited = new Set();
@@ -3143,6 +3173,7 @@ function addXp(n) {
   if (lv > before) {
     toast(`⭐ LEVEL ${lv}!`, "boom", 4000); sfx.cheer(); flashScreen("#ffe9a8", .35);
     earn(lv * 50, "level up bonus");
+    showLevelUp(lv);
     if (tut.step >= TUT.length) radio(pickLine([`Level ${lv}! Our planet is getting famous, explorer. 🌟`, `Level ${lv}! I'm so proud I could short-circuit. ⚡`, `Level ${lv}! The neighbors are starting to talk about us.`]));
   }
 }
@@ -3170,7 +3201,7 @@ function nextRadio() {
   tick();
 }
 function showRadio() {
-  const busy = tut.step < TUT.length || radioTyping || radioQ.length || clock() < radioHideAt;
+  const busy = tut.step < TUT.length || radioTyping || radioQ.length || clock() < radioHideAt || !$("radioEvents").hidden;
   $("radio").hidden = !busy || document.body.classList.contains("joining") || (mode === "home" && view !== "main");
 }
 $("radioMin").addEventListener("click", () => $("radio").classList.toggle("min"));
@@ -3327,6 +3358,339 @@ const TIPS = [
   "Tip: hurt? Talk to a trader and pay 20 credits for a repair. 🔧",
   "Bolt here. I planted a little flower on our planet. Don't tell anyone. 🌸",
 ];
+
+// ================= game logic: saved progress, level rewards, buildings, jobs, raids, bounties, events, friends, arena, Top 100, styles =================
+function lvl() { return levelOf(wallet.xp); }
+wallet.stats ||= {}; wallet.friends ||= [];
+// ---- level rewards: every level unlocks something real
+var GUN_LEVEL = { twin: 1, gatling: 3, heavy: 4, pods: 5, plasma: 7 };
+var DECOR_LEVEL = { base: 2, turret: 2, castle: 3, pisa: 4, eiffel: 5, magic: 6 };
+var PRESET_LEVEL = { stealth: 2, burger: 2, toaster: 2, manta: 3, viper: 3, hammer: 3, corvette: 4, falcon: 4, shark: 4, crystal: 5, cop: 6, battleship: 8 };
+var FEATURE_LEVEL = { style: 3, pvp: 5 };
+function unlocksAt(lv) {
+  const out = [];
+  for (const [k, l] of Object.entries(GUN_LEVEL)) if (l === lv) out.push("🔫 " + GUNS[k].label);
+  for (const [k, l] of Object.entries(PRESET_LEVEL)) if (l === lv && PRESETS[k]) out.push("🚀 " + PRESETS[k].label + " ship");
+  for (const [k, l] of Object.entries(DECOR_LEVEL)) if (l === lv) out.push("🏗 " + DECOR[k]);
+  if (lv === FEATURE_LEVEL.style) out.push("🎨 Civilization style");
+  if (lv === FEATURE_LEVEL.pvp) out.push("⚔ Battles with other players: attack, prank and conquer their planets");
+  if (lv === 2) out.push("🏴‍☠️ Pirate raids and 🎯 wanted pirates");
+  return out;
+}
+function showLevelUp(lv) {
+  const got = unlocksAt(lv);
+  $("lvPopTitle").textContent = `⭐ Level ${lv}!`;
+  $("lvPopList").innerHTML = got.length ? got.map((g) => `<li>${esc(g)}</li>`).join("") : "<li>💰 A level bonus</li>";
+  $("lvPop").hidden = false; clearTimeout(showLevelUp.t); showLevelUp.t = setTimeout(() => ($("lvPop").hidden = true), 9000);
+  renderLocks();
+}
+$("lvPopOk").addEventListener("click", () => ($("lvPop").hidden = true));
+function needLevel(n, what) { if (lvl() >= n) return false; toast(`🔒 ${what} unlocks at level ${n}. You are level ${lvl()}.`); return true; }
+// ---- buildings that do something
+const BUILD_INFO = {
+  house: { cost: 40, fame: 5, text: "+5 fame" }, tower: { cost: 80, income: 3, fame: 8, text: "+3 credits a minute" },
+  base: { cost: 200, income: 8, fame: 20, text: "+8 credits a minute" }, turret: { cost: 120, fame: 6, text: "shoots attackers" },
+  castle: { cost: 300, income: 5, fame: 40, text: "+5 credits a minute, +40 fame" }, pisa: { cost: 250, fame: 60, text: "+60 fame" },
+  eiffel: { cost: 400, fame: 90, text: "+90 fame" }, magic: { cost: 600, income: 10, fame: 150, text: "+10 credits a minute, +150 fame" },
+  alien: { cost: 30, fame: 3, text: "+3 fame" }, sign: { cost: 0, fame: 1, text: "free" },
+};
+const styleBonus = (k) => (wallet.style && STYLES[wallet.style] && STYLES[wallet.style].bonus === k ? 1.2 : 1);
+const incomePerMin = () => Math.round(state.home.decor.reduce((s, d) => s + (BUILD_INFO[d.type]?.income || 0), 0) * styleBonus("income"));
+const buildFame = () => state.home.decor.reduce((s, d) => s + (BUILD_INFO[d.type]?.fame || 0), 0);
+function fameOf() { const st = wallet.stats; return Math.round((wallet.xp + buildFame() * 10 + (st.raids || 0) * 40 + (st.arena || 0) * 30 + (st.bounties || 0) * 50) * styleBonus("fame")); }
+function payBuild(type) { // returns false if you can't afford it
+  if (DECOR_LEVEL[type] && needLevel(DECOR_LEVEL[type], DECOR[type])) return false;
+  const c = godOn("free") ? 0 : BUILD_INFO[type]?.cost || 0; if (!c) return true;
+  if (wallet.credits < c) { toast(`🏗 A ${DECOR[type]} costs ${c} credits. You need ${Math.ceil(c - wallet.credits)} more.`); return false; }
+  wallet.credits -= c; saveWallet(); earn(0); missionEvent("build"); toast(`🏗 ${DECOR[type]} built · −${c} credits · ${BUILD_INFO[type].text}`, "", 2500); return true;
+}
+let incomeT = 0, incomeSum = 0;
+function incomeStep(dt) {
+  if ((incomeT += dt) < 60) return; incomeT = 0;
+  const n = incomePerMin(); if (!n || state.home.dead || state.home.conqueredBy) return;
+  wallet.credits += n; incomeSum += n; wallet.lastIncome = Date.now(); saveWallet(); earn(0);
+  if (incomeSum >= 50) { toast(`🏭 Your buildings earned ${incomeSum} credits`, "", 2500); incomeSum = 0; }
+}
+function awayIncome() { // buildings keep working while you are away (up to 8 hours, at half speed)
+  const last = wallet.lastIncome || Date.now(), mins = Math.min(480, (Date.now() - last) / 60000), n = Math.floor(incomePerMin() * mins * .5);
+  wallet.lastIncome = Date.now(); saveWallet();
+  if (n > 0) { earn(n); radio(`Welcome back! While you were away our buildings made ${n} credits. 🏭`); }
+}
+// ---- civilization styles
+const STYLES = {
+  robot:  { label: "🤖 Robot city", tpl: "disco", bonus: "income", text: "+20% credits from buildings" },
+  candy:  { label: "🍭 Candy world", tpl: "candy", bonus: "fame", text: "+20% fame" },
+  jungle: { label: "🌴 Jungle world", tpl: "earth", bonus: "jobs", text: "+20% credits from jobs" },
+  ice:    { label: "❄ Ice kingdom", tpl: "ice", bonus: "shield", text: "your ship heals twice as fast" },
+  lava:   { label: "🌋 Lava forge", tpl: "lava", bonus: "damage", text: "+15% weapon damage" },
+  toxic:  { label: "☣ Toxic swamp", tpl: "toxic", bonus: "pranks", text: "pranks cost 30% less" },
+};
+function renderStyles() {
+  const el = $("styleRow"); if (!el) return; el.innerHTML = "";
+  const locked = lvl() < FEATURE_LEVEL.style;
+  $("styleNote").textContent = locked ? `🔒 Unlocks at level ${FEATURE_LEVEL.style}.` : wallet.style ? `Now: ${STYLES[wallet.style].label} · ${STYLES[wallet.style].text}. Changing costs 💰200.` : "Pick the style of your civilization. The first one is free!";
+  for (const [k, s] of Object.entries(STYLES)) {
+    const b = document.createElement("button"); b.textContent = s.label; b.title = s.text; b.disabled = locked; b.classList.toggle("on", wallet.style === k);
+    b.addEventListener("click", () => {
+      if (needLevel(FEATURE_LEVEL.style, "Civilization style") || wallet.style === k) return;
+      const cost = wallet.style && !godOn("free") ? 200 : 0; if (wallet.credits < cost) return toast(`Changing style costs ${cost} credits.`);
+      wallet.credits -= cost; wallet.style = k; saveWallet(); earn(0);
+      const d = state.home.design, keep = { shape: d.shape, shapeAmt: d.shapeAmt, around: d.around, seed: d.seed };
+      Object.assign(d, designFrom(s.tpl, keep.seed), keep); home.refreshBase?.(); designChanged();
+      toast(`${s.label}! ${s.text}`, "", 3500); radio(`Our planet is a ${s.label.slice(2)} now. Looks amazing! ✨`); renderStyles(); renderGameInfo();
+    });
+    el.append(b);
+  }
+}
+// ---- locks shown in the shops and the build menu
+function renderLocks() {
+  document.querySelectorAll("#p-build [data-tool]").forEach((b) => {
+    const t = b.dataset.tool, info = BUILD_INFO[t]; if (!info) return;
+    b.dataset.label ||= b.textContent; const need = DECOR_LEVEL[t] || 1;
+    b.textContent = lvl() < need ? `🔒 ${b.dataset.label} · Lv ${need}` : info.cost ? `${b.dataset.label} · 💰${info.cost}` : b.dataset.label;
+    b.title = info.text;
+  });
+  renderStyles();
+}
+function renderGameInfo() { // planet panel: what your planet makes, your fame and rank
+  const el = $("gameInfo"); if (!el) return;
+  el.innerHTML = `<div class="stat"><span class="k">LEVEL</span><span>${lvl()} · ${fmt(wallet.xp)} XP</span></div>
+    <div class="stat"><span class="k">FAME</span><span>${fmt(fameOf())}${myRank ? ` · #${myRank} in the galaxy` : ""}</span></div>
+    <div class="stat"><span class="k">INCOME</span><span>💰 ${incomePerMin()} a minute from buildings</span></div>`;
+}
+// ---- saving your progress on the server (it lives in the database when the server has one)
+let walletSent = "";
+function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY) }; }
+function syncWallet() { if (!net.me || !gameStarted) return; const s = JSON.stringify(walletSnapshot()); if (s === walletSent) return; walletSent = s; net.send({ t: "wallet", wallet: JSON.parse(s) }); }
+setInterval(syncWallet, 4000);
+function restoreWallet(w) { // you joined from another browser, or this one was cleared: the server remembers you
+  if (!w || typeof w !== "object") return;
+  if ((w.xp | 0) < (wallet.xp | 0) && load(WALLETKEY)) return; // this browser is ahead
+  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now() });
+  saveWallet();
+  if (typeof w.tut === "number") { tut = { step: Math.min(TUT.length, w.tut), n: 0 }; store(TUTKEY, tut); }
+  if (w.missions && w.missions.day) { store(MISSIONKEY, w.missions); missions = null; }
+}
+// ---- Bolt's daily jobs (more kinds of missions, picked for your level)
+Object.assign(MISSION_TYPES, {
+  galaxy: { text: "Fly to the Prism Galaxy (mega boost!)", n: [1], ev: "galaxy", reward: 200, minLv: 2 },
+  raid:   { text: "Beat a pirate raid on your planet", n: [1], ev: "raid", reward: 150, minLv: 2 },
+  bounty: { text: "Catch {n} wanted pirate(s)", n: [1], ev: "bounty", reward: 150, minLv: 2 },
+  event:  { text: "Join {n} galaxy event(s)", n: [1, 2], ev: "event", reward: 80 },
+  build:  { text: "Build {n} new building(s)", n: [1, 2], ev: "build", reward: 60 },
+  arena:  { text: "Win {n} wave(s) in the Battle Arena", n: [1, 2], ev: "arenaWave", reward: 120, minLv: 2 },
+  team:   { text: "Fly next to another player for {n} seconds", n: [30, 60], ev: "team", reward: 100 },
+  teamBig:{ text: "Take down a giant ship with another player nearby", n: [1], ev: "teamBig", reward: 400, minLv: 3 },
+});
+for (const k of ["tp", "prank", "statue", "ducks"]) MISSION_TYPES[k].minLv = FEATURE_LEVEL.pvp; // pranks come with player battles
+const JOBDAY = "tinyplanets.jobday";
+function announceJobs() {
+  if (tut.step < TUT.length || load(JOBDAY) === today()) return; store(JOBDAY, today());
+  const list = M().list.filter((m) => !m.claimed).map((m) => MISSION_TYPES[m.id]?.text.replace("{n}", m.n)).filter(Boolean);
+  if (list.length) radio(`Good day, explorer! Today's jobs: ${list.join(" · ")}. Check 📋 Missions for the rewards.`);
+}
+// ---- pirate raids on your planet
+let raid = null, nextRaid = clock() + rnd(300, 480);
+function startRaid() {
+  const n = Math.min(5, 2 + Math.floor(lvl() / 2)), pirates = [];
+  for (let i = 0; i < n; i++) {
+    const p = new Npc(i === 0 && lvl() >= 4 ? "pirateBoss" : "pirate", { planet: home.data.name }); p.raid = true; p.hostile = true;
+    p.group.position.copy(home.group.position).add(new THREE.Vector3().randomDirection().multiplyScalar(home.R * 5 + 6)); npcs.push(p); pirates.push(p);
+  }
+  raid = { pirates, until: clock() + 120 }; sfx.lock(); renderEvents();
+  radio("🚨 Pirate raid! They're trying to steal our credits. Get back here and shoot them down!"); setNav(home);
+}
+function endRaid(won) {
+  for (const p of raid.pirates) removeNpc(p);
+  if (won) { const r = 100 + lvl() * 20; earn(r, "raid stopped"); addXp(60); missionEvent("raid"); wallet.stats.raids = (wallet.stats.raids || 0) + 1; saveWallet(); radio("We did it! The pirates are gone and our credits are safe. 💪"); }
+  else { const lost = Math.min(150, Math.floor(wallet.credits * .1)); wallet.credits -= lost; saveWallet(); earn(0); radio(`Oh no… the pirates got away with ${lost} credits. We'll be ready next time.`); }
+  raid = null; nextRaid = clock() + rnd(420, 720);
+}
+function removeNpc(n) { // dead ones stay a moment so their wreck can finish breaking apart
+  if (n.gone) return; n.gone = true; n.respawnAt = 1e9;
+  const go = () => { const i = npcs.indexOf(n); if (i < 0) return; scene.remove(n.group); n.tag.remove(); n.trail.dispose(); npcs.splice(i, 1); };
+  if (n.dead) setTimeout(go, 3500); else go();
+}
+// ---- wanted pirates (a bounty on each)
+const BOUNTY_NAMES = ["Captain Rustbeard", "Baron Von Zap", "Sneaky Pete", "Madame Laser", "The Toaster Bandit", "Big Gloop", "Admiral Crumbs", "Lady Nebula", "One-Eyed Zorx", "Doctor Kaboom"];
+const bounties = []; let nextBounty = 0;
+function spawnBounty() {
+  const spots = planets.filter((p) => p.alive && !p.data.far && p !== home), at = spots[(Math.random() * spots.length) | 0]; if (!at) return;
+  const name = BOUNTY_NAMES.filter((x) => !bounties.some((b) => b.wantedName === x))[(Math.random() * 6) | 0] || "Space Bandit";
+  const n = new Npc("pirateBoss", { planet: at.data.name }); n.wantedName = name; n.name = "🎯 WANTED · " + name; n.reward = 100 + lvl() * 30 + ((Math.random() * 4) | 0) * 25; npcs.push(n); bounties.push(n);
+}
+function bountyStep() {
+  for (const b of [...bounties]) if (b.dead) { // caught!
+    earn(b.reward, `bounty on ${b.wantedName}`); addXp(50); missionEvent("bounty"); wallet.stats.bounties = (wallet.stats.bounties || 0) + 1; saveWallet();
+    radio(`Got ${b.wantedName}! The bounty of ${b.reward} credits is ours. 🎯`); bounties.splice(bounties.indexOf(b), 1); removeNpc(b); nextBounty = clock() + 180; if (nav && nav.bounty === b) setNav(null);
+    if (ui.missions) renderMissions();
+  }
+  if (lvl() >= 2 && bounties.length < 3 && clock() > nextBounty) { spawnBounty(); nextBounty = clock() + 60; if (ui.missions) renderMissions(); }
+}
+function huntNav(b) { return { get group() { return b.group; }, R: .3, data: { name: b.wantedName }, quiet: true, bounty: b }; }
+// ---- galaxy events: meteor showers, festivals and trade fairs
+const gameEvents = []; let nextEvent = clock() + rnd(150, 240);
+const priceK = () => (gameEvents.some((e) => e.kind === "sale") ? .7 : 1);
+function startEvent() {
+  const spots = planets.filter((p) => p.alive && !p.data.far && p !== home), p = spots[(Math.random() * spots.length) | 0]; if (!p) return;
+  const kind = ["meteor", "festival", "sale"][(Math.random() * 3) | 0], e = { kind, p, until: clock() + (kind === "sale" ? 180 : 150), objs: [], joined: false };
+  if (kind === "meteor") {
+    const c = p.group.position.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(p.R * 6 + 8));
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(new THREE.OctahedronGeometry(.3, 0), new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 2.8, 3.4) }));
+      m.position.copy(c).add(new THREE.Vector3().randomDirection().multiplyScalar(rnd(1, 7))); m.scale.set(1, 1.7, 1);
+      const g = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(.6, 1.6, 2.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true })); g.scale.set(1.8, 1.1, 1); m.add(g);
+      scene.add(m); e.objs.push(m);
+    }
+    e.at = c; e.text = `☄ Crystal meteor shower near ${p.data.name}! Grab the crystals.`;
+  } else if (kind === "festival") { e.at = p.group.position; e.text = `🎉 Festival on ${p.data.name}! Visit for a gift.`; }
+  else e.text = "🛒 Trade fair! Weapons and trader deals are 30% off.";
+  gameEvents.push(e); radio(e.text); renderEvents();
+}
+function eventStep(dt, t) {
+  for (const e of [...gameEvents]) {
+    if (e.kind === "meteor") for (const m of [...e.objs]) {
+      m.rotation.y += dt * 2;
+      if (mode === "fly" && ship.position.distanceTo(m.position) < 1.6) { spark(m.position, .7, C(0x6fe3ff, 3)); sfx.place(); scene.remove(m); e.objs.splice(e.objs.indexOf(m), 1); earn(15, "meteor crystal"); if (!e.joined) { e.joined = true; missionEvent("event"); addXp(10); } }
+    }
+    if (e.kind === "festival") {
+      if (Math.random() < dt * 3) { const at = e.p.group.position.clone().addScaledVector(new THREE.Vector3().randomDirection(), e.p.R * rnd(1.4, 2.4)), col = C(SHIRTS[(Math.random() * SHIRTS.length) | 0].getHex(), 2.5); for (let i = 0; i < 50; i++) fire.spawn(at, new THREE.Vector3().randomDirection().multiplyScalar(rnd(.6, 1.3)), rnd(.7, 1.2), .05, col, col, 0, 1.5); }
+      if (!e.joined && mode === "fly" && ship.position.distanceTo(e.p.group.position) < e.p.R * 8) { e.joined = true; earn(80, `festival gift from ${e.p.data.name}`); addXp(20); missionEvent("event"); sfx.cheer(); }
+    }
+    if (e.kind === "sale" && !e.joined && (ui.hangar || ui.hail)) { e.joined = true; missionEvent("event"); }
+    if (clock() > e.until || (e.kind === "meteor" && !e.objs.length)) { for (const m of e.objs) scene.remove(m); gameEvents.splice(gameEvents.indexOf(e), 1); renderEvents(); }
+  }
+}
+// ---- the Battle Arena: fight anyone here at any level, or beat waves of arena bots
+const ARENA_C = [0, 240, 0], ARENA_R = 110;
+const arenaAt = () => V(ARENA_C).sub(WORLD_OFFSET);
+const inArena = (p) => p.distanceTo(arenaAt()) < ARENA_R;
+const arenaObj = (() => {
+  const g = new THREE.Group();
+  [[ARENA_R, 0, new THREE.Color(1, .4, .2)], [ARENA_R * .98, Math.PI / 2, new THREE.Color(.3, .8, 2)], [ARENA_R * .96, Math.PI / 4, new THREE.Color(1.6, .4, 1.4)]].forEach(([r, rot, col]) => {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(r, .9, 8, 120), new THREE.MeshBasicMaterial({ color: col.multiplyScalar(2), transparent: true, opacity: .55 })); m.rotation.y = rot; g.add(m);
+  });
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 128; const x = cv.getContext("2d");
+  x.font = "bold 70px Chakra Petch, sans-serif"; x.textAlign = "center"; x.fillStyle = "#ffb547"; x.shadowColor = "#ff5a3a"; x.shadowBlur = 20; x.fillText("⚔ BATTLE ARENA", 256, 88);
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false })); s.scale.set(80, 20, 1); s.position.y = ARENA_R + 20; g.add(s);
+  scene.add(g); return g;
+})();
+let arena = null, arenaMsgAt = 0;
+function arenaStep(dt) {
+  arenaObj.position.copy(arenaAt()); arenaObj.rotation.y += dt * .05;
+  const inside = mode === "fly" && inArena(ship.position);
+  if (inside && !arena) { arena = { wave: 0, bots: [], next: clock() + 4 }; radio("⚔ Welcome to the Battle Arena! Anyone can fight here, at any level. Arena bots are coming. Stay inside!"); renderEvents(); }
+  if (!arena) return;
+  if (!inside) { for (const b of arena.bots) removeNpc(b); if (arena.wave) radio(`You left the arena after ${arena.wave} wave(s). Come back anytime!`); arena = null; renderEvents(); return; }
+  for (const b of arena.bots) { b.hostile = true; if (b.group.position.distanceTo(arenaAt()) > ARENA_R * 1.1) b.group.position.lerp(arenaAt(), dt * .5); }
+  const alive = arena.bots.filter((b) => !b.dead);
+  if (arena.bots.length && !alive.length) { // wave cleared
+    const w = arena.wave; earn(40 * w, `arena wave ${w}`); addXp(25 * w); missionEvent("arenaWave"); wallet.stats.arena = (wallet.stats.arena || 0) + 1; saveWallet();
+    radio(pickLine([`Wave ${w} done! 💥`, `Wave ${w} cleared! You're a star, explorer.`, `Wave ${w} down! Next one is tougher…`]));
+    for (const b of arena.bots) removeNpc(b); arena.bots = []; arena.next = clock() + 5; renderEvents();
+  }
+  if (!arena.bots.length && clock() > arena.next) {
+    arena.wave++; const n = Math.min(8, 1 + arena.wave);
+    for (let i = 0; i < n; i++) {
+      const b = new Npc(arena.wave > 3 && i === 0 ? "pirateBoss" : "guard", {}); b.name = "Arena bot"; b.T = { ...b.T, outlaw: true }; b.hostile = true; b.maxHp = b.hp = b.hp * (1 + arena.wave * .15);
+      b.group.position.copy(arenaAt()).add(new THREE.Vector3().randomDirection().multiplyScalar(ARENA_R * .7)); npcs.push(b); arena.bots.push(b);
+    }
+    toast(`⚔ Arena wave ${arena.wave}: ${n} bots!`, "boom", 2000); renderEvents();
+  }
+  if (clock() > arenaMsgAt) { arenaMsgAt = clock() + .5; renderEvents(); }
+}
+// ---- player battles: from level 5, or anytime inside the arena
+let pvpWarnAt = 0;
+function pvpOk(r) { return (inArena(ship.position) && inArena(r.group.position)) || (lvl() >= FEATURE_LEVEL.pvp && (r.lv || 1) >= FEATURE_LEVEL.pvp); }
+function pvpBlocked() { if (clock() > pvpWarnAt) { pvpWarnAt = clock() + 6; toast(`🛡 Player battles unlock at level ${FEATURE_LEVEL.pvp} for both pilots. In the ⚔ Battle Arena you can fight anytime!`, "", 4000); } }
+function canHitPlanet(planet) { // other players' planets can be attacked, pranked and conquered from level 5
+  if (!net.me || planet.isHome || planet.data.npc || !planet.data.owner || lvl() >= FEATURE_LEVEL.pvp || godOn("oneshot")) return true;
+  if (clock() > pvpWarnAt) { pvpWarnAt = clock() + 6; toast(`🛡 Attacking other players' planets unlocks at level ${FEATURE_LEVEL.pvp}. Aliens' planets are fair game!`, "", 4000); }
+  return false;
+}
+// ---- friends: who is online, add friends, fly to them, invite them
+const onlineIds = new Set();
+function friendsSeen(ids) {
+  for (const id of ids) if (!onlineIds.has(id) && wallet.friends.some((f) => f.id === id) && gameStarted) radio(`Your friend ${wallet.friends.find((f) => f.id === id).name} is online! 👥`);
+  const changed = ids.length !== onlineIds.size || ids.some((id) => !onlineIds.has(id));
+  onlineIds.clear(); for (const id of ids) onlineIds.add(id);
+  if (changed && ui.friends) renderFriends();
+}
+function flyToPlayer(id) {
+  const r = remotes.get(id); const pl = net.players[id], p = pl && planetById(pl.planetId);
+  if (r) setNav({ get group() { return r.group; }, R: .3, data: { name: r.name }, quiet: true }); else if (p) setNav(p); else return toast("Can't find them right now.");
+  if (mode === "home") startFlying();
+}
+function renderFriends() {
+  const el = $("friendsList"); if (!el) return;
+  if (!net.me) { el.innerHTML = `<span class="small">Friends work in the live online game. Open the game from its web address to play with others.</span>`; return; }
+  const isF = (id) => wallet.friends.some((f) => f.id === id);
+  const online = [...onlineIds].filter((id) => id !== net.me.id).map((id) => ({ id, name: net.players[id]?.name || remotes.get(id)?.name || "Player", lv: remotes.get(id)?.lv }));
+  const offline = wallet.friends.filter((f) => !onlineIds.has(f.id));
+  const row = (p, on) => `<div class="prank-row"><span>${on ? "🟢" : "⚪"} <b>${esc(p.name)}</b>${p.lv ? ` · Lv ${p.lv}` : ""}${isF(p.id) ? " ★" : ""}</span><span class="row">${on ? `<button data-goto="${p.id}">Fly to</button><button data-inv="${p.id}">Invite</button>` : ""}<button data-fr="${p.id}" data-name="${esc(p.name)}">${isF(p.id) ? "Remove" : "Add friend"}</button></span></div>`;
+  el.innerHTML = `<span class="label">Online now · ${online.length}</span>${online.map((p) => row(p, true)).join("") || `<span class="small">Nobody else is online right now. Bolt's jobs keep you busy until they come!</span>`}`
+    + (offline.length ? `<span class="label">Friends offline</span>${offline.map((p) => row(p, false)).join("")}` : "");
+  el.querySelectorAll("[data-goto]").forEach((b) => b.addEventListener("click", () => flyToPlayer(b.dataset.goto)));
+  el.querySelectorAll("[data-inv]").forEach((b) => b.addEventListener("click", () => { net.send({ t: "wave", to: b.dataset.inv, kind: "invite" }); toast("📨 Invite sent!"); }));
+  el.querySelectorAll("[data-fr]").forEach((b) => b.addEventListener("click", () => {
+    const id = b.dataset.fr; if (isF(id)) wallet.friends = wallet.friends.filter((f) => f.id !== id); else { wallet.friends.push({ id, name: b.dataset.name }); toast(`★ ${esc(b.dataset.name)} is your friend now`); }
+    saveWallet(); renderFriends();
+  }));
+}
+// ---- team play: flying together counts for team jobs, and kills near a friend pay a bonus
+let teamT = 0;
+const playerNear = (p, d) => [...remotes.values()].some((r) => !r.dead && r.group.position.distanceTo(p) < d);
+function teamStep(dt) { if (mode !== "fly" || !playerNear(ship.position, 60)) return; if ((teamT += dt) >= 1) { teamT = 0; missionEvent("team"); } }
+// ---- Galaxy Top 100
+let myRank = 0, topList = [];
+function requestTop() { if (net.me) net.send({ t: "top" }); else { topList = offlineTop(); renderTop(); } }
+function offlineTop() {
+  const list = OTHERS.filter((o) => !o.npc).map((o, i) => ({ name: o.owner, planet: o.name, lv: 2 + (i % 5), fame: 400 + o.pop / 10 }));
+  list.push({ name: state.home.owner, planet: state.home.name, lv: lvl(), fame: fameOf(), me: true });
+  return list.sort((a, b) => b.fame - a.fame).slice(0, 100);
+}
+function renderTop() {
+  const el = $("topList"); if (!el) return;
+  myRank = topList.findIndex((r) => r.me) + 1;
+  $("topMe").textContent = myRank ? `You are #${myRank} with ${fmt(fameOf())} fame.` : `You have ${fmt(fameOf())} fame. Earn more to enter the Top 100!`;
+  el.innerHTML = topList.map((r, i) => `<div class="prank-row${r.me ? " me" : ""}"><span>${i < 3 ? ["🥇", "🥈", "🥉"][i] : "#" + (i + 1)} <b>${esc(r.name)}</b> · ${esc(r.planet || "")}</span><span>Lv ${r.lv} · ⭐ ${fmt(r.fame)}</span></div>`).join("") || `<span class="small">Nobody is ranked yet. Be the first!</span>`;
+  renderGameInfo();
+}
+// ---- the radio box also shows what's happening now: raids, events, arena, bounties
+function renderEvents() {
+  const el = $("radioEvents"); if (!el) return;
+  const items = [];
+  if (raid) items.push([`🏴‍☠️ Pirate raid! ${raid.pirates.filter((p) => !p.dead).length} left · ${fmtLeft((raid.until - clock()) * 1000)}`, () => setNav(home)]);
+  if (arena) items.push([arena.bots.length ? `⚔ Arena wave ${arena.wave} · ${arena.bots.filter((b) => !b.dead).length} bots left` : `⚔ Arena · next wave soon`, null]);
+  for (const e of gameEvents) items.push([`${e.text} · ${fmtLeft((e.until - clock()) * 1000)}`, e.at ? () => setNav(e.kind === "festival" ? e.p : navPoint("Meteor shower", e.at)) : null]);
+  el.innerHTML = ""; el.hidden = !items.length;
+  for (const [txt, go] of items) { const d = document.createElement("div"); d.className = "evline"; d.textContent = txt; if (go) { const b = document.createElement("button"); b.textContent = "Go"; b.addEventListener("click", () => { go(); if (mode === "home") startFlying(); }); d.append(b); } el.append(d); }
+  showRadio();
+}
+let evTick = 0;
+function gameStep(dt, t) {
+  if (!gameStarted) return;
+  incomeStep(dt); eventStep(dt, t); bountyStep(); arenaStep(dt); teamStep(dt);
+  if (raid) {
+    const left = raid.pirates.filter((p) => !p.dead);
+    for (const p of left) p.hostile = true;
+    if (!left.length) endRaid(true); else if (clock() > raid.until) endRaid(false);
+  } else if (tut.step >= TUT.length && lvl() >= 2 && clock() > nextRaid) { if (mode === "fly" && !arena) startRaid(); else nextRaid = clock() + 60; }
+  if (tut.step >= TUT.length && !gameEvents.length && clock() > nextEvent) { startEvent(); nextEvent = clock() + rnd(300, 480); }
+  if ((evTick += dt) > 1) { evTick = 0; if (raid || gameEvents.length) renderEvents(); }
+}
+function gameInit() {
+  wallet.lastIncome ||= Date.now(); awayIncome(); renderLocks(); renderGameInfo(); announceJobs(); requestTop();
+  if (lvl() >= 2) nextBounty = clock() + 20;
+}
+// ---- wanted pirates are listed on the mission board
+$("mapArena").addEventListener("click", () => { setNav(navPoint("⚔ Battle Arena", arenaAt())); setPanel("map", false); if (mode === "home") startFlying(); });
+function renderWanted() {
+  const el = $("wantedList"); if (!el) return;
+  if (lvl() < 2) { el.innerHTML = `<span class="small">🎯 Wanted pirates show up at level 2.</span>`; return; }
+  el.innerHTML = `<span class="label">🎯 Wanted pirates</span>` + (bounties.map((b, i) => `<div class="prank-row"><span><b>${esc(b.wantedName)}</b> · near ${esc(b.opts.planet || "?")}</span><span class="row">💰${b.reward} <button data-hunt="${i}">Hunt</button></span></div>`).join("") || `<span class="small">No wanted pirates right now.</span>`);
+  el.querySelectorAll("[data-hunt]").forEach((x) => x.addEventListener("click", () => { const b = bounties[+x.dataset.hunt]; if (!b) return; setNav(huntNav(b)); if (mode === "home") startFlying(); }));
+}
 
 // ================= conquering =================
 const ransomOf = (d) => Math.round(100 + (d.maxPop || 8000) / 80);
@@ -3549,7 +3913,8 @@ canvas.addEventListener("pointerup", (e) => {
     const n = home.mesh.worldToLocal(hit.point.clone()).normalize();
     const d = { type: tool, n: n.toArray().map((x) => +x.toFixed(4)), face: home.mesh.worldToLocal(camera.position.clone()).normalize().toArray().map((x) => +x.toFixed(4)) };
     if (tool === "sign" || tool === "alien") Object.assign(d, signFields()); else d.size = +$("signSize").value;
-    s.decor.push(d); home.rebuildDecor(); save();
+    if (!payBuild(tool)) return;
+    s.decor.push(d); home.rebuildDecor(); save(); renderGameInfo();
     spark(home.mesh.localToWorld(n.clone().multiplyScalar(home.radiusAt(n) + .05)), .5, C(0x7dff9b, 2)); sfx.place();
     if (ghost) ghost.visible = false;
     toast(`${DECOR[tool]} placed`, "", 1200); return;
@@ -3834,7 +4199,9 @@ class Npc {
     const r = this.info.radius; boom(this.group.position, this.T.big ? 1.2 * Math.sqrt(r) : .8); sfx.boom(this.T.big ? 2 : 1.2, this.group.position);
     this.wreck = { t: 0, dur: this.T.big ? 3.2 : rnd(1.6, 2.2), axis: new THREE.Vector3().randomDirection(), spin: this.T.big ? rnd(.3, .6) : rnd(3, 6), pop: .2,
       vel: this.vel.clone().multiplyScalar(.5).add(new THREE.Vector3().randomDirection().multiplyScalar(this.T.big ? 1 : 4)) };
-    earn(this.T.big ? 250 : 30, `${this.name} destroyed`);
+    const team = playerNear(this.group.position, 150);
+    earn(Math.round((this.T.big ? 250 : 30) * (team ? 1.5 : 1)), `${this.name} destroyed${team ? " · team bonus" : ""}`);
+    if (this.T.big && team) missionEvent("teamBig");
     addXp(this.T.big ? 60 : 10);
     missionEvent("kill"); if (this.role === "pirate") missionEvent("kill:pirate"); if (this.T.big) missionEvent("kill:big");
   }
@@ -3960,7 +4327,7 @@ class RemoteShip {
   }
   setCfg(cfg) { if (!cfg) return; const k = JSON.stringify(cfg); if (k === this.cfgKey) return; this.cfgKey = k; this.info = makeShipModel(cfg, this.model); }
   setState(s) {
-    this.name = s.name; this.hp = s.hp ?? 100; this.seen = clock();
+    this.name = s.name; this.hp = s.hp ?? 100; this.lv = s.lv || 1; this.seen = clock();
     this.tp.fromArray(s.p).sub(WORLD_OFFSET); this.tq.fromArray(s.q);
     if (!this.placed) { this.group.position.copy(this.tp); this.group.quaternion.copy(this.tq); this.placed = true; }
   }
@@ -3972,14 +4339,14 @@ class RemoteShip {
     this.trail.update(this.group.position, dt, moving);
     animateShipParts(this.info, t);
   }
-  damage(amount) { net.send({ t: "pvp", target: this.pid, dmg: amount * .4 }); hitFx(this, amount); lastHitNpc = this; lastHitAt = clock(); } // players take less than aliens, so duels last
+  damage(amount) { if (!pvpOk(this)) return pvpBlocked(); net.send({ t: "pvp", target: this.pid, dmg: amount * .4 }); hitFx(this, amount); lastHitNpc = this; lastHitAt = clock(); } // players take less than aliens, so duels last
   remove() { scene.remove(this.group); this.tag.remove(); this.trail.dispose(); remotes.delete(this.pid); }
 }
 const fighters = () => (remotes.size ? npcs.concat([...remotes.values()]) : npcs);
 function remoteStep(dt, t) { for (const r of [...remotes.values()]) { if (clock() - r.seen > 6) r.remove(); else r.update(dt, t); } }
 setInterval(() => { // tell the server where you are, 10 times a second
   if (!net.me || !gameStarted) return;
-  net.send({ t: "pos", p: ship.position.clone().add(WORLD_OFFSET).toArray().map(r3), q: ship.quaternion.toArray().map(r3), f: mode === "fly", hp: Math.round(shipHp) });
+  net.send({ t: "pos", p: ship.position.clone().add(WORLD_OFFSET).toArray().map(r3), q: ship.quaternion.toArray().map(r3), f: mode === "fly", hp: Math.round(shipHp), lv: lvl() });
 }, 100);
 function remoteShot(m) { // draw other players' lasers
   const from = V(m.from).sub(WORLD_OFFSET), to = V(m.to).sub(WORLD_OFFSET), dir = to.clone().sub(from); const L = dir.length(); if (!L || from.distanceTo(camera.position) > 150) return;
@@ -4015,6 +4382,7 @@ function setupNet() {
   });
   net.on("chat", (m) => { state.chat.push(m.msg); if (state.chat.length > 120) state.chat.shift(); renderChat(); if (!ui.chat && m.msg.who !== net.me?.name) toast(`💬 ${esc(m.msg.who)}: ${esc(m.msg.text)}`, "", 3500); });
   net.on("ships", (m) => {
+    friendsSeen(m.ships.map((s) => s.pid));
     net.count = m.ships.length + (m.ships.some((s) => s.pid === net.me?.id) ? 0 : 1); setPill();
     for (const s of m.ships) {
       if (!net.me || s.pid === net.me.id) continue;
@@ -4024,7 +4392,7 @@ function setupNet() {
   });
   net.on("shipCfg", (m) => { (net.players[m.pid] ||= { id: m.pid }).ship = m.ship; remotes.get(m.pid)?.setCfg(m.ship); });
   net.on("left", (m) => remotes.get(m.pid)?.remove());
-  net.on("hurt", (m) => { if (mode !== "fly") return; hurtPlayer(m.dmg, [...remotes.values()].find((r) => r.name === m.by)); if (shipHp <= 0) toast(`💥 ${esc(m.by)} destroyed your ship!`, "boom", 3000); });
+  net.on("hurt", (m) => { if (mode !== "fly") return; const by = [...remotes.values()].find((r) => r.name === m.by); if (by && !pvpOk(by)) return; hurtPlayer(m.dmg, by); if (shipHp <= 0) toast(`💥 ${esc(m.by)} destroyed your ship!`, "boom", 3000); });
   net.on("shot", (m) => remoteShot(m));
   net.on("godNo", (m) => toast(m.why === "nokey" ? "⚡ God mode is off on this server. In Render → Environment, add ADMIN_KEY with a secret word, then try again." : "⚡ Wrong god key.", "boom", 6000));
   net.on("god", () => { net.god = true; renderPanels(); renderGod(); toast("⚡ God mode is yours. Find it under ⚙."); if (ui.godMode.shield) net.send({ t: "godShield", on: true }); });
@@ -4036,7 +4404,8 @@ function setupNet() {
   net.on("conquer", (m) => { const p = planetById(m.id); if (p) setConquered(p, m.by, m.pop); });
   net.on("paid", (m) => earn(m.amount, `${m.from} paid you a ransom`));
   net.on("newHome", () => location.reload());
-  net.on("wave", (m) => toast(m.kind === "duel" ? `⚔ ${esc(m.from)} challenges you to a duel!` : m.kind === "msg" ? `💬 ${esc(m.from)}: ${esc(m.text)}` : `👋 ${esc(m.from)} waves at you!`, m.kind === "duel" ? "boom" : "", 5000));
+  net.on("top", (m) => { topList = (m.list || []).map((r) => ({ ...r, me: r.id === net.me?.id })); renderTop(); });
+  net.on("wave", (m) => m.kind === "invite" ? (radio(`📨 ${m.from} invites you to fly together! I pointed your nav arrow at them.`), toast(`📨 ${esc(m.from)} invites you! Open 👥 Friends to fly to them.`, "", 5000), m.fromId && setNav({ get group() { return remotes.get(m.fromId)?.group || ship; }, R: .3, data: { name: m.from }, quiet: true })) : toast(m.kind === "duel" ? `⚔ ${esc(m.from)} challenges you to a duel!` : m.kind === "msg" ? `💬 ${esc(m.from)}: ${esc(m.text)}` : `👋 ${esc(m.from)} waves at you!`, m.kind === "duel" ? "boom" : "", 5000));
   net.on("unprank", (m) => { const p = planetById(m.id); if (!p) return; p.data.pranks = (p.data.pranks || []).filter((k) => k.id !== m.pid); p.rebuildPranks(); if (ui.pranks) renderPranks(); });
   wakeServer().then(() => net.connect());
 }
@@ -4095,6 +4464,7 @@ function enterWorld(you, world) {
   lastSent = { name: JSON.stringify(mineP.name), design: JSON.stringify(mineP.design), decor: JSON.stringify(mineP.decor), sculpt: JSON.stringify(mineP.sculpt ?? null), paint: JSON.stringify(mineP.paint ?? null), ship: JSON.stringify(state.ship) };
   $("p-join").hidden = true;
   $("resetAsk").textContent = "Reset my planet";
+  restoreWallet(you.wallet);
   startGame();
   toast(`🌍 Welcome, ${esc(you.name)}! This galaxy is live: other players can visit you.`, "", 5000);
 }
@@ -4695,6 +5065,7 @@ function fireWeapon(kind) {
   }
 }
 function impact(b, planet, point) {
+  if (!canHitPlanet(planet)) { spark(point, .5, C(0x8fd0ff, 2)); return; }
   const n = planet.mesh.worldToLocal(point.clone()).normalize();
   const surf = point.clone();
   const nrm = surf.clone().sub(planet.group.position).normalize();
@@ -4785,7 +5156,7 @@ function boltStep(dt) {
 function flyStep(dt) {
   const k = (c) => keys.has(c);
   if (playerDead) return;
-  if (clock() - lastPlayerHit > 4) shipHp = Math.min(100, shipHp + 5 * dt); // shields recharge
+  if (clock() - lastPlayerHit > 4) shipHp = Math.min(100, shipHp + 5 * dt * (wallet.style === "ice" ? 2 : 1)); // shields recharge
   $("hudHp").textContent = Math.ceil(shipHp); $("hudHp").style.color = shipHp < 35 ? "var(--danger)" : ""; $("hudHpBar").style.width = shipHp + "%"; $("hudHpBar").style.filter = shipHp < 35 && Math.sin(clock() * 12) > 0 ? "brightness(1.8)" : "";
   const boost = k("ShiftLeft") || k("ShiftRight"), size = state.ship.size, thrust = k("KeyW");
   // turning: the mouse turns the ship exactly as far as you move it, eased over a few frames so it feels smooth
@@ -4970,12 +5341,13 @@ $("resetAsk").addEventListener("click", () => { $("resetConfirm").hidden = false
 $("resetNo").addEventListener("click", () => { $("resetConfirm").hidden = true; $("resetAskRow").hidden = false; });
 $("resetAll").addEventListener("click", () => { setView("planet"); $("resetConfirm").hidden = false; $("resetAskRow").hidden = true; });
 function resetPlayerStuff() { // money, weapons, missions, and everyone's anger at you
-  Object.assign(wallet, { credits: 150, owned: [], xp: 0 }); saveWallet();
+  Object.assign(wallet, { credits: 150, owned: [], xp: 0, style: null, stats: {}, lastIncome: Date.now() }); saveWallet();
+  if (raid) raid = null; bounties.length = 0; gameEvents.forEach((e) => e.objs.forEach((m) => scene.remove(m))); gameEvents.length = 0; arena = null; renderEvents(); try { localStorage.removeItem(JOBDAY); } catch {}
   try { localStorage.removeItem(MISSIONKEY); localStorage.removeItem(SEENKEY); } catch {}
   tut = { step: 0, n: 0 }; store(TUTKEY, tut); radioQ = []; renderLevel(); tutEnter();
   lastPlayerAttack = -99; lastHitNpc = null; shipHp = 100;
   state.ship = { ...structuredClone(PRESETS.fighter), name: state.ship.name }; delete state.ship.label; buildShip();
-  spawnNpcs(); renderHangar(); renderMissions();
+  spawnNpcs(); renderHangar(); renderMissions(); renderLocks(); renderGameInfo();
 }
 $("reset").addEventListener("click", () => {
   $("resetConfirm").hidden = true; $("resetAskRow").hidden = false;
@@ -5035,7 +5407,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t);
+  boltStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t);
   if (mode !== "fly" || !nav) $("navTag").hidden = true;
   if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
@@ -5063,10 +5435,10 @@ function startGame() {
   if (gameStarted) return; gameStarted = true; document.body.classList.remove("joining");
   buildWorld(); buildShip(); spawnNpcs(); renderDesign(); renderHangar(); renderMail(); renderChat(); renderInfo(); renderPanels(); applyQuality();
   { const dist = viewDistance(); camera.position.set(0, dist * .22, dist); }
-  buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter();
+  buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter(); gameInit();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
-window.__tp = { get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
+window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
 </script>
 </body>
 </html>
