@@ -2360,10 +2360,10 @@ function makeShipModel(c, root) {
 }
 // ---- ships made in Blender (art/<name>), loaded from models/*.glb; your body / trim / glow colors paint them
 const BLENDER_SHIPS = {
-  warden: { file: "spiral_warden.glb", fallback: "battleship", tint: { Plate: "body", Red: "accent", Neon: "glow" }, lights: ["SensorTip"],
+  warden: { file: "spiral_warden.glb", fallback: "battleship", tint: { Plate: "body", Red: "accent", Neon: "glow" }, lights: ["SensorTip", "NavL", "NavR", "PodLLight", "PodRLight"],
     flames: [[-.04, .018, -.3, .75], [.04, .018, -.3, .75], [-.04, -.022, -.3, .75], [.04, -.022, -.3, .75], [-.185, -.025, -.25, .9], [.185, -.025, -.25, .9]],
     muzzles: [[-.185, -.012, .3], [.185, -.012, .3], [0, 0, .32], [-.185, -.038, .3], [.185, -.038, .3]], len: .62, radius: .3 },
-  raptor: { file: "spiral_raptor.glb", fallback: "interceptor", tint: { Armor: "body", Red: "accent", Neon: "glow" }, lights: [],
+  raptor: { file: "spiral_raptor.glb", fallback: "interceptor", tint: { Armor: "body", Red: "accent", Neon: "glow" }, lights: ["NavL", "NavR", "TailL", "TailR"],
     flames: [[-.055, -.004, -.31, .95], [.055, -.004, -.31, .95], [0, .02, -.295, .55]],
     muzzles: [[-.19, -.03, .19], [.19, -.03, .19]], len: .65, radius: .34 },
 };

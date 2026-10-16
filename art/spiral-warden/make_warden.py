@@ -4,6 +4,8 @@
 # three.js Y-up with the nose toward +Z, which is what the game's ships use.
 import bpy, bmesh, math, sys, os
 from mathutils import Vector
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common"))
+import shipkit
 
 ARGS = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = ARGS[0] if ARGS else os.getcwd()
@@ -104,6 +106,7 @@ def plate(name, outline, thick, m, z=0.0, tilt=0.0, bevel=0.003, loc=(0, 0, 0)):
 
 
 def cyl(name, m, loc, r, depth, axis="Y", verts=24, scale=(1, 1, 1)):
+    verts = 32 if verts in (8, 12) else verts
     rot = {"Y": (math.pi / 2, 0, 0), "Z": (0, 0, 0), "X": (0, math.pi / 2, 0)}[axis]
     bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth, location=loc, rotation=rot)
     o = bpy.context.active_object
@@ -115,6 +118,7 @@ def cyl(name, m, loc, r, depth, axis="Y", verts=24, scale=(1, 1, 1)):
 
 
 def cone(name, m, loc, r1, r2, depth, verts=24):
+    verts = 32 if verts in (8, 12) else verts
     bpy.ops.mesh.primitive_cone_add(vertices=verts, radius1=r1, radius2=r2, depth=depth,
                                     location=loc, rotation=(math.pi / 2, 0, 0))
     o = bpy.context.active_object
@@ -226,67 +230,16 @@ for ex in (-0.04, 0.04):
         cyl("Nozzle", PLATE, (ex, 0.29, ez), 0.021, 0.02, verts=8)
         cyl("Flame", CORE, (ex, 0.301, ez), 0.017, 0.003, verts=16)
         cyl("FlameRing", NEON, (ex, 0.30, ez), 0.0215, 0.002, verts=8)
+# ---- small details: blinking corner lights and radio antennas on the bridge
+shipkit.nav_light(root, "NavL", (0.163, 0.15, 0.056), "#ff2a2a")   # Blender +X is the pilot's left
+shipkit.nav_light(root, "NavR", (-0.163, 0.15, 0.056), "#2aff6a")
+for s, tag in ((1, "L"), (-1, "R")):
+    shipkit.nav_light(root, "Pod" + tag + "Light", (s * 0.185, -0.205, 0.008), "#ffffff", r=0.0045)
+shipkit.antenna(root, BLACK, (-0.03, 0.22, 0.112), 0.03)
+shipkit.finish(root)
 # ---- export
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.export_scene.gltf(filepath=os.path.join(OUT, "spiral_warden.glb"), export_format="GLB",
-                          export_apply=True, export_yup=True)
+shipkit.export(os.path.join(OUT, "spiral_warden.glb"))
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT, "spiral_warden.blend"))
-if not RENDER:
-    sys.exit(0)
-
-# ---- hero renders with bloom
-world = bpy.data.worlds.new("Space")
-world.use_nodes = True
-bg = world.node_tree.nodes["Background"]
-bg.inputs[0].default_value = (0.02, 0.018, 0.05, 1)
-bg.inputs[1].default_value = 1.0
-scene.world = world
-for name, loc, energy, col in [("Key", (0.7, -0.3, 0.9), 110, (1, 0.93, 0.85)),
-                               ("Rim", (-0.7, 0.6, 0.4), 90, (1.0, 0.3, 0.2)),
-                               ("Top", (0, 0.1, 1.0), 60, (0.9, 0.9, 1)),
-                               ("Cool", (0.3, -0.9, -0.4), 40, (0.4, 0.7, 1))]:
-    L = bpy.data.lights.new(name, "POINT")
-    L.energy = energy
-    L.color = col
-    lo = bpy.data.objects.new(name, L)
-    lo.location = loc
-    scene.collection.objects.link(lo)
-cam = bpy.data.objects.new("Cam", bpy.data.cameras.new("Cam"))
-cam.data.lens = 40
-scene.collection.objects.link(cam)
-scene.camera = cam
-scene.render.engine = "BLENDER_EEVEE_NEXT"
-scene.eevee.taa_render_samples = 32
-scene.render.resolution_x, scene.render.resolution_y = 1100, 720
-scene.view_settings.view_transform = "AgX"
-scene.view_settings.look = "AgX - Punchy"
-
-scene.use_nodes = True
-nt = scene.node_tree
-for n in list(nt.nodes):
-    nt.nodes.remove(n)
-rl = nt.nodes.new("CompositorNodeRLayers")
-glare = nt.nodes.new("CompositorNodeGlare")
-glare.glare_type = "FOG_GLOW"
-glare.quality = "HIGH"
-glare.size = 7
-try:
-    glare.threshold = 1.0
-except Exception:
-    pass
-comp = nt.nodes.new("CompositorNodeComposite")
-nt.links.new(rl.outputs["Image"], glare.inputs["Image"])
-nt.links.new(glare.outputs["Image"], comp.inputs["Image"])
-
-
-def shoot(fname, pos, target=(0, 0.0, 0)):
-    cam.location = pos
-    d = Vector(target) - cam.location
-    cam.rotation_euler = d.to_track_quat("-Z", "Y").to_euler()
-    scene.render.filepath = os.path.join(OUT, fname)
-    bpy.ops.render.render(write_still=True)
-
-
-shoot("warden_front.png", (0.75, -0.85, 0.5), (0, 0.02, -0.01))
-shoot("warden_back.png", (-0.7, 0.95, 0.45), (0, 0.02, -0.01))
+if RENDER:
+    shipkit.render(OUT, [("warden_front.png", (0.75, -0.85, 0.5), (0, 0.02, -0.01)), ("warden_back.png", (-0.7, 0.95, 0.45), (0, 0.02, -0.01))])
 print("DONE", OUT)
