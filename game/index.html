@@ -553,6 +553,7 @@ import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { Lensflare, LensflareElement } from "three/addons/objects/Lensflare.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeVertices, mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
@@ -1012,8 +1013,29 @@ controls.enableDamping = true; controls.enablePan = false; controls.minDistance 
 const pmrem = new THREE.PMREMGenerator(renderer);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), .14, .2, 1.7); composer.addPass(bloomPass);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), .2, .35, 1.5); // a soft glow around bright lights, engines and lasers composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
+// movie look: rich colors (cool shadows, warm highlights), a soft dark frame, a whisper of film grain, and color fringes at the edges when you go super fast
+const gradePass = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, time: { value: 0 }, speed: { value: 0 }, grain: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float time, speed, grain; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main(){
+      vec2 d = vUv - .5; float r2 = dot(d, d);
+      vec2 ca = d * r2 * .02 * speed; // chromatic fringes only at high speed
+      vec3 c = vec3(texture2D(tDiffuse, vUv + ca).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - ca).b);
+      float l = dot(c, vec3(.299, .587, .114));
+      c = mix(c, c * vec3(.92, .98, 1.1), (1. - smoothstep(.0, .45, l)) * .5);   // cool, deep shadows
+      c = mix(c, c * vec3(1.06, 1.01, .93), smoothstep(.55, 1., l) * .45);      // warm highlights
+      c = mix(vec3(l), c, 1.12);                                               // a little more color
+      c = (c - .5) * 1.04 + .5;                                                // a little more contrast
+      c *= 1. - smoothstep(.18, .75, r2 * 1.6) * .42;                          // soft dark frame
+      c += (h(vUv * 1000. + fract(time) * 37.) - .5) * .022 * grain;           // fine film grain
+      gl_FragColor = vec4(max(c, 0.), 1.);
+    }`,
+});
+composer.addPass(gradePass);
 
 // one strong sun and almost no other light, like real space: planets get a bright day side and a dark night side
 scene.add(new THREE.AmbientLight(0x5864a8, 0.14));
@@ -2801,7 +2823,7 @@ $("homeBtn").addEventListener("click", goMain);
 $("s-sens").value = ui.sens || .0026;
 $("s-sens").addEventListener("input", (e) => { ui.sens = +e.target.value; saveUi(); });
 $("gfxBtn").addEventListener("click", () => { ui.low = !ui.low; saveUi(); applyQuality(); renderPanels(); toast(ui.low ? "Graphics set to fast (for slower computers)" : "Graphics set to beautiful"); });
-function applyQuality() { bloomPass.enabled = !ui.low; resize(); }
+function applyQuality() { bloomPass.enabled = gradePass.enabled = !ui.low; resize(); }
 $("soundBtn").addEventListener("click", () => { ui.muted = !ui.muted; sfx.setMuted(ui.muted); saveUi(); renderPanels(); });
 
 function toast(html, cls = "", ms = 3000) {
@@ -6080,6 +6102,7 @@ function frame() {
   if (ui.map && (mapTick += realDt) > .3) { mapTick = 0; renderMap(); }
   const off = new THREE.Vector3();
   if (shake > .001) { off.randomDirection().multiplyScalar(shake * .5); camera.position.add(off); shake *= Math.exp(-realDt * 3); }
+  gradePass.uniforms.time.value = t; gradePass.uniforms.speed.value = mode === "fly" ? Math.min(1.5, boostFx.k * .6 + megaK * 1.2) : 0; gradePass.uniforms.grain.value = ui.low ? 0 : 1;
   composer.render();
   camera.position.sub(off);
 }
