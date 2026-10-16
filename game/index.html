@@ -750,7 +750,9 @@ const sfx = (() => {
     en.connect(el); saw.connect(sawG).connect(el); el.connect(shaper(2)).connect(eg); out(eg, 1, .15);
     const rn = noise(t, LONG, 1), rb = filt("bandpass", 700, 700, t, 1, .9), rg = gain(); rg.gain.value = 0;
     rn.connect(rb).connect(shaper(5)).connect(rg); out(rg, 1, .25);
-    eng = { eg, el, saw, rg, rb };
+    const sn = noise(t, LONG, .8), sb = filt("bandpass", 300, 300, t, 1, .6), sg = gain(); sg.gain.value = 0; // rushing air: louder and higher the faster you go
+    sn.connect(sb).connect(sg); out(sg, 1, .2);
+    eng = { eg, el, saw, rg, rb, sg, sb };
   }
   return {
     unlock() { const c = ctx(); if (!c) return; if (c.state === "suspended") c.resume().then(startLoops); else startLoops(); },
@@ -762,6 +764,15 @@ const sfx = (() => {
       eng.saw.frequency.setTargetAtTime(44 + thrust * 18 + (boost ? 34 : 0), t, .3);
       eng.rg.gain.setTargetAtTime(boost ? .06 : 0, t, boost ? .08 : .35);
       eng.rb.frequency.setTargetAtTime(boost ? 1500 : 700, t, .4);
+    },
+    rush(spd, mk) {
+      if (!eng) return; const t = ac.currentTime, k = Math.min(1, spd / 150);
+      eng.sg.gain.setTargetAtTime(mode === "fly" ? k * .05 + mk * .05 : 0, t, .3); eng.sb.frequency.setTargetAtTime(250 + k * 1400 + mk * 1800, t, .3);
+    },
+    flyBy(v) { // a quick whoosh, like a car passing by
+      if (!ok() || v < .05) return; const t = ac.currentTime;
+      const n = noise(t, .9, 1.2), b = filt("bandpass", 600, 2600, t, .35, 1.4), g = gain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .3); g.gain.exponentialRampToValueAtTime(.0001, t + .85);
+      b.frequency.exponentialRampToValueAtTime(500, t + .85); n.connect(b).connect(g); out(g, .25 * v, .4);
     },
     boostKick() { // an aggressive afterburner punch
       if (!ok()) return; const t = ac.currentTime;
@@ -4092,31 +4103,54 @@ function enterWorld(you, world) {
 const keys = new Set(), vel = new THREE.Vector3(), head = new THREE.Quaternion();
 const turn = new THREE.Vector3(), mouseTurn = new THREE.Vector2(), pendingTurn = new THREE.Vector2(), lean = new THREE.Vector2(), leanQ = new THREE.Quaternion(), camPos = new THREE.Vector3();
 let throttle = 0, lockTarget = null, lockCand = null, lockT = 0;
+const camFx = { spd: null, acc: 0, push: 0, kick: 0, up: new THREE.Vector3(0, 1, 0), look: new THREE.Vector2() };
+function flyBys(spd) { // a whoosh when a ship zooms past you
+  const now = clock();
+  for (const n of npcs) {
+    if (n.dead || !n.group) continue; const p = n.group.position, d = p.distanceTo(ship.position), R = ship.userData.len * 6 + (n.T && n.T.big ? 30 : 0);
+    if (d > R || now < (n.whooshAt || 0)) continue;
+    const rel = vel.clone().sub(n.vel || new THREE.Vector3()).length(); if (rel < 18) continue;
+    n.whooshAt = now + 3; sfx.flyBy(Math.min(1, rel / 80) * (1 - d / R));
+  }
+}
 // specks of space dust drifting past make speed easy to feel
-const dust = (() => { // space dust: tiny specks that stretch into streaks as you speed up, so you feel yourself moving
-  const N = 420, at = new Float32Array(N * 3), pos = new Float32Array(N * 6), col = new Float32Array(N * 6), g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  const pts = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: .7, depthWrite: false }));
-  pts.frustumCulled = false; pts.visible = false; scene.add(pts);
-  return { pts, at, pos, col, N, ready: false };
+const dust = (() => { // space dust: soft glowing specks that stretch into light streaks as you speed up, so you feel yourself moving
+  const N = 900, at = new Float32Array(N * 3), head = new Float32Array(N * 3), tail = new Float32Array(N * 3), tint = new Float32Array(N * 3);
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3)); g.setIndex([0, 1, 2, 1, 3, 2]);
+  const hA = new THREE.InstancedBufferAttribute(head, 3), tA = new THREE.InstancedBufferAttribute(tail, 3), cA = new THREE.InstancedBufferAttribute(tint, 3);
+  g.setAttribute("aHead", hA); g.setAttribute("aTail", tA); g.setAttribute("aTint", cA); g.instanceCount = N;
+  const PAL = [[.75, .85, 1], [1, .85, .65], [.7, 1, .95], [1, .7, .95], [.9, .9, 1]]; // mostly blue-white, a few warm and colorful specks
+  for (let i = 0; i < N; i++) { const c = PAL[i % 7 < 3 ? 0 : i % 7 < 4 ? 4 : 1 + (i % 4)]; tint.set(c, i * 3); }
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { px: { value: .002 }, bright: { value: .5 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `attribute vec3 aHead, aTail, aTint; uniform float px; varying vec2 vP; varying vec3 vC; varying float vL;
+      void main(){ vec3 h=(modelViewMatrix*vec4(aHead,1.)).xyz, t=(modelViewMatrix*vec4(aTail,1.)).xyz; vec3 d=t-h; float L=length(d);
+        float w=max(.004,-h.z)*px; vec3 dir=L>1e-5?d/L:vec3(0.,1.,0.); vec3 s=normalize(cross(dir,normalize(h)+vec3(1e-4)));
+        vec3 p=h+dir*(position.y*(L+w*2.)-w)+s*position.x*w; vP=position.xy; vL=L/(L+w*2.); float fade=smoothstep(26.,14.,length(h));
+        vC=aTint*fade; gl_Position=projectionMatrix*vec4(p,1.); }`,
+    fragmentShader: `uniform float bright; varying vec2 vP; varying vec3 vC; varying float vL;
+      void main(){ float core=exp(-vP.x*vP.x*4.); float along=pow(1.-vP.y,1.4+vL*1.5); gl_FragColor=vec4(vC*core*along*bright,1.); }`,
+  });
+  const pts = new THREE.Mesh(g, mat); pts.frustumCulled = false; pts.visible = false; scene.add(pts);
+  return { pts, at, head, tail, hA, tA, mat, N, ready: false };
 })();
 function spaceDust(dt, spd) {
   const R = 26, c = ship.position, v = new THREE.Vector3(), ahead = vel.clone().normalize();
   dust.pts.visible = mode === "fly";
-  const len = Math.min(3.5 + megaK * 16, .02 + spd * .022), bright = Math.min(1, .25 + spd / 50);
+  const len = Math.min(4 + megaK * 18, spd * .03), sv = Math.max(1, spd);
+  dust.mat.uniforms.bright.value = Math.min(1, .75 + spd / 60) * (ui.low ? .8 : 1);
+  dust.mat.uniforms.px.value = 2.6 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / innerHeight; // about 2.6 pixels wide
   for (let i = 0; i < dust.N; i++) {
     const j = i * 3, dx = dust.at[j] - c.x, dy = dust.at[j + 1] - c.y, dz = dust.at[j + 2] - c.z;
     if (!dust.ready || dx * dx + dy * dy + dz * dz > R * R) { // new specks appear mostly in front of you
       v.randomDirection(); if (dust.ready && spd > 5 && v.dot(ahead) < 0) v.reflect(ahead);
       v.multiplyScalar(R * (dust.ready ? rnd(.85, 1) : Math.cbrt(Math.random()))); dust.at.set([c.x + v.x, c.y + v.y, c.z + v.z], j);
     }
-    const k = i * 6;
-    dust.pos[k] = dust.at[j]; dust.pos[k + 1] = dust.at[j + 1]; dust.pos[k + 2] = dust.at[j + 2];
-    dust.pos[k + 3] = dust.at[j] - vel.x * len / Math.max(1, spd); dust.pos[k + 4] = dust.at[j + 1] - vel.y * len / Math.max(1, spd); dust.pos[k + 5] = dust.at[j + 2] - vel.z * len / Math.max(1, spd);
-    const b = bright * (.5 + (i % 7) / 12);
-    dust.col[k] = .6 * b; dust.col[k + 1] = .7 * b; dust.col[k + 2] = b; dust.col[k + 3] = 0; dust.col[k + 4] = 0; dust.col[k + 5] = 0;
+    dust.head[j] = dust.at[j]; dust.head[j + 1] = dust.at[j + 1]; dust.head[j + 2] = dust.at[j + 2];
+    dust.tail[j] = dust.at[j] - vel.x * len / sv; dust.tail[j + 1] = dust.at[j + 1] - vel.y * len / sv; dust.tail[j + 2] = dust.at[j + 2] - vel.z * len / sv;
   }
-  dust.ready = true; dust.pts.geometry.attributes.position.needsUpdate = true; dust.pts.geometry.attributes.color.needsUpdate = true;
+  dust.ready = true; dust.hA.needsUpdate = dust.tA.needsUpdate = true;
   // thin trails from the wing tips, like a jet cutting through air
   if (spd > 12 && !ui.low) {
     const r = ship.userData.radius * .95, back = FWD.clone().applyQuaternion(head).multiplyScalar(-ship.userData.len * .3), side = new THREE.Vector3(1, 0, 0).applyQuaternion(head);
@@ -4192,6 +4226,50 @@ function updateBoostFx(dt, on) {
     const len = L * (.8 + b.k * 1.4);
     m.scale.set(R * .08, len, 1); m.position.set(m.userData.sgn * R * .95, 0, -L * .3 - len / 2); m.rotation.set(Math.PI / 2, 0, 0);
   }
+}
+// engine glow: a soft hot halo at every nozzle, and a light that paints the hull with engine color
+const engineGlow = (() => {
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64; const x = cv.getContext("2d"), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)"); gr.addColorStop(.25, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)"); x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+  const mat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true });
+  const light = new THREE.PointLight(0xffffff, 0, 1, 2); scene.add(light);
+  return { mat, light, sprites: [] };
+})();
+function updateEngineGlow(power, boosting) {
+  const E = engineGlow, flames = mode === "fly" && !playerDead ? ship.userData.flames : [], w = new THREE.Vector3();
+  while (E.sprites.length < flames.length) { const sp = new THREE.Sprite(E.mat); sp.renderOrder = 2; scene.add(sp); E.sprites.push(sp); }
+  E.sprites.forEach((sp, i) => (sp.visible = i < flames.length && flames[i].visible));
+  const R = ship.userData.radius, col = boosting ? ship.userData.boostCol : ship.userData.flameCol;
+  E.mat.color.copy(col).multiplyScalar(.12 + power * .22);
+  flames.forEach((f, i) => { f.getWorldPosition(w); const sp = E.sprites[i], fs = f.userData.fs || 1; sp.position.copy(w); sp.scale.setScalar(R * fs * (.16 + power * .18) * (.9 + Math.random() * .2)); });
+  E.light.visible = flames.length > 0 && power > .02;
+  if (E.light.visible) { // just behind the engines, lighting the back of the ship
+    E.light.position.copy(ship.position).addScaledVector(FWD.clone().applyQuaternion(head), -ship.userData.len * .75);
+    E.light.color.copy(col).multiplyScalar(.6); E.light.distance = ship.userData.len * 3; E.light.intensity = power * ship.userData.len * ship.userData.len * 1.5;
+  }
+}
+// warp tunnel: streaks of light rushing past the edges of the screen while you boost
+const warpTunnel = (() => {
+  const geo = new THREE.CylinderGeometry(2.2, 2.2, 70, 48, 1, true); geo.rotateX(Math.PI / 2); geo.translate(0, 0, -30);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, power: { value: 0 }, color: { value: new THREE.Color(.6, .85, 1) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
+    vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader: `uniform float time, power; uniform vec3 color; varying vec2 vUv;
+      float h(float n){ return fract(sin(n*127.1)*43758.5); }
+      void main(){ float lane=floor(vUv.x*140.), r=h(lane); if(r>.55) discard;
+        float sp=.6+r*1.4, y=fract(vUv.y*(1.5+r*2.)+time*sp+r*7.); float streak=smoothstep(0.,.08,y)*smoothstep(.6,.1,y);
+        float edge=1.-abs(fract(vUv.x*140.)-.5)*2.; float ends=smoothstep(0.,.25,vUv.y)*smoothstep(1.,.6,vUv.y);
+        vec3 c=mix(color,vec3(1.),.4+.4*h(lane+3.)); gl_FragColor=vec4(c*streak*edge*edge*ends*power*.9,1.); }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = 3; scene.add(mesh);
+  return { mesh, mat };
+})();
+function updateWarpTunnel(boostK) {
+  const T = warpTunnel, power = Math.min(1.6, boostK * .45 + megaK * 1.2);
+  T.mesh.visible = mode === "fly" && power > .02 && !ui.low; if (!T.mesh.visible) return;
+  T.mesh.position.copy(camera.position); T.mesh.quaternion.copy(camera.quaternion);
+  T.mat.uniforms.time.value = clock() * (1.2 + megaK * 2); T.mat.uniforms.power.value = power;
+  T.mat.uniforms.color.value.copy(megaK > .3 ? new THREE.Color(.75, .6, 1) : ship.userData.boostCol).lerp(new THREE.Color(1, 1, 1), .3);
 }
 // ---- galaxies, minimap and danger arrows
 const GALAXIES = [ // the main crowded galaxy, and far ones for explorers
@@ -4428,7 +4506,7 @@ function startFlying() { // only switches to flight; the ship waits until you pr
   camAnim = null; viewShift.set(0, 0); camera.clearViewOffset();
   mode = "fly"; document.body.classList.add("flying");
   controls.enabled = false; tip.hidden = true;
-  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
+  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
   vel.set(0, 0, 0);
   aimNdc.set(0, 0); $("crosshair").style.left = "50%"; $("crosshair").style.top = "50%";
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
@@ -4724,9 +4802,10 @@ function flyStep(dt) {
   lean.lerp(new THREE.Vector2((mx + turn.y * dt) / Math.max(dt, .001), (my + turn.x * dt) / Math.max(dt, .001)), Math.min(1, dt * 4));
   const lx = THREE.MathUtils.clamp(lean.x, -2, 2), ly = THREE.MathUtils.clamp(lean.y, -2, 2), tt = clock();
   const idle = Math.max(0, 1 - vel.length() / 6);
-  leanQ.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(ly * .1 + Math.sin(tt * .9) * .03 * idle, lx * .12, lx * .35 + Math.sin(tt * .7) * .05 * idle, "YXZ")), Math.min(1, dt * 6));
+  leanQ.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(ly * .1 + Math.sin(tt * .9) * .03 * idle, lx * .12, lx * .5 + Math.sin(tt * .7) * .05 * idle, "YXZ")), Math.min(1, dt * 6));
   model.quaternion.copy(leanQ);
-  model.position.set(0, Math.sin(tt * 1.3) * .012 * size * idle, 0);
+  const buzz = throttle * .004 * size * (boost ? 2.2 : 1); // the engines make the hull hum a tiny bit
+  model.position.set((Math.random() - .5) * buzz, Math.sin(tt * 1.3) * .012 * size * idle + (Math.random() - .5) * buzz, 0);
   if (roll) { // barrel roll: a full spin and a quick sidestep
     roll.t += dt; const k2 = Math.min(1, roll.t / roll.dur);
     model.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(FWD, roll.dir * Math.PI * 2 * ss(0, 1, k2)));
@@ -4761,15 +4840,20 @@ function flyStep(dt) {
     if (d.length() < min) { d.setLength(min); ship.position.copy(p.group.position).add(d); const nrm = d.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); }
   }
   // camera: follows on a soft spring, pulls back and widens with speed
-  const L = ship.userData.len, spd = vel.length(), dist = .12 + L * 1.5 + Math.min(1, spd / 150) * L * 1.2; // close enough that your ship looks big
+  const L = ship.userData.len, spd = vel.length();
+  const acc = (spd - (camFx.spd ?? spd)) / Math.max(dt, .001); camFx.spd = spd; camFx.acc += (acc - camFx.acc) * Math.min(1, dt * 3); // speeding up pulls the camera back, braking lets it catch up
+  camFx.push += (THREE.MathUtils.clamp(camFx.acc / 160, -.25, .55) - camFx.push) * Math.min(1, dt * 4);
+  const dist = .12 + L * 1.5 + Math.min(1, spd / 150) * L * 1.2 + camFx.push * L; // close enough that your ship looks big
   const offWant = fwd.clone().multiplyScalar(-dist).addScaledVector(headUp, dist * .22);
   camPos.lerp(offWant, 1 - Math.exp(-dt * 12)); if (camPos.length() > dist * 3) camPos.copy(offWant); // camPos = offset from the ship
   camera.position.copy(ship.position).add(camPos);
-  const boostShake = throttle > .7 ? (throttle - .7) * .012 * L : 0; // the hull rumbles at full boost
-  if (boostShake) camera.position.add(new THREE.Vector3(Math.sin(clock() * 61) * boostShake, Math.sin(clock() * 47) * boostShake, 0).applyQuaternion(head));
-  camera.up.copy(headUp);
-  camera.lookAt(ship.position.clone().addScaledVector(fwd, dist * 3.2).addScaledVector(headUp, dist * .2));
-  const fovWant = 58 + Math.min(14, spd / 10) + megaK * 28; if (Math.abs(fovWant - camera.fov) > .01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
+  const boostShake = (throttle > .7 ? (throttle - .7) * .03 * L : 0) + megaK * .03 * L; // the hull rumbles at full boost
+  if (boostShake) camera.position.add(new THREE.Vector3((Math.sin(clock() * 61) + Math.sin(clock() * 23) * .6) * boostShake, (Math.sin(clock() * 47) + Math.sin(clock() * 31) * .6) * boostShake, 0).applyQuaternion(head));
+  camFx.up.lerp(headUp, 1 - Math.exp(-dt * 4)).normalize(); camera.up.copy(camFx.up); // the camera rolls a moment after the ship, so rolls feel heavy
+  camFx.look.lerp(new THREE.Vector2(THREE.MathUtils.clamp(lean.x, -2, 2), THREE.MathUtils.clamp(lean.y, -2, 2)), 1 - Math.exp(-dt * 3)); // look a bit into the turn
+  camera.lookAt(ship.position.clone().addScaledVector(fwd, dist * 3.2).addScaledVector(headUp, dist * .2).addScaledVector(right, -camFx.look.x * dist * .35).addScaledVector(headUp, -camFx.look.y * dist * .25));
+  camFx.kick *= Math.exp(-dt * 2.2);
+  const fovWant = 58 + Math.min(14, spd / 10) + megaK * 28 + camFx.kick; if (Math.abs(fovWant - camera.fov) > .01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
   camera.updateMatrixWorld();
   spaceDust(dt, spd);
   updateAim(); // after the camera moves, so shots go exactly under the cursor
@@ -4779,9 +4863,9 @@ function flyStep(dt) {
   const moving = throttle > .05 || spd > 2;
   for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, .5 + throttle * (boost ? 2.8 : 1.6) + Math.random() * .3, boost && thrust);
   const boosting = boost && thrust;
-  updateBoostFx(dt, boosting && throttle > .6); updateEngineTrail(dt, spd, boostFx.k);
-  if (boosting && !wasBoost) sfx.boostKick();
-  wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting);
+  updateBoostFx(dt, boosting && throttle > .6); updateEngineTrail(dt, spd, boostFx.k); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
+  if (boosting && !wasBoost) { sfx.boostKick(); camFx.kick = 9; shake = Math.max(shake, .05 * L); }
+  wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting); sfx.rush(spd, megaK); flyBys(spd);
   // HUD
   $("hudSpeed").textContent = fmt(vel.length() * 10);
   if (nav) {
@@ -4936,7 +5020,7 @@ function frame() {
     p.decor.traverse((o) => { if (o.userData.blink !== undefined) o.visible = Math.sin(t * 3 + o.userData.blink) > -.3; });
     p.animateAround(dt, t);
   }
-  if (mode !== "fly") { boostFx.g.visible = false; engineTrail.mesh.visible = false; engineTrail.pts.length = 0; }
+  if (mode !== "fly") { boostFx.g.visible = false; engineTrail.mesh.visible = false; engineTrail.pts.length = 0; warpTunnel.mesh.visible = false; updateEngineGlow(0, false); }
   if (mode === "fly") flyStep(dt);
   else if (mode === "warp") warpStep(realDt);
   else {
