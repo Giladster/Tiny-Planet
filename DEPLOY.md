@@ -59,3 +59,9 @@ The game server address is set in `game/index.html` (`GAME_SERVER`).
 1. Render → your service → Environment → add `ADMIN_KEY` with a secret word only you know.
 2. Open the game once with `?god=YOUR_SECRET` at the end of the link.
 3. Find ⚡ God mode under the ⚙ menu. Other players never see it.
+
+## Bolt's AI answers (Ask Bolt)
+Players can type or talk to Bolt (💬 on the radio, or Talk → 🤖 Ask Bolt). To make Bolt answer with AI:
+1. Get an API key at console.anthropic.com.
+2. Render → your service → Environment → add `ANTHROPIC_API_KEY` with that key.
+Without it, Bolt still answers common questions from built-in tips. Each player can ask up to 60 questions an hour.

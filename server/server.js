@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createStore } from "./store.js";
+import { askBolt, boltReady } from "./bolt.js";
 
 const PORT = process.env.PORT || 3000;
 const GAME_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "game");
@@ -120,7 +121,7 @@ function handle(ws, c, m) {
       if (p && world.planets[p.planetId]) { c.player = p; p.lastSeen = Date.now(); markPlayer(p); }
       if (process.env.ADMIN_KEY && typeof m.god === "string" && m.god === process.env.ADMIN_KEY) { c.god = true; send(ws, { t: "god" }); } // only the game owner knows this key
       if (c.player && c.player.pending) { send(ws, { t: "paid", amount: c.player.pending, from: "Ransoms" }); c.player.pending = 0; markPlayer(c.player); }
-      send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId) });
+      send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId), boltAi: boltReady });
       break;
     }
     case "seed": { // the very first visitor fills the empty galaxy with the starting planets
@@ -211,6 +212,11 @@ function handle(ws, c, m) {
       if (!me || !m.wallet || typeof m.wallet !== "object") return;
       if (JSON.stringify(m.wallet).length > 30000) return;
       me.wallet = m.wallet; markPlayer(me); break;
+    }
+    case "askBolt": { // the player asks their robot a question
+      if (!me) return;
+      askBolt(me.id, text(m.q, 400), text(m.status || "", 600), m.history).then((r) => send(ws, { t: "boltSays", id: m.id, text: r.text, reason: r.reason }));
+      break;
     }
     case "top": { // the Galaxy Top 100, ranked by fame
       const list = Object.values(world.players).filter((p) => p.wallet && p.wallet.fame > 0).sort((a, b) => b.wallet.fame - a.wallet.fame).slice(0, 100)

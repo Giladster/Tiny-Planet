@@ -10,3 +10,5 @@ services:
     envVars:
       - key: DATABASE_URL # paste your free database link here later (Neon or another Postgres)
         sync: false
+      - key: ANTHROPIC_API_KEY # lets Bolt answer players' questions with AI (from console.anthropic.com)
+        sync: false

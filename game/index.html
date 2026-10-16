@@ -142,6 +142,16 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 @keyframes boltTalk { to { transform: scale(1.12); background: rgba(111,227,255,.35); } }
 #radioText { min-height: 18px; }
 #radioEvents { display: grid; gap: 4px; }
+#radioAsk { padding: 2px 8px; font-size: 11px; }
+#radio .rhead #radioMin { margin-left: 4px; }
+#p-bolt { width: 320px; }
+#boltLog { display: grid; gap: 6px; max-height: 44vh; overflow-y: auto; font-size: 13px; line-height: 1.4; }
+#boltLog .bmsg { padding: 7px 10px; border-radius: 10px; max-width: 88%; }
+#boltLog .bmsg.me { justify-self: end; background: rgba(111,227,255,.14); border: 1px solid rgba(111,227,255,.3); }
+#boltLog .bmsg.bolt { justify-self: start; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.3); }
+#boltLog .thinking { opacity: .7; font-style: italic; }
+#boltQ { flex: 1; min-width: 0; }
+#boltMic.rec { background: #ff3b52; color: #fff; animation: lockpulse .5s ease-in-out infinite alternate; }
 #radioEvents .evline { display: flex; align-items: center; gap: 6px; justify-content: space-between; font-size: 12px; padding: 5px 8px; border-radius: 8px; background: rgba(255,90,110,.1); border: 1px solid rgba(255,90,110,.35); }
 #radioEvents .evline button { padding: 2px 10px; font-size: 11px; }
 #lvPop { position: fixed; z-index: 20; left: 50%; top: 22%; transform: translateX(-50%); width: min(340px, calc(100% - 32px)); padding: 16px 18px; text-align: center; border: 1px solid rgba(255,214,90,.6); box-shadow: 0 0 40px rgba(255,200,80,.35); }
@@ -420,6 +430,11 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div id="wantedList" class="group"></div>
   <span class="small" id="missionReset"></span>
 </section>
+<section id="p-bolt" class="hud panel side" data-panel="bolt" hidden>
+  <div class="ph"><span class="label">🤖 Ask Bolt</span><span class="row"><button id="boltVoice" aria-label="Bolt voice on or off">🔊</button><button class="x" data-close="bolt" aria-label="Close Ask Bolt">×</button></span></div>
+  <div id="boltLog"></div>
+  <div class="row"><input id="boltQ" type="text" maxlength="300" placeholder="Ask Bolt anything…" aria-label="Question for Bolt"><button id="boltMic" aria-label="Talk to Bolt">🎙</button><button class="go" id="boltSend">Ask</button></div>
+</section>
 <section id="p-friends" class="hud panel side" data-panel="friends" hidden>
   <div class="ph"><span class="label">👥 Friends</span><button class="x" data-close="friends" aria-label="Close friends">×</button></div>
   <div id="friendsList"></div>
@@ -473,7 +488,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <div id="lockBox" hidden><span id="lockText">LOCKING…</span></div>
 <div id="tip" class="hud" hidden></div>
 <section id="radio" class="hud" hidden aria-live="polite">
-  <div class="rhead"><span class="bolt">🤖</span><b>BOLT</b><span class="small">· ship radio</span><span id="radioLv" class="small"></span><button id="radioMin" aria-label="Shrink radio">–</button></div>
+  <div class="rhead"><span class="bolt">🤖</span><b>BOLT</b><span class="small">· ship radio</span><span id="radioLv" class="small"></span><button id="radioAsk" aria-label="Ask Bolt" title="Ask Bolt">💬</button><button id="radioMin" aria-label="Shrink radio">–</button></div>
   <div id="radioText"></div>
   <div id="radioGoal" hidden></div>
   <div id="radioEvents" hidden></div>
@@ -507,7 +522,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <button data-open="missions">📋 Missions</button>
   <button data-open="top">🏆 Top 100</button>
   <div class="dd"><button class="ddb">💬 Talk ▾</button><div class="ddm" hidden>
-    <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button>
+    <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button><button data-open="bolt">🤖 Ask Bolt</button>
   </div></div>
   <div class="dd"><button class="ddb" aria-label="Settings">⚙ ▾</button><div class="ddm" hidden>
     <button data-open="help" data-fly>Flight controls</button><button id="soundBtn">Sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
@@ -2546,7 +2561,7 @@ function setView(v) {
   if (mode !== "home") return;
   view = v;
   for (const [vv, panel] of Object.entries(VIEWS)) ui[panel] = vv === v;
-  if (v !== "main") ui.mail = ui.chat = ui.map = ui.help = ui.prank = ui.pranks = ui.god = ui.hail = ui.missions = ui.friends = ui.top = false; // only one menu open at a time
+  if (v !== "main") ui.mail = ui.chat = ui.map = ui.help = ui.prank = ui.pranks = ui.god = ui.hail = ui.missions = ui.friends = ui.top = ui.bolt = false; // only one menu open at a time
   $("renameRow").hidden = true;
   setTool(null); frameCamera(); renderPanels(); saveUi();
 }
@@ -2558,11 +2573,12 @@ function goMain() { // Esc and the Home button: straight back to the normal view
 }
 function setPanel(name, open) { // small panels on top of any view: map, mail, chat, flight controls
   if (open) { // opening a menu closes the one that was open
-    for (const k of ["mail", "chat", "map", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top"]) if (k !== name) ui[k] = false;
+    for (const k of ["mail", "chat", "map", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top", "bolt"]) if (k !== name) ui[k] = false;
     if (mode === "home" && view !== "main") setView("main");
   }
   ui[name] = open;
   if (name === "friends" && open) renderFriends();
+  if (name === "bolt" && open) { renderBolt(); setTimeout(() => $("boltQ").focus(), 50); }
   if (name === "top" && open) requestTop();
   if (name === "map" && open) { mapGal = shipInPrism() ? "prism" : "main"; renderMap(); renderMapCard(); }
   renderPanels(); saveUi();
@@ -2572,8 +2588,8 @@ function renderPanels() {
   document.querySelectorAll("[data-panel]").forEach((el) => {
     const name = el.dataset.panel;
     let show = !!ui[name];
-    if (fly) show = show && ["map", "mail", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top"].includes(name);
-    else show = show && !["help", "prank", "hail"].includes(name) && !(view !== "main" && ["mail", "chat", "pranks", "god", "missions", "friends", "top"].includes(name));
+    if (fly) show = show && ["map", "mail", "help", "prank", "pranks", "god", "hail", "missions", "friends", "top", "bolt"].includes(name);
+    else show = show && !["help", "prank", "hail"].includes(name) && !(view !== "main" && ["mail", "chat", "pranks", "god", "missions", "friends", "top", "bolt"].includes(name));
     el.hidden = !show;
   });
   document.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", !fly && view === b.dataset.view));
@@ -3761,6 +3777,86 @@ function renderWanted() {
   el.querySelectorAll("[data-hunt]").forEach((x) => x.addEventListener("click", () => { const b = bounties[+x.dataset.hunt]; if (!b) return; setNav(huntNav(b)); if (mode === "home") startFlying(); }));
 }
 
+// ---- Ask Bolt: type or talk to your robot, and Bolt answers (with AI when the server has it)
+const boltLog = [];
+let boltAsking = 0, boltRec = null;
+ui.boltVoice ??= true;
+function boltStatus() {
+  const d = state.home.decor.filter((x) => BUILD_INFO[x.type]).length;
+  return [`level ${lvl()}${ui.freePlay ? " (free play: everything unlocked and free)" : ""}`, `${fmt(wallet.xp)} XP`, `${Math.floor(wallet.credits)} credits`,
+    `tutorial ${tut.step < TUT.length ? `step ${tut.step + 1} of ${TUT.length}: ${TUT[tut.step]?.goal?.(tutS) || ""}` : "done"}`,
+    `guns on ship: ${(state.ship.guns || []).join(", ") || "basic lasers"}`, `${d} buildings, ${incomePerMin()} credits a minute`, `fame ${fameOf()}${myRank ? `, rank #${myRank}` : ""}`,
+    `style: ${wallet.style || "none"}`, mode === "fly" ? (shipInPrism() ? "flying in the Prism Galaxy" : "flying in the main galaxy") : "at home",
+    raid ? "a pirate raid is happening on their planet" : "", gameEvents.length ? "events now: " + gameEvents.map((e) => e.kind).join(", ") : "", arena ? `in the arena, wave ${arena.wave}` : "",
+    net.me ? `${onlineIds.size} players online` : "playing offline"].filter(Boolean).join("; ");
+}
+const BOLT_FAQ = [
+  [/mega|prism|other galaxy|far galaxy|new galaxy/, "Hold Shift boost for 10 seconds and a mega boost kicks in! About 10 seconds of mega boost gets you to the Prism Galaxy. Open 🗺 Map, pick Prism Galaxy and press Navigate. 🌌"],
+  [/money|credit|rich|earn|coins?/, "Credits come from daily jobs in 📋 Missions, shooting pirates, stopping raids, wanted pirates, events and the arena. Buildings like a Tower or Space base earn credits every minute too! 💰"],
+  [/level|xp|unlock/, `You're level ${lvl()}. Missions and fights give XP, and every level unlocks new guns, ships or buildings. Player battles open at level 5. ⭐`],
+  [/gun|weapon|laser|missile|shoot/, "Buy guns in the 🚀 Hangar. Fire with click or L, F for missiles, B for bombs. Better guns unlock as you level up. 🔫"],
+  [/build|house|tower|castle|decor/, "Go to 🪐 My planet → Decorate. Buildings cost credits, but Towers, Space bases and Castles earn credits every minute, and they all add fame. 🏗"],
+  [/mission|job|quest|what (do|should) i do/, "Open 📋 Missions for today's jobs. Finish one and press Claim for the reward! 📋"],
+  [/friend|invite|multiplayer|together|other players?/, "Open 💬 Talk → 👥 Friends to see who's online, add friends, fly to them or invite them. Shooting ships near a friend gives a team bonus! 👥"],
+  [/arena|battle|pvp|fight players?/, "The ⚔ Battle Arena is a glowing ring above the galaxy center: 🗺 Map → Arena. Anyone can fight there. Outside the arena, player battles need level 5. ⚔"],
+  [/pirate|raid|wanted|bounty/, "From level 2 pirates raid our planet. Shoot them all within 2 minutes! Wanted pirates are listed in 📋 Missions with a Hunt button. 🏴‍☠️"],
+  [/top|rank|fame|famous/, "Fame comes from XP, buildings, raids, arena waves and bounties. Check 🏆 Top 100 to see your rank! 🏆"],
+  [/style|robot city|candy|jungle|ice|lava|toxic/, "At level 3, pick a civilization style in 🪐 My planet → Planet info. Each style gives a bonus, like Lava forge for +15% damage. 🎨"],
+  [/fly|control|key|steer|move/, "Press Fly, click to lock the mouse, and steer with it. W goes forward, S brakes, Shift boosts, Space up, Ctrl down. ⚙ → Flight controls shows all keys. 🚀"],
+  [/heal|health|hp|repair/, "Your ship heals by itself after a few seconds without getting hit. Stay out of fire for a bit! 🛠"],
+  [/prank|toilet|duck|statue/, "Pick a prank in 😈 Prank, aim at a planet and press P. Pranking other players' planets needs level 5. 😈"],
+];
+function boltLocal(q) {
+  const s = q.toLowerCase();
+  for (const [re, a] of BOLT_FAQ) if (re.test(s)) return a;
+  return "I'm not sure about that one, partner. Try asking about credits, levels, missions, the Prism Galaxy, the arena or friends! 🤖";
+}
+function renderBolt() {
+  const el = $("boltLog"); if (!el) return;
+  el.innerHTML = boltLog.map((m) => `<div class="bmsg ${m.who}">${m.who === "bolt" ? "🤖 " : ""}${esc(m.text)}</div>`).join("") + (boltAsking ? `<div class="bmsg bolt thinking">🤖 Bolt is thinking…</div>` : "")
+    || `<span class="small">Ask me anything about the game! Type, or press 🎙 and talk.</span>`;
+  el.scrollTop = el.scrollHeight;
+  $("boltVoice").textContent = ui.boltVoice ? "🔊" : "🔇"; $("boltVoice").title = ui.boltVoice ? "Bolt talks out loud" : "Bolt is quiet";
+}
+function boltSpeak(text) {
+  if (!ui.boltVoice || ui.muted || !window.speechSynthesis) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "")); u.pitch = 1.6; u.rate = 1.05;
+  const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang)); if (v) u.voice = v;
+  speechSynthesis.speak(u);
+}
+function boltAnswer(text) {
+  boltAsking = 0; boltLog.push({ who: "bolt", text }); if (boltLog.length > 40) boltLog.shift();
+  renderBolt(); boltSpeak(text);
+  if (!ui.bolt) { radio(text); }
+}
+function askBolt(q) {
+  q = q.trim().slice(0, 300); if (!q || boltAsking) return;
+  const history = boltLog.slice(-8);
+  boltLog.push({ who: "me", text: q }); $("boltQ").value = "";
+  if (!net.me || !net.boltAi) { boltAsking = 1; renderBolt(); setTimeout(() => boltAnswer(boltLocal(q)), 500); return; }
+  boltAsking = clock(); renderBolt();
+  net.send({ t: "askBolt", q, status: boltStatus(), history });
+  const at = boltAsking; setTimeout(() => { if (boltAsking === at) boltAnswer("Static on the radio… I couldn't hear you. Try again! 📻"); }, 25000);
+}
+function boltListen() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return toast("🎙 Talking to Bolt needs Chrome, Edge or Safari. You can still type!", "", 4000);
+  if (boltRec) { boltRec.stop(); return; }
+  speechSynthesis?.cancel();
+  const r = new SR(); boltRec = r; r.lang = navigator.language || "en-US"; r.interimResults = true; r.maxAlternatives = 1;
+  let said = "";
+  r.onresult = (e) => { said = [...e.results].map((x) => x[0].transcript).join(" "); $("boltQ").value = said; };
+  r.onerror = (e) => { if (e.error === "not-allowed") toast("🎙 Allow the microphone in your browser to talk to Bolt.", "", 4000); };
+  r.onend = () => { boltRec = null; $("boltMic").classList.remove("rec"); $("boltMic").textContent = "🎙"; if (said.trim()) askBolt(said); };
+  r.start(); $("boltMic").classList.add("rec"); $("boltMic").textContent = "⏹";
+}
+$("boltSend").addEventListener("click", () => askBolt($("boltQ").value));
+$("boltQ").addEventListener("keydown", (e) => { if (e.key === "Enter") askBolt(e.target.value); });
+$("boltMic").addEventListener("click", boltListen);
+$("boltVoice").addEventListener("click", () => { ui.boltVoice = !ui.boltVoice; saveUi(); if (!ui.boltVoice) speechSynthesis?.cancel(); renderBolt(); });
+$("radioAsk").addEventListener("click", () => setPanel("bolt", !ui.bolt));
+
 // ================= conquering =================
 const ransomOf = (d) => Math.round(100 + (d.maxPop || 8000) / 80);
 const myId = () => (net.me ? net.me.id : "me");
@@ -4427,6 +4523,7 @@ function remoteShot(m) { // draw other players' lasers
 function setupNet() {
   net.on("welcome", (m) => {
     if (gameStarted) { if (!m.you) toast("The server restarted and lost the world (it has no database yet). Reload the page to join again.", "boom", 8000); return; }
+    net.boltAi = !!m.boltAi;
     if (m.needsSeed) net.send({ t: "seed", planets: defaults().others });
     if (m.you) enterWorld(m.you, m.world); else showJoin(m.world);
   });
@@ -4473,6 +4570,7 @@ function setupNet() {
   net.on("conquer", (m) => { const p = planetById(m.id); if (p) setConquered(p, m.by, m.pop); });
   net.on("paid", (m) => earn(m.amount, `${m.from} paid you a ransom`));
   net.on("newHome", () => location.reload());
+  net.on("boltSays", (m) => { if (!boltAsking) return; if (m.text) boltAnswer(m.text); else { net.boltAi = false; boltAnswer(boltLocal(boltLog[boltLog.length - 1]?.text || "")); } });
   net.on("top", (m) => { topList = (m.list || []).map((r) => ({ ...r, me: r.id === net.me?.id })); renderTop(); });
   net.on("wave", (m) => m.kind === "invite" ? (radio(`📨 ${m.from} invites you to fly together! I pointed your nav arrow at them.`), toast(`📨 ${esc(m.from)} invites you! Open 👥 Friends to fly to them.`, "", 5000), m.fromId && setNav({ get group() { return remotes.get(m.fromId)?.group || ship; }, R: .3, data: { name: m.from }, quiet: true })) : toast(m.kind === "duel" ? `⚔ ${esc(m.from)} challenges you to a duel!` : m.kind === "msg" ? `💬 ${esc(m.from)}: ${esc(m.text)}` : `👋 ${esc(m.from)} waves at you!`, m.kind === "duel" ? "boom" : "", 5000));
   net.on("unprank", (m) => { const p = planetById(m.id); if (!p) return; p.data.pranks = (p.data.pranks || []).filter((k) => k.id !== m.pid); p.rebuildPranks(); if (ui.pranks) renderPranks(); });
