@@ -4604,7 +4604,7 @@ function flyStep(dt) {
     if (d.length() < min) { d.setLength(min); ship.position.copy(p.group.position).add(d); const nrm = d.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); }
   }
   // camera: follows on a soft spring, pulls back and widens with speed
-  const L = ship.userData.len, spd = vel.length(), dist = .25 + L * 2.4 + Math.min(1, spd / 150) * L * 1.8; // close enough that your ship looks big
+  const L = ship.userData.len, spd = vel.length(), dist = .12 + L * 1.5 + Math.min(1, spd / 150) * L * 1.2; // close enough that your ship looks big
   const offWant = fwd.clone().multiplyScalar(-dist).addScaledVector(headUp, dist * .22);
   camPos.lerp(offWant, 1 - Math.exp(-dt * 12)); if (camPos.length() > dist * 3) camPos.copy(offWant); // camPos = offset from the ship
   camera.position.copy(ship.position).add(camPos);
