@@ -510,7 +510,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
     <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button>
   </div></div>
   <div class="dd"><button class="ddb" aria-label="Settings">⚙ ▾</button><div class="ddm" hidden>
-    <button data-open="help" data-fly>Flight controls</button><button id="soundBtn">Sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button>
+    <button data-open="help" data-fly>Flight controls</button><button id="soundBtn">Sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
   </div></div>
   <span id="netPill" hidden>● connecting…</span>
   <span class="sep" data-home></span>
@@ -3360,7 +3360,20 @@ const TIPS = [
 ];
 
 // ================= game logic: saved progress, level rewards, buildings, jobs, raids, bounties, events, friends, arena, Top 100, styles =================
-function lvl() { return levelOf(wallet.xp); }
+function lvl() { return ui.freePlay ? Math.max(10, levelOf(wallet.xp)) : levelOf(wallet.xp); }
+// ---- two ways to try the game: start over as a brand-new player, or free play (everything unlocked and free)
+function renderPlayModes() { $("freePlayBtn").textContent = ui.freePlay ? "🎮 Free play: ON · turn off" : "🎮 Free play"; $("freePlayBtn").classList.toggle("on", !!ui.freePlay); }
+$("newPlayerBtn").addEventListener("click", () => {
+  if (!confirm("Start over as a brand-new player? Your money, level, ship and planet go back to the start, and Bolt's tutorial begins again.")) return;
+  ui.freePlay = false; saveUi(); renderPlayModes(); $("reset").click(); setView("main"); renderPanels();
+  toast("🆕 You're a brand-new explorer. Follow Bolt on the radio!", "", 4000);
+});
+$("freePlayBtn").addEventListener("click", () => {
+  ui.freePlay = !ui.freePlay; saveUi(); renderPlayModes();
+  if (ui.freePlay && tut.step < TUT.length) { tut.step = TUT.length; store(TUTKEY, tut); tutClear(); setNav(null); tutEnter(); }
+  renderLocks(); renderGameInfo(); renderShop(); renderHangar(); if (ui.missions) renderMissions();
+  toast(ui.freePlay ? "🎮 Free play: every ship, gun, building and battle is unlocked, and everything is free." : "🎮 Free play is off. Back to the normal game.", "", 4500);
+});
 wallet.stats ||= {}; wallet.friends ||= [];
 // ---- level rewards: every level unlocks something real
 var GUN_LEVEL = { twin: 1, gatling: 3, heavy: 4, pods: 5, plasma: 7 };
@@ -3680,7 +3693,7 @@ function gameStep(dt, t) {
   if ((evTick += dt) > 1) { evTick = 0; if (raid || gameEvents.length) renderEvents(); }
 }
 function gameInit() {
-  wallet.lastIncome ||= Date.now(); awayIncome(); renderLocks(); renderGameInfo(); announceJobs(); requestTop();
+  renderPlayModes(); wallet.lastIncome ||= Date.now(); awayIncome(); renderLocks(); renderGameInfo(); announceJobs(); requestTop();
   if (lvl() >= 2) nextBounty = clock() + 20;
 }
 // ---- wanted pirates are listed on the mission board
@@ -3723,7 +3736,7 @@ function conquerFlag(pl, by) { // a big flag with the conqueror's name on top of
 ui.godMode ||= {};
 const GOD_TOGGLES = { inv: "Ship can't be hurt", shield: "Planet can't be hurt", oneshot: "One-hit kills", free: "Everything free" };
 function godAllowed() { return !net.online || !!net.god; }
-function godOn(k) { return godAllowed() && !!(ui.godMode && ui.godMode[k]); }
+function godOn(k) { if (k === "free" && ui.freePlay) return true; return godAllowed() && !!(ui.godMode && ui.godMode[k]); }
 function renderGod() {
   choiceRow($("godToggles"), GOD_TOGGLES, (k) => !!ui.godMode[k], (k) => { ui.godMode[k] = !ui.godMode[k]; saveUi(); if (k === "shield" && net.me) net.send({ t: "godShield", on: !!ui.godMode.shield }); renderGod(); renderHangar(); renderPrankTool(); });
 }
