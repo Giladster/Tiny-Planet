@@ -534,6 +534,7 @@ import { Lensflare, LensflareElement } from "three/addons/objects/Lensflare.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { mergeVertices, mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DecalGeometry } from "three/addons/geometries/DecalGeometry.js";
 
 const $ = (id) => document.getElementById(id);
 const V = (a) => new THREE.Vector3(...a);
@@ -2122,7 +2123,61 @@ function bar(a, b, r, mat) { // a thin rod between two points
   const A = V(a), B = V(b), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, A.distanceTo(B), 8), mat);
   m.position.copy(A).add(B).multiplyScalar(.5); m.quaternion.setFromUnitVectors(UP, B.clone().sub(A).normalize()); return m;
 }
-function makeShipModel(c, root) {
+function makeShipModel(c, root) { // players' ships get their ship name painted on the wings
+  const info = makeShipParts(c, root);
+  if (c.name && !ui.low) try { paintShipName(c, root); } catch (e) { console.warn("name paint", e); }
+  return info;
+}
+const nameTex = new Map();
+function nameTexture(text, c) {
+  const key = text + c.accent + c.body; if (nameTex.has(key)) return nameTex.get(key);
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 128; const x = cv.getContext("2d");
+  const lum = new THREE.Color(c.body).getHSL({}).l, ink = lum > .55 ? "#15181f" : "#f4f6fb"; // dark letters on a light ship, light letters on a dark ship
+  x.font = "800 74px 'Space Grotesk', 'Arial Black', sans-serif"; x.textAlign = "center"; x.textBaseline = "middle";
+  let size = 74; while (x.measureText(text).width > 470 && size > 30) { size -= 4; x.font = `800 ${size}px 'Space Grotesk', 'Arial Black', sans-serif`; }
+  x.lineWidth = 10; x.strokeStyle = c.accent; x.lineJoin = "round"; x.strokeText(text, 256, 66);
+  x.fillStyle = ink; x.fillText(text, 256, 66);
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  nameTex.set(key, t); return t;
+}
+function paintShipName(c, root) {
+  const text = String(c.name).toUpperCase().slice(0, 18); if (!text.trim()) return;
+  root.updateMatrixWorld(true);
+  const inv = root.matrixWorld.clone().invert(), meshes = [], box = new THREE.Box3(), tmp = new THREE.Box3();
+  root.traverse((o) => { // only solid painted hull, not glass, glow or fire
+    if (!o.isMesh || !o.material || o.material.transparent || !o.material.isMeshStandardMaterial) return;
+    if (o.material.emissive && o.material.emissive.getHSL({}).l * (o.material.emissiveIntensity ?? 1) > .15) return;
+    meshes.push(o); o.geometry.computeBoundingBox(); tmp.copy(o.geometry.boundingBox).applyMatrix4(o.matrixWorld.clone().premultiply(inv)); box.union(tmp);
+  });
+  if (!meshes.length || box.isEmpty()) return;
+  const hw = Math.max(box.max.x, -box.min.x), len = box.max.z - box.min.z, cz = (box.max.z + box.min.z) / 2;
+  const q = new THREE.Quaternion(); root.getWorldQuaternion(q);
+  const up = UP.clone().applyQuaternion(q), fwd = FWD.clone().applyQuaternion(q), ray = new THREE.Raycaster(), ws = new THREE.Vector3(); root.getWorldScale(ws);
+  const mat = new THREE.MeshStandardMaterial({ map: nameTexture(text, c), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, metalness: .3, roughness: .45 });
+  for (const s of [-1, 1]) { // one on each wing, readable from behind
+    let hit = null, best = 0, n = null;
+    for (const t of [.42, .52, .62, .72]) for (const dz of [-.12, 0, -.24]) { // find the biggest flat top part (a wing, a deck), not a gun on it
+      ray.set(new THREE.Vector3(s * hw * t, box.max.y + 1, cz + len * dz).applyMatrix4(root.matrixWorld), up.clone().negate());
+      const h = ray.intersectObjects(meshes, false)[0]; if (!h) continue;
+      const nn = h.face.normal.clone().transformDirection(h.object.matrixWorld); if (nn.dot(up) < .6) continue;
+      const bb = h.object.geometry.boundingBox, wc = new THREE.Vector3().addVectors(bb.min, bb.max).multiplyScalar(.5).applyMatrix4(h.object.matrixWorld).applyMatrix4(inv);
+      if (Math.abs(wc.x) < hw * .25) continue; // a wing on the side, not the middle of the hull
+      const area = (bb.max.x - bb.min.x) * (bb.max.z - bb.min.z) * h.object.getWorldScale(new THREE.Vector3()).lengthSq();
+      if (area > best * 1.05) { best = area; hit = h; n = nn; hit.partW = (bb.max.x - bb.min.x) * h.object.getWorldScale(new THREE.Vector3()).x; hit.cx = wc.x; hit.dz = dz; }
+    }
+    if (!hit) continue;
+    { // paint it in the middle of that part, so no letters fall off the edge
+      ray.set(new THREE.Vector3(hit.cx, box.max.y + 1, cz + len * hit.dz).applyMatrix4(root.matrixWorld), up.clone().negate());
+      const h = ray.intersectObjects([hit.object], false)[0]; if (h) { const { partW } = hit; hit = h; hit.partW = partW; n = h.face.normal.clone().transformDirection(h.object.matrixWorld); }
+    }
+    const y = fwd.clone().addScaledVector(n, -fwd.dot(n)).normalize(), xx = new THREE.Vector3().crossVectors(y, n);
+    const ori = new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xx, y, n));
+    const w = Math.min(hw * .5 * ws.x, hit.partW * .55), size = new THREE.Vector3(w, w / 4, hw * .35 * ws.x);
+    const geo = new DecalGeometry(hit.object, hit.point, ori, size); if (!geo.attributes.position.count) continue;
+    geo.applyMatrix4(inv); const d = new THREE.Mesh(geo, mat); d.renderOrder = 1; d.name = "shipname"; root.add(d);
+  }
+}
+function makeShipParts(c, root) {
   const bm = BLENDER_SHIPS[c.hull];
   if (bm) { if (bm.scene) return makeBlenderShip(bm, c, root); c = { ...c, hull: bm.fallback }; } // built-in shape until the model has loaded
   root.clear();
@@ -2828,7 +2883,8 @@ $("flameSize").addEventListener("input", (e) => { state.ship.flameSize = +e.targ
 for (const [id, key] of [["sc-body", "body"], ["sc-accent", "accent"], ["sc-flame", "flame"], ["sc-glow", "glow"], ["sc-boost", "boost"]])
   $(id).addEventListener("input", (e) => { state.ship[key] = e.target.value; buildShip(); save(); });
 $("shipSize").addEventListener("input", (e) => { state.ship.size = +e.target.value; buildShip(); save(); });
-$("shipName").addEventListener("input", (e) => { state.ship.name = e.target.value || "No Name"; save(); });
+let nameTimer = 0;
+$("shipName").addEventListener("input", (e) => { state.ship.name = e.target.value || "No Name"; save(); clearTimeout(nameTimer); nameTimer = setTimeout(buildShip, 350); }); // repaint the name on the wings
 $("goFly").addEventListener("click", () => startFlying());
 $("shipSize").addEventListener("change", () => { if (view === "hangar") frameCamera(.4); });
 
