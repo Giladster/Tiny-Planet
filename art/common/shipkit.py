@@ -14,6 +14,10 @@ _imgs = {}
 
 
 def _img(name, color=True):
+    try:
+        _imgs[name].name  # a new empty scene removes old images
+    except (KeyError, ReferenceError):
+        _imgs.pop(name, None)
     if name not in _imgs:
         im = bpy.data.images.load(os.path.join(TEX, name), check_existing=True)
         im.colorspace_settings.name = "sRGB" if color else "Non-Color"

@@ -2436,6 +2436,16 @@ const BLENDER_SHIPS = {
   raptor: { file: "spiral_raptor.glb", fallback: "interceptor", tint: { Armor: "body", Red: "accent", Neon: "glow" }, lights: ["NavL", "NavR", "TailL", "TailR"],
     flames: [[-.055, -.004, -.31, .95], [.055, -.004, -.31, .95], [0, .02, -.295, .55]],
     muzzles: [[-.19, -.03, .19], [.19, -.03, .19]], len: .65, radius: .34 },
+  // ships flying around the galaxy (pirates, traders, police, alien saucers); player quick ships with these bodies use them too
+  shark: { file: "krell_raider.glb", fallback: "shark", tint: { Hull: "body", Trim: "accent", Neon: "glow" }, lights: ["NavL", "NavR"],
+    flames: [[-.045, -.002, -.303, .9], [.045, -.002, -.303, .9]], muzzles: [[-.13, -.025, .16], [.13, -.025, .16]], len: .62, radius: .32 },
+  hauler: { file: "star_hauler.glb", fallback: "hauler", tint: { Hull: "body", Trim: "accent", Neon: "glow" }, lights: ["NavL", "NavR", "Beacon"],
+    flames: [[.05, .022, -.323, .9], [-.05, .022, -.323, .9], [0, -.025, -.323, .9]], muzzles: [[0, 0, .31]], len: .63, radius: .13 },
+  cruiser: { file: "police_cruiser.glb", fallback: "cruiser", tint: { Hull: "body", Trim: "accent", Neon: "glow" }, lights: ["NavL", "NavR", "SirenL", "SirenR"],
+    lightPhase: { SirenL: [0, true], SirenR: [Math.PI, true] },
+    flames: [[-.04, 0, -.303, .85], [.04, 0, -.303, .85]], muzzles: [[-.07, -.01, .2], [.07, -.01, .2]], len: .58, radius: .27 },
+  saucer: { file: "alien_saucer.glb", fallback: "saucer", tint: { Hull: "body", Trim: "accent", Neon: "glow" }, lights: ["Rim0", "Rim1", "Rim2", "Rim3", "Rim4", "Rim5", "Rim6", "Rim7", "Rim8", "Rim9", "Rim10", "Rim11"],
+    lightPhase: { Rim0: [0.00, false], Rim1: [0.52, false], Rim2: [1.04, false], Rim3: [1.56, false], Rim4: [2.08, false], Rim5: [2.60, false], Rim6: [3.12, false], Rim7: [3.64, false], Rim8: [4.16, false], Rim9: [4.68, false], Rim10: [5.20, false], Rim11: [5.72, false] }, flames: [[0.082, -.03, -0.164, .7], [0.000, -.03, -0.185, .7], [-0.082, -.03, -0.164, .7]], muzzles: [[0, -.02, .22]], len: .46, radius: .25 },
 };
 for (const [hull, bm] of Object.entries(BLENDER_SHIPS)) {
   bm.scene = null;
@@ -2453,7 +2463,7 @@ function makeBlenderShip(bm, c, root) {
     if (!o.isMesh) return;
     const name = o.material.name, key = bm.tint[name];
     if (key) { if (!mats[name]) { mats[name] = o.material.clone(); mats[name].color.set(c[key]); if (key === "glow") mats[name].emissive.set(c[key]); } o.material = mats[name]; }
-    if (bm.lights.includes(o.name)) { o.name = "navlight"; o.userData.phase = 0; }
+    if (bm.lights.includes(o.name)) { const ph = bm.lightPhase?.[o.name]; o.name = "navlight"; o.userData.phase = ph ? ph[0] : 0; o.userData.fast = !!(ph && ph[1]); }
   });
   root.add(m);
   const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.flame).multiplyScalar(1.6), transparent: true, opacity: .92, depthWrite: false });
