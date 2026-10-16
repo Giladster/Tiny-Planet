@@ -1581,6 +1581,19 @@ const sphereGeo = new THREE.SphereGeometry(1, 96, 64);
 const _q2 = new THREE.Quaternion(), XAXIS = new THREE.Vector3(1, 0, 0);
 const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), _s = new THREE.Vector3(1, 1, 1);
 
+const CLOUD_TIME = { value: 0 };
+// GLSL 3D noise shared by planet ground and clouds: gives every planet sharp detail up close (rocks, ridges, soft cloud edges)
+const GLSL_NOISE = `
+float pn_h(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+float pn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
+  return mix(mix(mix(pn_h(i),pn_h(i+vec3(1,0,0)),f.x),mix(pn_h(i+vec3(0,1,0)),pn_h(i+vec3(1,1,0)),f.x),f.y),
+             mix(mix(pn_h(i+vec3(0,0,1)),pn_h(i+vec3(1,0,1)),f.x),mix(pn_h(i+vec3(0,1,1)),pn_h(i+vec3(1,1,1)),f.x),f.y),f.z); }
+float pfbm(vec3 p, int oct, float fw){ float v=0., a=.5, t=0.; for(int i=0;i<7;i++){ if(i>=oct) break; float fade=1.-smoothstep(.25,.6,fw); v+=a*pn(p)*fade; t+=a*fade; p=p*2.07+vec3(1.7,9.2,3.1); a*=.5; fw*=2.07; } return t>0.?v/t:.5; }
+float cloudCover(vec3 d, float seed, float t, float fw){ // the same clouds for the sky and for their shadows on the ground
+  vec3 cp = d * 3.2 + seed;
+  vec3 warp = vec3(pfbm(cp + t * .02, 3, fw), pfbm(cp + 4.3, 3, fw), pfbm(cp + 8.1 - t * .015, 3, fw));
+  return pfbm(cp * 1.6 + warp * 2.2, 7, fw * 1.6) * (1. - abs(d.y) * .3); }
+`;
 class Planet {
   constructor(data, detail, isHome) {
     this.data = data; this.isHome = isHome;
@@ -1604,8 +1617,41 @@ class Planet {
     this.mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .9, metalness: 0, envMapIntensity: .15 });
     this.mat.onBeforeCompile = (sh) => { // cracks and wounds glow like lava; towns twinkle on the night side
       sh.uniforms.sunDir = { value: SUN_DIR };
-      sh.vertexShader = "attribute float glow;\nattribute float city;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal);");
-      sh.fragmentShader = "uniform vec3 sunDir;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + sh.fragmentShader.replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
+      sh.uniforms.pR = { value: this.data.R }; sh.uniforms.pSeed = { value: (this.data.design.seed || 1) % 97 };
+      sh.uniforms.cSeed = { value: ((this.data.design.seed || 1) * 7.31) % 53 }; sh.uniforms.cTime = CLOUD_TIME; sh.uniforms.cRot = { value: 0 }; sh.uniforms.cOn = { value: 0 };
+      sh.uniforms.pAtmo = { value: new THREE.Color(this.data.design.atmo || "#88ccff") }; this.groundSh = sh;
+      sh.vertexShader = "attribute float glow;\nattribute float city;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal); vWR = normalize(mat3(modelMatrix) * position);");
+      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + sh.fragmentShader
+        .replace("#include <color_fragment>", `#include <color_fragment>
+// ground detail: patches of lighter and darker soil, and bare rock on steep slopes
+vec3 gp = vDir * 9. + pSeed; float gfw = length(fwidth(gp));
+float gd = pfbm(gp, 6, gfw), gd2 = pfbm(gp * 3.3 + 5., 4, gfw * 3.3);
+float slope = 1. - clamp(dot(normalize(vWN), normalize(vWR)), 0., 1.);
+float lumC = dot(diffuseColor.rgb, vec3(.3, .59, .11));
+vec3 rock = mix(vec3(lumC) * vec3(1.05, .95, .85), diffuseColor.rgb * .55, .35);
+diffuseColor.rgb = mix(diffuseColor.rgb, rock, smoothstep(.06, .2, slope) * .75);
+diffuseColor.rgb *= .74 + .36 * gd + .16 * (gd2 - .5);
+diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.08, 1.02, .82), smoothstep(.45, .75, gd2) * .5); // sunny dry patches
+if (cOn > .5) { // cloud shadows drifting over the ground
+  float cr = -cRot; vec3 cd = vec3(cos(cr) * vDir.x + sin(cr) * vDir.z, vDir.y, -sin(cr) * vDir.x + cos(cr) * vDir.z);
+  float sh0 = smoothstep(.52, .7, cloudCover(cd, cSeed, cTime, length(fwidth(vDir * 3.2))));
+  diffuseColor.rgb *= 1. - sh0 * .45;
+}`)
+        .replace("#include <fog_fragment>", `#include <fog_fragment>
+{ // the air: a bright haze toward the edge of the planet, like looking through the sky
+  float edge = 1. - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0., 1.);
+  float lit = smoothstep(-.25, .45, dot(normalize(vWN), sunDir));
+  gl_FragColor.rgb = mix(gl_FragColor.rgb, pAtmo * (.15 + .85 * lit), pow(edge, 2.6) * .55 * lit + .05 * lit);
+}`)
+        .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+{ // tiny ridges and rocks drawn per pixel, so the ground stays sharp when you fly close
+  vec3 bp = vDir * 26. + pSeed * 1.7; float bfw = length(fwidth(bp));
+  float bh = (pfbm(bp, 6, bfw) * .7 + pfbm(bp * 4.1, 4, bfw * 4.1) * .3) * pR * .012;
+  vec2 dH = vec2(dFdx(bh), dFdy(bh)); vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition);
+  vec3 r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
+  normal = normalize(abs(det) * normal - sign(det) * (dH.x * r1 + dH.y * r2));
+}`)
+        .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
 totalEmissiveRadiance += vec3(1.0, .32, .06) * vGlow * 1.6;
 float night = smoothstep(.08, -.22, dot(normalize(vWN), sunDir));
 float town = step(.85, h3(floor(vDir * 170.))) * (.4 + .6 * h3(floor(vDir * 47.))) + .04;
@@ -1614,6 +1660,16 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.userData.planet = this;
     this.ocean = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ roughness: .1, metalness: .1, transparent: true, opacity: .92, envMapIntensity: .3, normalMap: WAVES, normalScale: new THREE.Vector2(.45, .45) }));
     this.clouds = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, depthWrite: false, roughness: 1, envMapIntensity: .3 }));
+    { const seed = ((this.data.design.seed || 1) * 7.31) % 53; // sharp, swirly clouds drawn per pixel, so they never look blurry up close
+      this.clouds.material.onBeforeCompile = (sh) => {
+        sh.uniforms.cSeed = { value: seed }; sh.uniforms.cTime = CLOUD_TIME;
+        sh.vertexShader = "varying vec3 vCD;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvCD = normalize(position);");
+        sh.fragmentShader = "uniform float cSeed, cTime;\nvarying vec3 vCD;\n" + GLSL_NOISE + sh.fragmentShader.replace("#include <map_fragment>", `
+          float cfw = length(fwidth(vCD * 3.2)), cn = cloudCover(vCD, cSeed, cTime, cfw);
+          float ca = smoothstep(.52, .68, cn); ca *= .45 + .55 * smoothstep(.6, .78, cn); // soft wispy edges, thick bright middles
+          diffuseColor.a *= ca * .95; diffuseColor.rgb *= .82 + .18 * smoothstep(.55, .85, cn);`);
+      };
+    }
     const atmoShader = (back) => new THREE.ShaderMaterial({
       side: back ? THREE.BackSide : THREE.FrontSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
       uniforms: { col: { value: new THREE.Color() }, sun: { value: SUN_DIR } },
@@ -1752,6 +1808,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.clouds.visible = !!d.clouds; if (d.clouds) this.clouds.material.color.set(d.clouds);
     this.clouds.scale.setScalar(R * 1.04);
     this.atmoBack.material.uniforms.col.value.set(d.atmo); this.atmoRim.material.uniforms.col.value.set(d.atmo);
+    if (this.groundSh) this.groundSh.uniforms.pAtmo.value.set(d.atmo || "#88ccff");
     this.atmoBack.scale.setScalar(R * 1.16); this.atmoRim.scale.setScalar(R * 1.05);
     const disco = d.template === "disco";
     this.mat.metalness = disco ? .75 : 0; this.mat.roughness = disco ? .22 : .82; this.mat.envMapIntensity = disco ? .9 : .15;
@@ -5970,12 +6027,13 @@ function frame() {
   const realDt = Math.min(timer.getDelta(), .05), dt = realDt * slow, t = timer.elapsedTime;
   drawMinimap(); updateThreats();
   sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t;
-  WAVES.offset.set(t * .004, t * .0025);
+  WAVES.offset.set(t * .004, t * .0025); CLOUD_TIME.value = t;
   const still = reduce || brushing || (mode === "home" && (!!tool || view === "design" || view === "build"));
   if (!still) home.spin.rotation.y += dt * .04;
   for (const p of planets) {
     if (p !== home) p.spin.rotation.y += dt * .03;
     p.clouds.rotation.y += dt * .012;
+    if (p.groundSh) { p.groundSh.uniforms.cRot.value = p.clouds.rotation.y; p.groundSh.uniforms.cOn.value = p.clouds.visible && !ui.low ? 1 : 0; }
     if (p.remnant) p.remnant.rotation.y += dt * .05;
     if (p.dirty && clock() - p.lastBuild > .09) { p.rebuild(); p.placeDecor(); }
     if (p.alive && camera.position.distanceTo(p.group.position) < 60) p.updatePeople(dt, t);
