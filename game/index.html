@@ -749,7 +749,7 @@ const sfx = (() => {
   const ctx = () => {
     if (ac) return ac;
     try {
-      ac = new AudioContext();
+      ac = new AudioContext(); ac.onstatechange = () => { if (ac.state !== "running" && ac.state !== "closed") ac.resume().catch(() => {}); }; // the browser can pause sound; ask for it back right away
       master = ac.createGain(); master.gain.value = ui.muted ? 0 : .7;
       const comp = ac.createDynamicsCompressor(); comp.threshold.value = -16; comp.ratio.value = 5; comp.attack.value = .003; comp.release.value = .25;
       master.connect(comp).connect(ac.destination);
@@ -801,7 +801,7 @@ const sfx = (() => {
   function playMusic(kind) { // calm music while exploring, intense music in a fight; they cross-fade
     if (!ac || mus?.kind === kind) return;
     const old = mus, me = mus = { kind }, t = ac.currentTime;
-    if (old?.g) { old.g.gain.setTargetAtTime(.0001, t, 1.8); setTimeout(() => old.src.stop(), 9000); }
+    if (old?.g) { old.g.gain.setTargetAtTime(.0001, t, 1.8); setTimeout(() => old.src?.stop(), 9000); }
     loadBuf(kind === "battle" ? "music-intense.mp3" : "music-calm.mp3").then((b) => {
       if (!b || mus !== me) return;
       const s = ac.createBufferSource(), g = gain(); s.buffer = b; s.loop = true; s.loopStart = 6; s.loopEnd = b.duration - 8;
@@ -843,7 +843,7 @@ const sfx = (() => {
     playMusic("calm");
   }
   return {
-    unlock() { const c = ctx(); if (!c) return; if (c.state === "suspended") c.resume().then(startLoops); else startLoops(); },
+    unlock() { const c = ctx(); if (!c) return; if (c.state !== "running") c.resume().then(startLoops).catch(() => {}); else startLoops(); }, // also wakes sound that the browser paused (tab switch, sleep, headphones)
     setMuted(m) { if (master) master.gain.setTargetAtTime(m ? 0 : .7, ac.currentTime, .1); },
     engine(thrust, boost, flying = true) {
       if (!eng) return; const t = ac.currentTime;
@@ -1024,6 +1024,7 @@ const sfx = (() => {
   };
 })();
 addEventListener("pointerdown", () => sfx.unlock(), { capture: true });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) sfx.unlock(); });
 addEventListener("keydown", () => sfx.unlock(), { capture: true });
 
 // ================= renderer, scene, glow effect =================
