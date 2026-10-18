@@ -795,6 +795,21 @@ const sfx = (() => {
     const sub = osc("sine", 95, 24, t, dur * .8), g2 = env(gain(), t, .003, dur * .8); sub.connect(g2); out(g2, v * 1.3, .25);
     const crack = noise(t, .15, 1.4), hp = filt("highpass", 2200, 900, t, .15), g3 = env(gain(), t, .001, .14); crack.connect(hp).connect(g3); out(g3, v * .7, .35);
   }
+  const bufs = {}; // recorded sounds from game/sounds, loaded once
+  function loadBuf(name) { return bufs[name] ??= fetch("sounds/" + name).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).catch(() => null); }
+  let mus = null, drone = null;
+  function playMusic(kind) { // calm music while exploring, intense music in a fight; they cross-fade
+    if (!ac || mus?.kind === kind) return;
+    const old = mus, me = mus = { kind }, t = ac.currentTime;
+    if (old?.g) { old.g.gain.setTargetAtTime(.0001, t, 1.8); setTimeout(() => old.src.stop(), 9000); }
+    loadBuf(kind === "battle" ? "music-intense.mp3" : "music-calm.mp3").then((b) => {
+      if (!b || mus !== me) return;
+      const s = ac.createBufferSource(), g = gain(); s.buffer = b; s.loop = true; s.loopStart = 6; s.loopEnd = b.duration - 8;
+      g.gain.value = .0001; g.gain.setTargetAtTime(kind === "battle" ? .42 : .34, ac.currentTime, kind === "battle" ? .8 : 2.5);
+      s.connect(g); out(g, 1, .12); s.start(0, kind === "battle" ? 20 : 0); me.src = s; me.g = g;
+      if (drone) drone.gain.setTargetAtTime(.018, ac.currentTime, 3); // the old hum steps back under the music
+    });
+  }
   function startLoops() { // deep space hum, slow wind, the ship engine
     if (eng || !ac) return;
     const t = ac.currentTime + .05, LONG = 1e6;
@@ -802,7 +817,7 @@ const sfx = (() => {
     const dl = filt("lowpass", 240, 240, t, 1, .8), dg = gain(); dg.gain.value = 0; dg.gain.setTargetAtTime(.045, t, 3);
     for (const [type, f, d] of [["sine", 55, 0], ["sine", 55, 9], ["triangle", 82.4, -6], ["sawtooth", 27.5, 3]]) { const o = osc(type, f, f, t, LONG, d); const og = gain(); og.gain.value = type === "sawtooth" ? .25 : .6; o.connect(og).connect(dl); }
     const lfo = osc("sine", .05, .05, t, LONG), lg = gain(); lg.gain.value = 140; lfo.connect(lg).connect(dl.frequency);
-    dl.connect(dg); out(dg, 1, .7);
+    dl.connect(dg); out(dg, 1, .7); drone = dg;
     // wind
     const wn = noise(t, LONG, .5), wb = filt("bandpass", 420, 420, t, 1, .7), wg = gain(); wg.gain.value = 0; wg.gain.setTargetAtTime(.022, t, 4);
     const wl = osc("sine", .031, .031, t, LONG), wlg = gain(); wlg.gain.value = 260; wl.connect(wlg).connect(wb.frequency);
@@ -822,19 +837,25 @@ const sfx = (() => {
     rn.connect(rb).connect(shaper(5)).connect(rg); out(rg, 1, .25);
     const sn = noise(t, LONG, .8), sb = filt("bandpass", 300, 300, t, 1, .6), sg = gain(); sg.gain.value = 0; // rushing air: louder and higher the faster you go
     sn.connect(sb).connect(sg); out(sg, 1, .2);
-    eng = { eg, el, saw, rg, rb, sg, sb };
+    const hg = gain(); hg.gain.value = 0; out(hg, 1, .1); // the recorded hover engine, looped; pitch follows the throttle
+    eng = { eg, el, saw, rg, rb, sg, sb, hg, hs: null };
+    loadBuf("engine-hover.wav").then((b) => { if (!b) return; const s = ac.createBufferSource(); s.buffer = b; s.loop = true; s.connect(hg); s.start(); eng.hs = s; });
+    playMusic("calm");
   }
   return {
     unlock() { const c = ctx(); if (!c) return; if (c.state === "suspended") c.resume().then(startLoops); else startLoops(); },
     setMuted(m) { if (master) master.gain.setTargetAtTime(m ? 0 : .7, ac.currentTime, .1); },
     engine(thrust, boost, flying = true) {
       if (!eng) return; const t = ac.currentTime;
-      eng.eg.gain.setTargetAtTime(flying ? .01 + thrust * .04 + (boost ? .035 : 0) : 0, t, .25);
+      eng.eg.gain.setTargetAtTime((flying ? .01 + thrust * .04 + (boost ? .035 : 0) : 0) * (eng.hs ? .45 : 1), t, .25);
+      eng.hg.gain.setTargetAtTime(flying ? .55 + thrust * .45 + (boost ? .35 : 0) : 0, t, .3);
+      if (eng.hs) eng.hs.playbackRate.setTargetAtTime(.82 + thrust * .2 + (boost ? .28 : 0), t, .45);
       eng.el.frequency.setTargetAtTime(220 + thrust * 380 + (boost ? 900 : 0), t, .3);
       eng.saw.frequency.setTargetAtTime(44 + thrust * 18 + (boost ? 34 : 0), t, .3);
       eng.rg.gain.setTargetAtTime(boost ? .06 : 0, t, boost ? .08 : .35);
       eng.rb.frequency.setTargetAtTime(boost ? 1500 : 700, t, .4);
     },
+    music(kind) { playMusic(kind); },
     rush(spd, mk) {
       if (!eng) return; const t = ac.currentTime, k = Math.min(1, spd / 150);
       eng.sg.gain.setTargetAtTime(mode === "fly" ? k * .05 + mk * .05 : 0, t, .3); eng.sb.frequency.setTargetAtTime(250 + k * 1400 + mk * 1800, t, .3);
@@ -5355,7 +5376,7 @@ function land() { // fly into a black hole, come out next to home
   hole.position.copy(ship.position).addScaledVector(fwd, 3 + state.ship.size * 2);
   hole.lookAt(camera.position);
   warp = { phase: "in", t: 0, hole, size, start: ship.position.clone() };
-  sfx.warpIn(); sfx.engine(0, false, false); renderPanels();
+  sfx.warpIn(); sfx.engine(0, false, false); sfx.music("calm"); renderPanels();
 }
 function warpStep(dt) {
   const w = warp; w.t += dt;
@@ -5964,6 +5985,12 @@ function thrusterFx(dt, m) {
   jets.outMat.color.set(state.ship.flame).multiplyScalar(1.5);
   if (lit) sfx.thruster(1);
 }
+let fightUntil = 0;
+function inFight() { // fight music: you shot or got hit lately, or you're in the arena or a pirate raid; it lingers a bit after
+  const now = clock(), shot = Math.max(-99, ...Object.entries(lastShot).filter(([k]) => k !== "noGadget").map(([, v]) => v));
+  if (arena || raid || now - lastPlayerHit < 6 || now - shot < 4) fightUntil = now + 14;
+  return now < fightUntil;
+}
 function flyStep(dt) {
   const k = (c) => keys.has(c);
   if (playerDead) return;
@@ -6052,7 +6079,7 @@ function flyStep(dt) {
   const boosting = boost && thrust;
   updateBoostFx(dt, boosting && throttle > .6); updateEngineTrail(dt, spd, boostFx.k); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
   if (boosting && !wasBoost) { sfx.boostKick(); camFx.kick = 9; shake = Math.max(shake, .05 * L); }
-  wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting); sfx.rush(spd, megaK); flyBys(spd);
+  wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting); sfx.music(inFight() ? "battle" : "calm"); sfx.rush(spd, megaK); flyBys(spd);
   // HUD
   $("hudSpeed").textContent = fmt(vel.length() * 10);
   if (nav) {
