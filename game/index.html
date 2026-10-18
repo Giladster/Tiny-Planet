@@ -982,6 +982,9 @@ const sfx = (() => {
     },
     enemyLaser(at) { if (!ok()) return; const t = ac.currentTime, v = near(at); if (v < .05) return; const o = osc("sawtooth", 900, 140, t, .16), b = filt("bandpass", 1600, 300, t, .16, 1.5), g = env(gain(), t, .002, .15); o.connect(b).connect(g); out(g, .06 * v, .3); },
     hit() { if (!ok()) return; const t = ac.currentTime, n = noise(t, .2, 1.3), b = filt("bandpass", 1800, 600, t, .2, 1), g = env(gain(), t, .002, .18); n.connect(b).connect(shaper(4)).connect(g); out(g, .25, .2); const o = osc("square", 220, 90, t, .12), og = env(gain(), t, .002, .12); o.connect(og); out(og, .06, 0); },
+    thruster(k = 1) { // a short gas puff from a side thruster
+      if (!ok()) return; const t = ac.currentTime, n = noise(t, .25, 1.2), b = filt("bandpass", 2600, 900, t, .2, .9), g = env(gain(), t, .01, .18 + .1 * k); n.connect(b).connect(g); out(g, .05 + .05 * k, .25);
+    },
     roll() { if (!ok()) return; const t = ac.currentTime, n = noise(t, .7, 1), b = filt("bandpass", 400, 2400, t, .6, 1.4), g = env(gain(), t, .08, .55); n.connect(b).connect(g); out(g, .14, .3); },
     nuke(at) { // a blinding flash, a deep roar and a long rolling thunder
       if (!ok()) return; const t = ac.currentTime, v = Math.max(.5, near(at));
@@ -4917,7 +4920,8 @@ function enterWorld(you, world) {
 
 // ================= flying =================
 const keys = new Set(), vel = new THREE.Vector3(), head = new THREE.Quaternion();
-const turn = new THREE.Vector3(), mouseTurn = new THREE.Vector2(), pendingTurn = new THREE.Vector2(), lean = new THREE.Vector2(), leanQ = new THREE.Quaternion(), camPos = new THREE.Vector3();
+const turn = new THREE.Vector3(), mouseTurn = new THREE.Vector2(), pendingTurn = new THREE.Vector2(), angVel = new THREE.Vector2(), lean = new THREE.Vector2(), leanQ = new THREE.Quaternion(), camPos = new THREE.Vector3();
+const rcs = { prev: {}, spin: new THREE.Vector3(), acc: new THREE.Vector3(), lastSnd: 0 }, _tv2 = new THREE.Vector2(); // side-thruster state, see thrusterFx
 let throttle = 0, lockTarget = null, lockCand = null, lockT = 0;
 const camFx = { spd: null, acc: 0, push: 0, kick: 0, up: new THREE.Vector3(0, 1, 0), look: new THREE.Vector2() };
 function flyBys(spd) { // a whoosh when a ship zooms past you
@@ -5322,7 +5326,7 @@ function startFlying() { // only switches to flight; the ship waits until you pr
   camAnim = null; viewShift.set(0, 0); camera.clearViewOffset();
   mode = "fly"; document.body.classList.add("flying");
   controls.enabled = false; tip.hidden = true;
-  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
+  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); angVel.set(0, 0); rcs.spin.set(0, 0, 0); rcs.acc.set(0, 0, 0); lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
   vel.set(0, 0, 0);
   aimNdc.set(0, 0); $("crosshair").style.left = "50%"; $("crosshair").style.top = "50%";
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
@@ -5899,16 +5903,62 @@ function armsStep(dt) {
   else if (cl) { let h = null; model.traverse((o) => { if (!h && o.isMesh && o.name !== "flame") h = o; }); if (h && !h.userData.realMat) setCloakLook(true); } // the ship was rebuilt
   if (cl) { const o = .14 + .1 * Math.sin(clock() * 9) + (cloakUntil - clock() < 1 && Math.random() < .3 ? .4 : 0); for (const m of cloakMats) m.opacity = o; } // shimmers, and flickers before it wears off
 }
+// side thrusters: every move you make shoots a jet of hot blue gas the other way, so you see the power pushing the ship.
+// Turning fires a pair at the nose and tail, rolling fires the wingtips, and every new move starts with a bright pulse.
+const RCS_HOT = C(0xe8f6ff, 3.4), RCS_MID = C(0x6cc4ff, 1.4), RCS_FADE = C(0x203a70, .3);
+function rcsJet(px, py, pz, dx, dy, dz, power, dt, pulse) {
+  // (px,py,pz) = a spot on the ship, in ship lengths; (dx,dy,dz) = the way the gas shoots out
+  const L = ship.userData.len || .6, q = model.getWorldQuaternion(_rq), at = _ra.set(px * L, py * L, pz * L).applyQuaternion(q).add(ship.position), d = _rd.set(dx, dy, dz).applyQuaternion(q);
+  let n = pulse ? 9 : power * dt * 70; n = Math.floor(n) + (Math.random() < n % 1 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const sp = L * (pulse ? rnd(5, 9) : rnd(3, 6)) * (.6 + .4 * Math.min(1, power));
+    fire.spawn(at.clone().addScaledVector(d, rnd(0, L * .04)), vel.clone().addScaledVector(d, sp).add(_rv.randomDirection().multiplyScalar(sp * .18)), pulse ? rnd(.16, .26) : rnd(.1, .2), L * (pulse ? rnd(.1, .15) : rnd(.055, .09)), pulse ? RCS_HOT : RCS_MID, RCS_FADE, 1.8, 3);
+  }
+}
+const _rq = new THREE.Quaternion(), _ra = new THREE.Vector3(), _rd = new THREE.Vector3(), _rv = new THREE.Vector3(), _rw = new THREE.Vector3(), _rp = new THREE.Vector3();
+function thrusterFx(dt, m) {
+  if (playerDead || !ship.userData.len) return;
+  const fresh = (key, on) => { const was = rcs.prev[key]; rcs.prev[key] = on; return on && !was; }, t = clock();
+  let pulsed = 0;
+  // sliding sideways and up/down: jets on the far side push you
+  if (m.strafe) { const p = fresh("s" + m.strafe, 1); pulsed += p; for (const z of [.28, -.28]) rcsJet(-m.strafe * -.36, 0, z, m.strafe, 0, 0, 1, dt, p); } else rcs.prev.s1 = rcs.prev["s-1"] = 0;
+  if (m.lift) { const p = fresh("l" + m.lift, 1); pulsed += p; for (const x of [.24, -.24]) rcsJet(x, -m.lift * .14, 0, 0, -m.lift, 0, 1, dt, p); } else rcs.prev.l1 = rcs.prev["l-1"] = 0;
+  // braking and dropping out of boost: jets at the nose shoot forward
+  const back = Math.max(m.brake, m.retro);
+  if (back > .02) { const p = fresh("b", 1); pulsed += p; for (const x of [.22, -.22]) rcsJet(x, 0, .4, x * .6, 0, 1, back * 1.5, dt, p); } else rcs.prev.b = 0;
+  // pressing go or boost: a punch of energy out of the main engines
+  if (fresh("t" + m.thrust, m.thrust > 0) && m.thrust) { pulsed++; for (const f of ship.userData.flames || []) { f.getWorldPosition(_rp); for (let i = 0; i < (m.thrust > 1 ? 16 : 8); i++) fire.spawn(_rp, vel.clone().addScaledVector(FWD.clone().applyQuaternion(head), -rnd(4, 9) * (m.thrust > 1 ? 1.6 : 1)).add(_rv.randomDirection().multiplyScalar(1.2)), rnd(.15, .3), (ship.userData.len || .6) * rnd(.08, .14), RCS_HOT, C(state.ship.flame, 1.4), 1.5, 2.5); } }
+  if (!m.thrust) rcs.prev.t1 = 0; if (m.thrust < 2) rcs.prev.t2 = 0;
+  // turning and rolling: the spin speeds up and slows down, and that change is what the thrusters push.
+  // A jet at spot p, for a change in spin a, shoots out opposite to a × p.
+  _rw.set(angVel.x + turn.x, angVel.y + turn.y, turn.z);
+  const a = _rp.copy(_rw).sub(rcs.spin).divideScalar(Math.max(dt, .001)); rcs.spin.copy(_rw);
+  rcs.acc.lerp(a, 1 - Math.exp(-dt * 10));
+  const A = rcs.acc, keep = .15; // a little steady puffing while you keep turning, more when the turn starts or stops
+  for (const [px, py, pz] of [[0, 0, .46], [0, 0, -.42], [.46, 0, 0], [-.46, 0, 0]]) {
+    const w = _rv.set(A.y * pz - A.z * py, A.z * px - A.x * pz, A.x * py - A.y * px).addScaledVector(_rd.set(_rw.y * pz - _rw.z * py, _rw.z * px - _rw.x * pz, _rw.x * py - _rw.y * px), keep * 3);
+    const mag = w.length(); if (mag < 1.1) continue;
+    const dx = -w.x / mag, dy = -w.y / mag, dz = -w.z / mag, power = Math.min(1.6, (mag - 1.1) / 5);
+    const p = mag > 9 && fresh("r" + px + pz, 1); if (mag < 6) rcs.prev["r" + px + pz] = 0; pulsed += p ? 1 : 0;
+    rcsJet(px, py, pz, dx, dy, dz, power, dt, p);
+  }
+  if (pulsed && t - rcs.lastSnd > .12) { rcs.lastSnd = t; sfx.thruster(Math.min(2, pulsed)); }
+}
 function flyStep(dt) {
   const k = (c) => keys.has(c);
   if (playerDead) return;
   if (clock() - lastPlayerHit > 4) shipHp = Math.min(100, shipHp + 5 * dt * (wallet.style === "ice" ? 2 : 1)); // shields recharge
   $("hudHp").textContent = Math.ceil(shipHp); $("hudHp").style.color = shipHp < 35 ? "var(--danger)" : ""; $("hudHpBar").style.width = shipHp + "%"; $("hudHpBar").style.filter = shipHp < 35 && Math.sin(clock() * 12) > 0 ? "brightness(1.8)" : "";
   const boost = k("ShiftLeft") || k("ShiftRight"), size = state.ship.size, thrust = k("KeyW");
-  // turning: the mouse turns the ship exactly as far as you move it, eased over a few frames so it feels smooth
-  const SENS = ui.sens || .0026;
+  // turning: the ship has weight. The mouse asks for a turn, and the ship's spin builds up, carries it round and eases out,
+  // so it swings like a real spaceship instead of snapping. It still ends up exactly as far as you moved the mouse.
+  const SENS = ui.sens || .0026, heavy = Math.max(.75, Math.min(1.6, size)), boostK = mega ? .35 : boost && thrust ? .7 : 1;
   pendingTurn.x += mouseTurn.y * SENS; pendingTurn.y += -mouseTurn.x * SENS; mouseTurn.set(0, 0);
-  const ease = 1 - Math.exp(-dt * 16), my = pendingTurn.x * ease, mx = pendingTurn.y * ease; pendingTurn.x -= my; pendingTurn.y -= mx;
+  pendingTurn.clampScalar(-1.2, 1.2);
+  const spinUp = 12 / heavy, pull = 5 / heavy, maxRate = 3.2 * boostK / Math.sqrt(heavy);
+  _tv2.copy(pendingTurn).multiplyScalar(pull).clampScalar(-maxRate, maxRate);
+  angVel.lerp(_tv2, 1 - Math.exp(-dt * spinUp));
+  const my = angVel.x * dt, mx = angVel.y * dt; pendingTurn.x -= my; pendingTurn.y -= mx;
   const keyYaw = (k("ArrowLeft") ? 1 : 0) - (k("ArrowRight") ? 1 : 0);
   const keyPitch = (k("ArrowDown") ? 1 : 0) - (k("ArrowUp") ? 1 : 0);
   const rollKey = (k("KeyE") ? 1 : 0) - (k("KeyQ") ? 1 : 0);
@@ -5932,22 +5982,22 @@ function flyStep(dt) {
   // engines: power builds up and fades out instead of switching on and off
   throttle += ((thrust ? (boost ? 1 : .55) : 0) - throttle) * Math.min(1, dt * (thrust ? 2.2 : 3));
   megaStep(dt, boost && thrust);
-  const max = mega ? MEGA_SPEED : boost ? 150 : 28;
+  const max = mega ? MEGA_SPEED : boost && thrust ? 150 : 28;
   vel.addScaledVector(fwd, throttle * (mega ? MEGA_SPEED * 1.2 : boost ? 300 : 47) * dt);
   const strafe = (k("KeyD") ? 1 : 0) - (k("KeyA") ? 1 : 0);
   const lift = (k("Space") ? 1 : 0) - (k("ControlLeft") || k("ControlRight") || k("MetaLeft") || k("MetaRight") || k("KeyX") ? 1 : 0);
-  if (lift) { // climb or dive, with small thruster flames
-    vel.addScaledVector(headUp, lift * 24 * dt);
-    if (Math.random() < .8) fire.spawn(ship.position.clone().addScaledVector(headUp, -lift * ship.userData.radius * .5), vel.clone().addScaledVector(headUp, -lift * 7).add(new THREE.Vector3().randomDirection().multiplyScalar(.8)), .2, .035 * size, C(state.ship.flame, 1.6), DARK);
-  }
+  if (lift) vel.addScaledVector(headUp, lift * 24 * dt); // Space / Ctrl climb or dive
   if (strafe) vel.addScaledVector(right, strafe * 22 * dt); // A / D slide sideways
-  if (k("KeyS")) { const f = vel.dot(fwd); if (f > .5) vel.addScaledVector(fwd, -Math.min(f, 45 * dt)); else vel.addScaledVector(fwd, -16 * dt); } // brake, then reverse
-  // space has no air: you keep drifting. Flight assist slowly lines your drift up with where you point.
+  const braking = k("KeyS");
+  if (braking) { const f = vel.dot(fwd); if (f > .5) vel.addScaledVector(fwd, -Math.min(f, (45 + f * 2.2) * dt)); else vel.addScaledVector(fwd, -16 * dt); } // brake hard, then reverse
+  // space has no air: you keep drifting. Flight assist lines your drift up with where you point, so your path curves after the nose.
   const fv = vel.dot(fwd), side = vel.clone().addScaledVector(fwd, -fv);
-  if (!roll && !strafe && !lift) vel.addScaledVector(side, -Math.min(1, dt * 1.1));
+  if (!roll && !strafe && !lift) vel.addScaledVector(side, -Math.min(1, dt * 2.4));
   if (fv < -12) vel.addScaledVector(fwd, -12 - fv); // reverse is slow
-  if (!thrust && !k("KeyS")) vel.multiplyScalar(Math.exp(-.18 * dt)); // coasting: slows down only a little
-  if (vel.length() > max) vel.lerp(vel.clone().setLength(max), Math.min(1, dt * 1.5));
+  if (!thrust && !braking) vel.multiplyScalar(Math.exp(-.18 * dt)); // coasting: slows down only a little
+  const over = mega ? 0 : vel.length() - max; // let go of boost: the front thrusters fire and pull you back to cruising speed fast
+  if (over > 0) vel.setLength(max + over * Math.exp(-dt * 3.2));
+  thrusterFx(dt, { strafe, lift, brake: braking && fv > 1 ? 1 : 0, retro: Math.min(1, Math.max(0, over) / 60), thrust: thrust ? (boost ? 2 : 1) : 0 });
   if (mega && vel.length() > MEGA_SPEED) vel.setLength(MEGA_SPEED);
   if (!mega && vel.length() > 170) vel.multiplyScalar(Math.exp(-dt * 3)); // dropping out of mega boost slows you down fast
   ship.position.addScaledVector(vel, dt);
