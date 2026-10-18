@@ -3531,11 +3531,11 @@ function renderLevel() {
 // ---- the radio box
 let radioQ = [], radioTyping = null, radioHideAt = 0;
 function radio(text) { radioQ.push(text); if (!radioTyping) nextRadio(); }
-function radioNow() { radioQ = []; radioTyping = null; } // drop old chatter: Bolt talks about what you are doing now
+function radioNow() { radioQ = []; radioTyping = null; window.speechSynthesis?.cancel(); } // drop old chatter: Bolt talks about what you are doing now
 function nextRadio() {
   const text = radioQ.shift(); if (text === undefined) { radioTyping = null; return; }
   const el = $("radioText"), my = radioTyping = { text, i: 0, t0: clock() }; el.textContent = "";
-  $("radio").classList.remove("min"); $("radio").classList.add("talk"); sfx.lock();
+  $("radio").classList.remove("min"); $("radio").classList.add("talk"); sfx.lock(); boltSpeak(text, true); // Bolt reads his radio lines out loud
   radioHideAt = 0; showRadio();
   const tick = () => {
     if (radioTyping !== my) return; // a newer message took over
@@ -4093,11 +4093,16 @@ function renderBolt() {
   el.scrollTop = el.scrollHeight;
   $("boltVoice").textContent = ui.boltVoice ? "🔊" : "🔇"; $("boltVoice").title = ui.boltVoice ? "Bolt talks out loud" : "Bolt is quiet";
 }
-function boltSpeak(text) {
+function boltVoiceOf() { // a calm, clear "ship computer" voice: the best English voice this browser has
+  const vs = speechSynthesis.getVoices().filter((x) => /^en/i.test(x.lang));
+  for (const re of [/Google UK English Female/i, /Samantha/i, /Aria|Jenny|Libby|Sonia/i, /Serena|Moira|Karen|Tessa|Zira/i, /female/i]) { const v = vs.find((x) => re.test(x.name)); if (v) return v; }
+  return vs[0];
+}
+function boltSpeak(text, queue) { // queue: radio lines wait their turn; chat answers cut in
   if (!ui.boltVoice || ui.muted || !window.speechSynthesis) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "")); u.pitch = 1.6; u.rate = 1.05;
-  const v = speechSynthesis.getVoices().find((x) => /^en/i.test(x.lang)); if (v) u.voice = v;
+  if (!queue) speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ",")); u.pitch = .9; u.rate = .97;
+  const v = boltVoiceOf(); if (v) u.voice = v;
   speechSynthesis.speak(u);
 }
 function boltAnswer(text) {
