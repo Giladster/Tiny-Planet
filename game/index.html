@@ -365,6 +365,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="group" data-tab="ship"><span class="label">Body</span><div class="choice" id="hulls"></div></div>
   <div class="group" data-tab="ship"><span class="label">Wings</span><div class="choice" id="wings"></div></div>
   <div class="group" data-tab="ship"><span class="label">Engines</span><div class="choice" id="engines"></div></div>
+  <div class="group" data-tab="ship"><span class="small">Silver Hawk model: <a href="https://sketchfab.com/3d-models/spaceship-8dc6c42edd9e4ddeb9283bd5f47701fc" target="_blank" rel="noopener">SpaceShip</a> by JazOone (CC BY 4.0)</span></div>
   <div class="group" data-tab="style"><span class="label">Extras</span><div class="choice" id="extras"></div></div>
   <div class="group" data-tab="style"><span class="label">Finish</span><div class="choice" id="finishes"></div></div>
   <div class="group" data-tab="style"><span class="label">Colors</span>
@@ -596,7 +597,7 @@ function shapeK(x, y, z, s, amt, seed) { // how far the ground is from the centr
 const PATTERNS = { none: "None", stripes: "Stripes", checker: "Checks", holes: "Holes", spots: "Spots" };
 const designFrom = (key, seed = 1) => ({ template: key, seed, ...structuredClone(TEMPLATES[key]) });
 
-const HULLS = { interceptor: "Interceptor", stealth: "Stealth", manta: "Manta", hammerhead: "Hammerhead", corvette: "Corvette", dart: "Dart", rocket: "Rocket", saucer: "Saucer", battleship: "Battleship", warden: "Spiral Warden", raptor: "Spiral Raptor", falcon: "Falcon", shark: "Shark", beetle: "Beetle", needle: "Racer", hauler: "Hauler", crystal: "Crystal", cruiser: "Cruiser", squid: "Squid", van: "Space van", duck: "Rubber duck", toaster: "Toaster", burger: "Burger" };
+const HULLS = { interceptor: "Interceptor", stealth: "Stealth", manta: "Manta", hammerhead: "Hammerhead", corvette: "Corvette", dart: "Dart", rocket: "Rocket", saucer: "Saucer", battleship: "Battleship", warden: "Spiral Warden", raptor: "Spiral Raptor", hawk: "Silver Hawk", falcon: "Falcon", shark: "Shark", beetle: "Beetle", needle: "Racer", hauler: "Hauler", crystal: "Crystal", cruiser: "Cruiser", squid: "Squid", van: "Space van", duck: "Rubber duck", toaster: "Toaster", burger: "Burger" };
 const WINGS = { none: "None", swept: "Swept", delta: "Delta", forward: "Forward swept", bat: "Bat", xwing: "X-wings", booms: "Twin booms", wide: "Wide", ring: "Ring" };
 const EXTRAS = { siren: "Police siren", flag: "Pirate flag", drill: "Drill", glow: "Glow strips", lights: "Wing lights", fins: "Tail fins", cannons: "Side cannons", turret: "Turret", spikes: "Spikes", antenna: "Antenna", spoiler: "Spoiler", shield: "Shield bubble", hat: "Party hat", eyes: "Googly eyes" };
 const FLAMES = { cone: "Cone", long: "Long jet", wide: "Wide", ball: "Plasma ball", twin: "Split", ring: "Ring" };
@@ -642,6 +643,7 @@ const PRESETS = {
   battleship:{ label: "Battleship", hull: "battleship", wings: "wide", engines: 4, extras: ["cannons", "antenna", "turret", "lights"], body: "#7d8799", accent: "#ffb547", glow: "#ffb547", flame: "#ff8a3a", finish: "metal", size: 2.2 },
   warden:    { label: "Spiral Warden", hull: "warden", wings: "none", engines: 4, extras: [], body: "#7a8292", accent: "#c41a1c", glow: "#ff3b1e", flame: "#ff5030", finish: "metal", size: 2 },
   raptor:    { label: "Spiral Raptor", hull: "raptor", wings: "none", engines: 2, extras: [], body: "#565d6b", accent: "#c4161c", glow: "#ff3b1f", flame: "#ff6a30", finish: "metal", size: 1.3 },
+  hawk:      { label: "Silver Hawk", hull: "hawk", wings: "none", engines: 2, extras: [], body: "#c8ccd4", accent: "#3a4150", glow: "#6fe3ff", flame: "#6fe3ff", finish: "metal", size: 1.6 },
   duck:      { label: "Funny duck", hull: "duck", wings: "none", engines: 1, extras: ["hat", "eyes"], body: "#ffd23f", accent: "#ff8a1f", glow: "#ff5ab4", flame: "#ff5ab4", finish: "matte", size: 1.3 },
   falcon:    { label: "Falcon", hull: "falcon", wings: "none", engines: 1, extras: ["antenna", "lights"], body: "#b9bcc4", accent: "#6a6e78", glow: "#8fd0ff", flame: "#8fd0ff", finish: "matte", size: 1.4 },
   shark:     { label: "Shark", hull: "shark", wings: "none", engines: 2, extras: ["eyes"], body: "#5a7a9a", accent: "#ffffff", glow: "#6fe3ff", flame: "#6fe3ff", finish: "matte", size: 1.3 },
@@ -2686,6 +2688,9 @@ const BLENDER_SHIPS = {
   raptor: { file: "spiral_raptor.glb", fallback: "interceptor", tint: { Armor: "body", Red: "accent", Neon: "glow" }, lights: ["NavL", "NavR", "TailL", "TailR"],
     flames: [[-.055, -.004, -.31, .95], [.055, -.004, -.31, .95], [0, .02, -.295, .55]],
     muzzles: [[-.19, -.03, .19], [.19, -.03, .19]], len: .65, radius: .34 },
+  // free model from Sketchfab (see art/silver-hawk); it keeps its own paint, so no tint
+  hawk: { file: "silver_hawk.glb", fallback: "interceptor", tint: {}, lights: [],
+    flames: [[-.07, .015, -.3, 1.05], [.07, .015, -.3, 1.05]], muzzles: [[-.1, -.02, .26], [.1, -.02, .26]], len: .62, radius: .2 },
   // ships flying around the galaxy (pirates, traders, police, alien saucers); player quick ships with these bodies use them too
   shark: { file: "krell_raider.glb", fallback: "shark", tint: { Hull: "body", Trim: "accent", Neon: "glow" }, lights: ["NavL", "NavR"],
     flames: [[-.045, -.002, -.303, .9], [.045, -.002, -.303, .9]], muzzles: [[-.13, -.025, .16], [.13, -.025, .16]], len: .62, radius: .32 },
