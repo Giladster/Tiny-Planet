@@ -797,16 +797,16 @@ const sfx = (() => {
   }
   const bufs = {}; // recorded sounds from game/sounds, loaded once
   function loadBuf(name) { return bufs[name] ??= fetch("sounds/" + name).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).catch(() => null); }
-  let mus = null, drone = null;
-  function playMusic(kind) { // calm music while exploring, intense music in a fight; they cross-fade
+  let mus = null, drone = null; const playing = new Set();
+  function playMusic(kind) { // quiet music for normal play, loud music only in a fight; only one plays, they cross-fade
     if (!ac || mus?.kind === kind) return;
-    const old = mus, me = mus = { kind }, t = ac.currentTime;
-    if (old?.g) { old.g.gain.setTargetAtTime(.0001, t, 1.8); setTimeout(() => old.src?.stop(), 9000); }
+    const me = mus = { kind }, t = ac.currentTime;
+    for (const p of playing) { p.g.gain.cancelScheduledValues(t); p.g.gain.setTargetAtTime(.0001, t, kind === "battle" ? .5 : 1.5); playing.delete(p); setTimeout(() => p.src.stop(), 8000); }
     loadBuf(kind === "battle" ? "music-intense.mp3" : "music-calm.mp3").then((b) => {
       if (!b || mus !== me) return;
       const s = ac.createBufferSource(), g = gain(); s.buffer = b; s.loop = true; s.loopStart = 6; s.loopEnd = b.duration - 8;
-      g.gain.value = .0001; g.gain.setTargetAtTime(kind === "battle" ? .42 : .34, ac.currentTime, kind === "battle" ? .8 : 2.5);
-      s.connect(g); out(g, 1, .12); s.start(0, kind === "battle" ? 20 : 0); me.src = s; me.g = g;
+      g.gain.value = .0001; g.gain.setTargetAtTime(kind === "battle" ? .4 : .13, ac.currentTime, kind === "battle" ? .6 : 2.5);
+      s.connect(g); out(g, 1, .12); s.start(0, kind === "battle" ? 20 : 0); me.src = s; me.g = g; playing.add(me);
       if (drone) drone.gain.setTargetAtTime(.018, ac.currentTime, 3); // the old hum steps back under the music
     });
   }
@@ -848,8 +848,8 @@ const sfx = (() => {
     engine(thrust, boost, flying = true) {
       if (!eng) return; const t = ac.currentTime;
       eng.eg.gain.setTargetAtTime((flying ? .01 + thrust * .04 + (boost ? .035 : 0) : 0) * (eng.hs ? .45 : 1), t, .25);
-      eng.hg.gain.setTargetAtTime(flying ? .55 + thrust * .45 + (boost ? .35 : 0) : 0, t, .3);
-      if (eng.hs) eng.hs.playbackRate.setTargetAtTime(.82 + thrust * .2 + (boost ? .28 : 0), t, .45);
+      eng.hg.gain.setTargetAtTime(flying ? .22 + thrust * .85 + (boost ? .35 : 0) : 0, t, thrust > .1 ? .08 : .25); // quiet when coasting, roars on any move
+      if (eng.hs) eng.hs.playbackRate.setTargetAtTime(.8 + thrust * .25 + (boost ? .28 : 0), t, .2);
       eng.el.frequency.setTargetAtTime(220 + thrust * 380 + (boost ? 900 : 0), t, .3);
       eng.saw.frequency.setTargetAtTime(44 + thrust * 18 + (boost ? 34 : 0), t, .3);
       eng.rg.gain.setTargetAtTime(boost ? .06 : 0, t, boost ? .08 : .35);
@@ -5989,10 +5989,11 @@ function thrusterFx(dt, m) {
   jets.outMat.color.set(state.ship.flame).multiplyScalar(1.5);
   if (lit) sfx.thruster(1);
 }
-let fightUntil = 0;
-function inFight() { // fight music: you shot or got hit lately, or you're in the arena or a pirate raid; it lingers a bit after
-  const now = clock(), shot = Math.max(-99, ...Object.entries(lastShot).filter(([k]) => k !== "noGadget").map(([, v]) => v));
-  if (arena || raid || now - lastPlayerHit < 6 || now - shot < 4) fightUntil = now + 14;
+let fightUntil = 0, foeCheck = 0, foeNear = false;
+function inFight() { // loud music only in a real fight: an angry ship close by, you got hit, or an arena wave; it lingers a bit after
+  const now = clock();
+  if (now > foeCheck) { foeCheck = now + .5; foeNear = npcs.some((n) => !n.dead && (n.hostile || attackers.has(n)) && n.group.position.distanceTo(ship.position) < 160); }
+  if (foeNear || now - lastPlayerHit < 6 || arena?.bots?.length) fightUntil = now + 12;
   return now < fightUntil;
 }
 function flyStep(dt) {
@@ -6094,7 +6095,7 @@ function flyStep(dt) {
   const boosting = boost && thrust;
   updateBoostFx(dt, boosting && throttle > .6); updateEngineTrail(dt, spd, boostFx.k); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
   if (boosting && !wasBoost) { sfx.boostKick(); camFx.kick = 9; shake = Math.max(shake, .05 * L); }
-  wasBoost = boosting; sfx.engine(thrust ? 1 : 0, boosting); sfx.music(inFight() ? "battle" : "calm"); sfx.rush(spd, megaK); flyBys(spd);
+  wasBoost = boosting; sfx.engine(Math.max(thrust ? 1 : 0, Math.abs(rcs.sx), Math.abs(rcs.sy), k("KeyS") ? .8 : 0, Math.min(1, (angVel.length() + Math.abs(turn.x) + Math.abs(turn.y) + Math.abs(turn.z) * .4) / 1.4)), boosting); // every move fires the engines sfx.music(inFight() ? "battle" : "calm"); sfx.rush(spd, megaK); flyBys(spd);
   // HUD
   $("hudSpeed").textContent = fmt(vel.length() * 10);
   if (nav) {
