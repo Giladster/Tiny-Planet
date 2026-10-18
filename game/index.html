@@ -462,11 +462,11 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
     <kbd>C</kbd><span>barrel roll to dodge shots</span>
     <kbd>N</kbd><span>atom bomb: destroys a planet in one hit</span>
     <kbd>Shift</kbd><span>super boost</span>
-    <kbd>A / D</kbd><span>bank and turn left / right</span>
+    <kbd>A / D</kbd><span>slide left / right</span>
     <kbd>← → ↑ ↓</kbd><span>turn with keys</span>
     <kbd>Q / E</kbd><span>roll</span>
-    <kbd>Space</kbd><span>pull the nose up</span>
-    <kbd>Ctrl / ⌘ / X</kbd><span>push the nose down</span>
+    <kbd>Space</kbd><span>fly up</span>
+    <kbd>Ctrl / ⌘ / X</kbd><span>fly down</span>
     <kbd>L</kbd><span>fire your gun (or hold the mouse button) · rail gun: hold to charge, let go to fire</span>
     <kbd>I</kbd><span>talk to the ship you aim at</span>
     <kbd>F</kbd><span>heavy weapon (or right click): torpedo, drones or gravity bomb</span>
@@ -4103,7 +4103,7 @@ const BOLT_FAQ = [
   [/pirate|raid|wanted|bounty/, "From level 2 pirates raid our planet. Shoot them all within 2 minutes! Wanted pirates are listed in 📋 Missions with a Hunt button. 🏴‍☠️"],
   [/top|rank|fame|famous/, "Fame comes from XP, buildings, raids, arena waves and bounties. Check 🏆 Top 100 to see your rank! 🏆"],
   [/style|robot city|candy|jungle|ice|lava|toxic/, "At level 3, pick a civilization style in 🪐 My planet → Planet info. Each style gives a bonus, like Lava forge for +15% damage. 🎨"],
-  [/fly|control|key|steer|move/, "Press Fly, click to lock the mouse, and steer with it. W goes forward, S brakes, Shift boosts, A / D turn, Space up, Ctrl down. ⚙ → Flight controls shows all keys. 🚀"],
+  [/fly|control|key|steer|move/, "Press Fly, click to lock the mouse, and steer with it. W goes forward, S brakes, Shift boosts, A / D slide, Space up, Ctrl down. ⚙ → Flight controls shows all keys. 🚀"],
   [/heal|health|hp|repair/, "Your ship heals by itself after a few seconds without getting hit. Stay out of fire for a bit! 🛠"],
   [/prank|toilet|duck|statue/, "Pick a prank in 😈 Prank, aim at a planet and press P. Pranking other players' planets needs level 5. 😈"],
 ];
@@ -4952,7 +4952,7 @@ function enterWorld(you, world) {
 // ================= flying =================
 const keys = new Set(), vel = new THREE.Vector3(), head = new THREE.Quaternion();
 const turn = new THREE.Vector3(), mouseTurn = new THREE.Vector2(), pendingTurn = new THREE.Vector2(), angVel = new THREE.Vector2(), lean = new THREE.Vector2(), leanQ = new THREE.Quaternion(), camPos = new THREE.Vector3();
-const rcs = { prev: {}, spin: new THREE.Vector3(), acc: new THREE.Vector3(), lastSnd: 0, fv: 0, fa: 0 }, _tv2 = new THREE.Vector2(), _tv3 = new THREE.Vector3(); // side-thruster state, see thrusterFx
+const rcs = { prev: {}, spin: new THREE.Vector3(), acc: new THREE.Vector3(), lastSnd: 0, fv: 0, fa: 0, sx: 0, sy: 0 }, _tv2 = new THREE.Vector2(), _tv3 = new THREE.Vector3(); // side-thruster state, see thrusterFx
 let throttle = 0, lockTarget = null, lockCand = null, lockT = 0;
 const camFx = { spd: null, acc: 0, push: 0, kick: 0, up: new THREE.Vector3(0, 1, 0), look: new THREE.Vector2() };
 function flyBys(spd) { // a whoosh when a ship zooms past you
@@ -5357,7 +5357,7 @@ function startFlying() { // only switches to flight; the ship waits until you pr
   camAnim = null; viewShift.set(0, 0); camera.clearViewOffset();
   mode = "fly"; document.body.classList.add("flying");
   controls.enabled = false; tip.hidden = true;
-  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); angVel.set(0, 0); rcs.spin.set(0, 0, 0); rcs.acc.set(0, 0, 0); rcs.fv = rcs.fa = 0; lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
+  placeOrbit(orbitT); ship.scale.setScalar(1); head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); angVel.set(0, 0); rcs.spin.set(0, 0, 0); rcs.acc.set(0, 0, 0); rcs.fv = rcs.fa = rcs.sx = rcs.sy = 0; lean.set(0, 0); leanQ.identity(); roll = null; throttle = 0; lockTarget = lockCand = null; camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0); $("hudCredits").textContent = Math.floor(wallet.credits); model.quaternion.identity();
   vel.set(0, 0, 0);
   aimNdc.set(0, 0); $("crosshair").style.left = "50%"; $("crosshair").style.top = "50%";
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
@@ -5957,6 +5957,9 @@ function thrusterFx(dt, m) {
   // braking and dropping out of boost: two jets at the nose fire forward
   const back = Math.max(m.brake, m.retro);
   if (back > .02) for (const x of [.3, -.3]) jet("b" + x, x, .04, .3, x * 2.6, .25, 1, Math.min(1.4, back * 1.4)); // angled out so you can see them from behind
+  // sliding: jets on the far side push you, so they fire out the way you came from
+  if (m.strafe) for (const z of [.22, -.24]) jet("s" + z, m.strafe * .34, 0, z, m.strafe, 0, 0, 1);
+  if (m.lift) for (const x of [.22, -.22]) jet("l" + x, x, -m.lift * .12, 0, 0, -m.lift, 0, 1);
   // pressing go or boost: a punch of fire out of the main engines
   const fresh = m.thrust && !rcs.prev["t" + m.thrust]; rcs.prev.t1 = m.thrust === 1 || (m.thrust === 2 && rcs.prev.t1); rcs.prev.t2 = m.thrust === 2;
   if (fresh) for (const f of ship.userData.flames || []) { f.getWorldPosition(_rp); for (let i = 0; i < (m.thrust > 1 ? 14 : 7); i++) fire.spawn(_rp, vel.clone().addScaledVector(FWD.clone().applyQuaternion(head), -rnd(4, 9) * (m.thrust > 1 ? 1.6 : 1)).add(_rv.randomDirection().multiplyScalar(1.2)), rnd(.15, .3), L * rnd(.08, .14), RCS_HOT, C(state.ship.flame, 1.4), 1.5, 2.5); }
@@ -6006,10 +6009,9 @@ function flyStep(dt) {
   _tv2.copy(pendingTurn).multiplyScalar(pull).clampScalar(-maxRate, maxRate);
   angVel.lerp(_tv2, 1 - Math.exp(-dt * spinUp));
   const my = angVel.x * dt, mx = angVel.y * dt; pendingTurn.x -= my; pendingTurn.y -= mx;
-  // keys steer in round curves too: A / D (or ← →) bank and swing you round, Space / Ctrl (or ↑ ↓) pull the nose up or down
-  const down = k("ControlLeft") || k("ControlRight") || k("MetaLeft") || k("MetaRight") || k("KeyX");
-  const keyYaw = Math.sign((k("ArrowLeft") || k("KeyA") ? 1 : 0) - (k("ArrowRight") || k("KeyD") ? 1 : 0));
-  const keyPitch = Math.sign((k("ArrowDown") || down ? 1 : 0) - (k("ArrowUp") || k("Space") ? 1 : 0));
+  // only the mouse (and the arrow keys) turn the nose; A / D and Space / Ctrl slide the ship with thrusters further down
+  const keyYaw = (k("ArrowLeft") ? 1 : 0) - (k("ArrowRight") ? 1 : 0);
+  const keyPitch = (k("ArrowDown") ? 1 : 0) - (k("ArrowUp") ? 1 : 0);
   const rollKey = (k("KeyE") ? 1 : 0) - (k("KeyQ") ? 1 : 0);
   turn.lerp(_tv3.set(keyPitch * 1.1 * boostK, keyYaw * 1.3 * boostK, rollKey * 2), 1 - Math.exp(-dt * 3.2 / heavy)); // keys swing the turn in and out gently
   head.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(turn.x * dt + my, turn.y * dt + mx, turn.z * dt))).normalize();
@@ -6019,7 +6021,8 @@ function flyStep(dt) {
   lean.lerp(new THREE.Vector2((mx + turn.y * dt) / Math.max(dt, .001), (my + turn.x * dt) / Math.max(dt, .001)), Math.min(1, dt * 4));
   const lx = THREE.MathUtils.clamp(lean.x, -2, 2), ly = THREE.MathUtils.clamp(lean.y, -2, 2), tt = clock();
   const idle = Math.max(0, 1 - vel.length() / 6), surge = THREE.MathUtils.clamp(rcs.fa / 120, -.16, .14);
-  leanQ.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(ly * .16 + surge + Math.sin(tt * .9) * .03 * idle, lx * .12, lx * .62 + Math.sin(tt * .7) * .05 * idle, "YXZ")), Math.min(1, dt * 5));
+  const slideK = 1 - Math.exp(-dt * 4); rcs.sx += (((k("KeyD") ? 1 : 0) - (k("KeyA") ? 1 : 0)) - rcs.sx) * slideK; rcs.sy += (((k("Space") ? 1 : 0) - (k("ControlLeft") || k("ControlRight") || k("MetaLeft") || k("MetaRight") || k("KeyX") ? 1 : 0)) - rcs.sy) * slideK;
+  leanQ.slerp(new THREE.Quaternion().setFromEuler(new THREE.Euler(ly * .16 + surge - rcs.sy * .14 + Math.sin(tt * .9) * .03 * idle, lx * .12, lx * .62 - rcs.sx * .42 + Math.sin(tt * .7) * .05 * idle, "YXZ")), Math.min(1, dt * 5));
   model.quaternion.copy(leanQ);
   const buzz = throttle * .004 * size * (boost ? 2.2 : 1); // the engines make the hull hum a tiny bit
   model.position.set((Math.random() - .5) * buzz, Math.sin(tt * 1.3) * .012 * size * idle + (Math.random() - .5) * buzz, 0);
@@ -6034,20 +6037,31 @@ function flyStep(dt) {
   megaStep(dt, boost && thrust);
   const max = mega ? MEGA_SPEED : boost && thrust ? 150 : 28;
   vel.addScaledVector(fwd, throttle * (mega ? MEGA_SPEED * 1.2 : boost ? 300 : 47) * dt);
+  // A / D slide left and right, Space / Ctrl slide up and down: side thrusters push, and the ship leans into the move
+  const strafe = (k("KeyD") ? 1 : 0) - (k("KeyA") ? 1 : 0), lift = (k("Space") ? 1 : 0) - (k("ControlLeft") || k("ControlRight") || k("MetaLeft") || k("MetaRight") || k("KeyX") ? 1 : 0);
+  if (strafe) vel.addScaledVector(right, strafe * 30 * dt);
+  if (lift) vel.addScaledVector(headUp, lift * 26 * dt);
   const braking = k("KeyS");
   if (braking) { const f = vel.dot(fwd); if (f > .5) vel.addScaledVector(fwd, -Math.min(f, (45 + f * 2.2) * dt)); else vel.addScaledVector(fwd, -16 * dt); } // brake hard, then reverse
   // space has no air, but flight assist swings your drift round after the nose, so every turn is a smooth curve, not a slide
   const fv = vel.dot(fwd), side = vel.clone().addScaledVector(fwd, -fv);
-  if (!roll) vel.addScaledVector(side, -Math.min(1, dt * 3.5));
+  if (!roll && !strafe && !lift) vel.addScaledVector(side, -Math.min(1, dt * 3.5));
+  else if (!roll) { // keep the slide you are pushing, line up the rest
+    const rs = vel.dot(right), us = vel.dot(headUp);
+    if (!strafe) vel.addScaledVector(right, -rs * Math.min(1, dt * 3.5));
+    if (!lift) vel.addScaledVector(headUp, -us * Math.min(1, dt * 3.5));
+    if (strafe && Math.abs(rs) > 26) vel.addScaledVector(right, (Math.sign(rs) * 26 - rs) * Math.min(1, dt * 4)); // side thrusters top out
+    if (lift && Math.abs(us) > 22) vel.addScaledVector(headUp, (Math.sign(us) * 22 - us) * Math.min(1, dt * 4));
+  }
   rcs.fa += ((fv - rcs.fv) / Math.max(dt, .001) - rcs.fa) * Math.min(1, dt * 4); rcs.fv = fv; // speeding up or slowing down, for the lean
   if (fv < -12) vel.addScaledVector(fwd, -12 - fv); // reverse is slow
   if (!thrust && !braking) vel.multiplyScalar(Math.exp(-.18 * dt)); // coasting: slows down only a little
-  const over = mega ? 0 : vel.length() - max; // let go of boost: the front thrusters fire and pull you back to cruising speed fast
-  if (over > 0) vel.setLength(max + over * Math.exp(-dt * 3.2));
+  const over = mega ? 0 : vel.dot(fwd) - max; // let go of boost: the front thrusters fire and pull you back to cruising speed fast
+  if (over > 0) vel.addScaledVector(fwd, -over * (1 - Math.exp(-dt * 3.2)));
   if (mega && vel.length() > MEGA_SPEED) vel.setLength(MEGA_SPEED);
   if (!mega && vel.length() > 170) vel.multiplyScalar(Math.exp(-dt * 3)); // dropping out of mega boost slows you down fast
   ship.position.addScaledVector(vel, dt);
-  thrusterFx(dt, { brake: braking && fv > 1 ? 1 : 0, retro: Math.min(1, Math.max(0, over - 10) / 50), thrust: thrust ? (boost ? 2 : 1) : 0 });
+  thrusterFx(dt, { strafe, lift, brake: braking && fv > 1 ? 1 : 0, retro: Math.min(1, Math.max(0, over - 10) / 50), thrust: thrust ? (boost ? 2 : 1) : 0 });
   for (const p of planets) { // bump off planets
     if (!p.alive) continue;
     const d = ship.position.clone().sub(p.group.position), min = p.R * 1.2 * (p.maxK || 1) + ship.userData.radius;
