@@ -18,3 +18,13 @@ Gilad downloaded them; they were shrunk for the browser (planets 2048x1024, skie
 | stars.jpg, stars_milky_way.jpg | Star sky and Milky Way sky (wrap on a big sphere) |
 
 sky_alien_nebula.jpg is credited in ../models/CREDITS.md.
+
+## Nebula skies and extra maps (Sketchfab, CC BY 4.0)
+| File | Model | Maker | License |
+|---|---|---|---|
+| sky_nebula_16k.jpg (4096x2048, wraps on a big sphere) | [Nebula skybox 16k](https://sketchfab.com/3d-models/nebula-skybox-16k-0d1e380993a842e6a0111f09c5cb6bdc) | Jungle Jim | CC BY 4.0 |
+| sky_nebula_18.jpg (3840x2160, made for a UV sphere dome) | [Space nebula HDRI panorama 360 skydome](https://sketchfab.com/3d-models/space-nebula-hdri-panorama-360-skydome-5764c31489ad4504a8e49e1cde22ed3a) | Aliaksandr.melas | CC BY 4.0 |
+| mercury_normal.jpg, mercury_roughness.jpg (bump and shine maps for mercury.jpg) | Likely [Mercury (planet)](https://sketchfab.com/3d-models/mercury-planet-ccb6c6a9ac3742109cc67c0f16032b49) | SebastianSosnowski | CC BY 4.0 (match found by web search, page not opened) |
+
+Left out on purpose: "Grassland planet" (its file is named after Star Wars' Dantooine and the maker/license could not be found)
+and "Need some space?" star cloud by Loïc Norgeot (license could not be confirmed; he uses NonCommercial on some models).
