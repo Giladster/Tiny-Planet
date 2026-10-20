@@ -350,9 +350,8 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   </div>
   <div class="group" data-tab="people"><span class="label">Your people</span>
     <div class="choice" id="peopleKinds"></div>
-    <div class="row"><label class="label">skin <input type="color" id="pp-skin"></label><label class="label">shirts <input type="color" id="pp-shirt"></label><label class="label">pants <input type="color" id="pp-pants"></label></div>
-    <div class="choice" id="peopleMix"></div>
     <label class="slider">People size<input type="range" id="pp-size" min="0.6" max="2.2" step="0.05"></label>
+    <span class="small">Creatures by Quaternius (CC0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
   </div>
 </section>
 
@@ -1462,7 +1461,7 @@ function makeDecor(type, d = {}) {
     m(new RoundedBoxGeometry(.07, .06, .11, 3, .025), mats.mail, .19);
     m(new THREE.BoxGeometry(.006, .06, .012), mats.flag, .22, .04, -.02);
     m(new THREE.BoxGeometry(.006, .025, .03), mats.flag, .25, .04, -.004);
-  } else if (type === "alien") { const a = buildAlien(d); g.add(a); g.userData.wave = a.userData.wave; }
+  } else if (type === "alien") { const a = buildAlien(d); g.add(a); g.userData.fig = a.userData.fig; }
   else if (type === "turret") buildDefenseTower(g, m);
   else if (type !== "sign") decorExtra(type, g, m);
   else {
@@ -1485,7 +1484,6 @@ mats.bronze = (() => { // see-through iron lattice for the Eiffel tower
 })();
 mats.glass = new THREE.MeshPhysicalMaterial({ color: 0x9fe8ff, roughness: .05, metalness: .1, transparent: true, opacity: .55, clearcoat: 1 });
 mats.pad = new THREE.MeshStandardMaterial({ color: 0x2b313d, metalness: .6, roughness: .4 });
-mats.alien = new THREE.MeshStandardMaterial({ color: 0x6ad84a, roughness: .45 });
 const DECOR = { tower: "Tower", house: "House", sign: "Sign", castle: "Castle", base: "Space base", turret: "Defense tower", alien: "Alien", pisa: "Pisa tower", eiffel: "Eiffel tower", magic: "Magic castle" };
 function decorExtra(type, g, m) { // the bigger buildings and famous landmarks
   const H = Math.PI / 2;
@@ -1535,24 +1533,6 @@ function decorExtra(type, g, m) { // the bigger buildings and famous landmarks
     }
     m(new THREE.BoxGeometry(.05, .07, .01), mats.door, .035, 0, .052);
   }
-}
-function makeAlien(text, R) { // a huge friendly alien sitting on the planet, waving and holding a sign
-  const g = new THREE.Group(), add = (geo, mat, p, r = [0, 0, 0], s = [1, 1, 1]) => { const o = new THREE.Mesh(geo, mat); o.position.set(...p); o.rotation.set(...r); o.scale.set(...s); g.add(o); return o; };
-  const eyeW = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .2 }), eyeB = new THREE.MeshBasicMaterial({ color: 0x101010 });
-  add(new THREE.SphereGeometry(.22, 32, 24), mats.alien, [0, .2, 0], [0, 0, 0], [1, 1.1, .9]);
-  add(new THREE.SphereGeometry(.17, 32, 24), mats.alien, [0, .5, .02]);
-  for (const [x, y, s] of [[-.075, .54, 1], [.075, .54, 1], [0, .62, .8]]) { add(new THREE.SphereGeometry(.045 * s, 20, 14), eyeW, [x, y, .14]); add(new THREE.SphereGeometry(.022 * s, 12, 10), eyeB, [x, y, .18]); }
-  add(new THREE.TorusGeometry(.05, .01, 8, 20, Math.PI), eyeB, [0, .45, .15], [0, 0, Math.PI]);
-  for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(.008, .008, .16, 8), mats.alien, [s * .07, .7, 0], [0, 0, -s * .3]); add(new THREE.SphereGeometry(.022, 12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.5, .5) }), [s * .095, .78, 0]); }
-  for (const s of [-1, 1]) add(new THREE.CapsuleGeometry(.05, .18, 6, 16), mats.alien, [s * .1, .06, .16], [Math.PI / 2, 0, 0]);
-  const wave = new THREE.Group(); wave.position.set(.2, .3, 0); g.add(wave);
-  const arm = new THREE.Mesh(new THREE.CapsuleGeometry(.04, .2, 6, 16), mats.alien); arm.position.y = .13; wave.add(arm);
-  const hand = new THREE.Mesh(new THREE.SphereGeometry(.06, 16, 12), mats.alien); hand.position.y = .27; wave.add(hand);
-  const hold = new THREE.Group(); hold.position.set(-.2, .3, .05); hold.rotation.z = .5; g.add(hold);
-  const arm2 = new THREE.Mesh(new THREE.CapsuleGeometry(.04, .16, 6, 16), mats.alien); arm2.position.set(0, .1, .04); arm2.rotation.x = -.6; hold.add(arm2);
-  const sign = makeDecor("sign", { text: text || "HELLO!" }); sign.scale.setScalar(2.4); sign.position.set(-.05, -.2, .16); sign.rotation.z = -.5; hold.add(sign);
-  g.userData.wave = wave; g.scale.setScalar(R / 1.6);
-  return g;
 }
 const photoTex = (file) => { const t = new THREE.TextureLoader().load("textures/" + file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
 const moonPhoto = photoTex("moon.jpg");
@@ -1611,74 +1591,21 @@ function makeSatellite() {
   return g;
 }
 
-const ALIENS = { classic: "Classic green", zorg: "Three-eyed Zorg", blob: "Purple blob", octo: "Space octopus" };
-mats.alienGreen = new THREE.MeshStandardMaterial({ color: 0x86e35c, roughness: .4 });
-mats.alienPurple = new THREE.MeshStandardMaterial({ color: 0xa36ae0, roughness: .3, metalness: .05 });
-mats.alienOrange = new THREE.MeshStandardMaterial({ color: 0xff8a3a, roughness: .45 });
-mats.eyeBlack = new THREE.MeshPhysicalMaterial({ color: 0x050505, roughness: .05, clearcoat: 1 });
-mats.eyeWhite = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .2 });
-mats.glowTip = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.5, .5) });
-function buildAlien(d) { // friendly alien characters that sit or stand and can hold a sign
-  const kind = d.kind || "classic", sit = (d.pose || "sit") === "sit", g = new THREE.Group();
-  const add = (geo, mat, p, r = [0, 0, 0], s = [1, 1, 1], parent = g) => { const o = new THREE.Mesh(geo, mat); o.position.set(...p); o.rotation.set(...r); o.scale.set(...s); parent.add(o); return o; };
-  const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 6, 16), H = Math.PI / 2;
-  let wave, hold, chest;
-  if (kind === "classic" || kind === "zorg") {
-    const skin = kind === "classic" ? mats.alienGreen : mats.alien, hip = sit ? .07 : .2;
-    for (const s of [-1, 1]) {
-      if (sit) { add(cap(.024, .12), skin, [s * .05, hip, .08], [H, 0, 0]); add(cap(.022, .06), skin, [s * .05, .035, .16]); add(new THREE.SphereGeometry(.03, 12, 10), skin, [s * .05, .005, .18], [0, 0, 0], [1, .5, 1.4]); }
-      else { add(cap(.024, .17), skin, [s * .05, .11, 0]); add(new THREE.SphereGeometry(.03, 12, 10), skin, [s * .05, .01, .02], [0, 0, 0], [1, .5, 1.4]); }
-    }
-    add(cap(.065, .12), skin, [0, hip + .11, 0], [0, 0, 0], [1, 1, .8]); chest = hip + .16;
-    add(new THREE.CylinderGeometry(.018, .022, .06, 12), skin, [0, hip + .24, 0]);
-    if (kind === "classic") {
-      add(new THREE.SphereGeometry(.13, 32, 24), skin, [0, hip + .37, 0], [0, 0, 0], [1, 1.12, .95]);
-      add(new THREE.SphereGeometry(.06, 20, 14), skin, [0, hip + .29, .03], [0, 0, 0], [.8, .9, .8]); // narrow chin
-      for (const s of [-1, 1]) add(new THREE.SphereGeometry(.048, 24, 16), mats.eyeBlack, [s * .055, hip + .36, .098], [0, s * .35, s * .5], [1.6, .72, .55]);
-      add(new THREE.TorusGeometry(.012, .003, 6, 14, Math.PI), mats.eyeBlack, [0, hip + .285, .085], [0, 0, Math.PI]);
-    } else {
-      add(new THREE.SphereGeometry(.14, 32, 24), skin, [0, hip + .38, 0]);
-      for (const [x, y, k] of [[-.055, .38, 1], [.055, .38, 1], [0, .45, .8]]) { add(new THREE.SphereGeometry(.035 * k, 20, 14), mats.eyeWhite, [x, hip + y, .115]); add(new THREE.SphereGeometry(.017 * k, 12, 10), mats.eyeBlack, [x, hip + y, .145]); }
-      add(new THREE.TorusGeometry(.035, .007, 8, 20, Math.PI), mats.eyeBlack, [0, hip + .32, .125], [0, 0, Math.PI]);
-      for (const s of [-1, 1]) { add(new THREE.CylinderGeometry(.006, .006, .13, 8), skin, [s * .06, hip + .55, 0], [0, 0, -s * .3]); add(new THREE.SphereGeometry(.018, 12, 10), mats.glowTip, [s * .08, hip + .62, 0]); }
-    }
-    wave = new THREE.Group(); wave.position.set(.075, hip + .2, 0); g.add(wave);
-    add(cap(.016, .15), skin, [0, .09, 0], [0, 0, 0], [1, 1, 1], wave);
-    add(new THREE.SphereGeometry(.026, 14, 10), skin, [0, .18, 0], [0, 0, 0], [1, 1, 1], wave);
-    for (const a of [-.4, 0, .4]) add(cap(.006, .03), skin, [Math.sin(a) * .02, .21, 0], [0, 0, -a], [1, 1, 1], wave);
-    hold = new THREE.Group(); hold.position.set(-.075, hip + .2, 0); g.add(hold);
-    add(cap(.016, .12), skin, [0, -.02, .06], [H * .9, 0, 0], [1, 1, 1], hold);
-  } else if (kind === "blob") {
-    const lift = sit ? 0 : .06;
-    add(new THREE.SphereGeometry(.2, 40, 28), mats.alienPurple, [0, .19 + lift, 0], [0, 0, 0], [1, sit ? .85 : 1.05, 1]);
-    add(new THREE.SphereGeometry(.085, 24, 18), mats.eyeWhite, [0, .27 + lift, .15]); add(new THREE.SphereGeometry(.04, 16, 12), mats.eyeBlack, [0, .27 + lift, .225]);
-    add(new THREE.TorusGeometry(.05, .008, 8, 20, Math.PI), mats.eyeBlack, [0, .15 + lift, .18], [0, 0, Math.PI]);
-    wave = new THREE.Group(); wave.position.set(.18, .2 + lift, 0); g.add(wave);
-    add(cap(.03, .14), mats.alienPurple, [0, .09, 0], [0, 0, 0], [1, 1, 1], wave);
-    hold = new THREE.Group(); hold.position.set(-.18, .2 + lift, .02); g.add(hold);
-    add(cap(.03, .1), mats.alienPurple, [0, 0, .06], [H * .9, 0, 0], [1, 1, 1], hold);
-    chest = .22 + lift;
-  } else { // octopus
-    const lift = sit ? 0 : .08;
-    add(new THREE.SphereGeometry(.16, 36, 26), mats.alienOrange, [0, .3 + lift, 0], [0, 0, 0], [1, 1.15, 1]);
-    for (const s of [-1, 1]) { add(new THREE.SphereGeometry(.04, 18, 12), mats.eyeWhite, [s * .06, .32 + lift, .13]); add(new THREE.SphereGeometry(.02, 12, 10), mats.eyeBlack, [s * .06, .32 + lift, .165]); }
-    for (let i = 0; i < 6; i++) {
-      const a = i / 6 * Math.PI * 2 + .3, r0 = .1, r1 = .26;
-      const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(Math.cos(a) * r0, .2 + lift, Math.sin(a) * r0), new THREE.Vector3(Math.cos(a) * .2, .06 + lift * .5, Math.sin(a) * .2), new THREE.Vector3(Math.cos(a) * r1, .01, Math.sin(a) * r1), new THREE.Vector3(Math.cos(a + .4) * .3, .04, Math.sin(a + .4) * .3)]);
-      g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, .022, 8), mats.alienOrange));
-    }
-    wave = new THREE.Group(); wave.position.set(.14, .26 + lift, 0); g.add(wave);
-    add(cap(.022, .16), mats.alienOrange, [0, .1, 0], [0, 0, .2], [1, 1, 1], wave);
-    hold = new THREE.Group(); hold.position.set(-.14, .26 + lift, .02); g.add(hold);
-    add(cap(.022, .12), mats.alienOrange, [0, -.02, .06], [H * .9, 0, 0], [1, 1, 1], hold);
-    chest = .26 + lift;
-  }
-  if (d.holds !== false) { // the sign it holds up
+const ALIEN_OLD = { classic: "greys", zorg: "sprout", blob: "pinkblob", octo: "squidle" }; // older saves
+function buildAlien(d) { // a big friendly creature (same models as the planet people) that waves or chills, and can hold a sign
+  const g = new THREE.Group(), kind = PEOPLE_KINDS[d.kind] ? d.kind : ALIEN_OLD[d.kind] || "greys";
+  const mesh = new THREE.Mesh(new THREE.BufferGeometry()); mesh.scale.setScalar(2.2); g.add(mesh);
+  if (d.holds !== false) { // the sign it holds up, on a pole next to it
     const s = makeDecor("sign", { text: d.text || "HELLO!", img: d.img });
-    s.scale.setScalar(.9); s.position.set(.07, -.25, .14); hold.add(s);
+    s.scale.setScalar(1.3); s.position.set(.3, 0, .12); s.rotation.y = -.3; g.add(s);
   }
-  g.userData.wave = wave;
+  g.userData.fig = { mesh, kind, wave: (d.pose || "sit") === "stand", ph: Math.random() };
   return g;
+}
+function animFig(f, t, fast) { // show the right baked frame of a big creature
+  const kit = crowdKit(f.kind); if (!kit) return;
+  const clip = fast || f.wave ? "cheer" : "idle", frames = kit.clips[clip], n = frames.length;
+  f.mesh.geometry = frames[Math.floor(((t * (fast ? 1.5 : 1) / kit.dur[clip] + f.ph) % 1) * n) % n]; f.mesh.material = kit.mat;
 }
 function buildDefenseTower(g, m) { // a gun tower that shoots at anyone attacking its planet
   m(new THREE.CylinderGeometry(.06, .08, .14, 20), mats.pad, .07);
@@ -1730,49 +1657,57 @@ const PERSON = (() => { // one small person, about house-sized
     leg: cap(.0095, .036).translate(0, -.027, 0),
   };
 })();
-const personMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, envMapIntensity: .15 });
-const faceMat = new THREE.MeshBasicMaterial({ color: 0x15100c });
-const pantsMat = new THREE.MeshStandardMaterial({ color: 0x2c3550, roughness: .9, envMapIntensity: .15 });
 const LIMB = { armL: new THREE.Vector3(.031, .112, 0), armR: new THREE.Vector3(-.031, .112, 0), legL: new THREE.Vector3(.013, .058, 0), legR: new THREE.Vector3(-.013, .058, 0) };
 const SHIRTS = [0xff5a6e, 0x6fe3ff, 0xffb547, 0x7dff9b, 0xc8a2ff, 0xffffff, 0xff8ad8].map((c) => new THREE.Color(c));
-const SKINS = [0xf2c9a0, 0xc68a5c, 0x8a5a3a, 0xffe0c0].map((c) => new THREE.Color(c));
-const ARMY = new THREE.Color(0x3d6b2e), HELMET = new THREE.Color(0x2a4a1e);
 const MAXPEOPLE = 70;
-const PEOPLE_KINDS = { human: "Humans", green: "Little green men", robot: "Robots", cyclops: "Cyclops", cat: "Cat people", bunny: "Bunnies", blob: "Blobs" };
-const KIND_SKIN = { green: "#7dd35a", robot: "#aab4c4", cyclops: "#b07aff", cat: "#f2a65a", bunny: "#f4efe6", blob: "#ff8ad8" };
-const personGeos = {};
-function personGeo(kind) { // body parts for each kind of people
-  if (personGeos[kind]) return personGeos[kind];
-  const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 4, 10), sph = (r) => new THREE.SphereGeometry(r, 14, 10), both = (f) => mergeGeometries([f(-1), f(1)]);
-  const g = { ...PERSON, extra: null };
-  if (kind === "green") {
-    g.head = sph(.036).scale(1, 1.12, 1).translate(0, .165, 0);
-    g.face = both((s) => sph(.011).scale(1, 1.5, .5).rotateZ(-s * .5).translate(s * .014, .17, .031));
-    g.extra = mergeGeometries([-1, 1].flatMap((s) => [new THREE.CylinderGeometry(.002, .002, .04, 5).rotateZ(-s * .4).translate(s * .016, .214, 0), sph(.006).translate(s * .024, .233, 0)]));
-  } else if (kind === "robot") {
-    g.torso = new THREE.BoxGeometry(.046, .052, .034).translate(0, .089, 0);
-    g.head = new THREE.BoxGeometry(.044, .038, .04).translate(0, .153, 0);
-    g.face = mergeGeometries([new THREE.BoxGeometry(.034, .009, .004).translate(0, .158, .0205), new THREE.BoxGeometry(.018, .003, .003).translate(0, .143, .0205)]);
-    g.extra = mergeGeometries([new THREE.CylinderGeometry(.0018, .0018, .026, 5).translate(0, .184, 0), sph(.005).translate(0, .198, 0)]);
-  } else if (kind === "cyclops") {
-    g.head = sph(.03).translate(0, .154, 0);
-    g.face = mergeGeometries([sph(.012).scale(1, 1, .45).translate(0, .16, .027), PERSON.face.clone().translate(0, -.004, .004)]);
-    g.extra = both((s) => new THREE.ConeGeometry(.005, .02, 6).rotateZ(-s * .4).translate(s * .016, .182, 0));
-  } else if (kind === "cat") {
-    g.extra = mergeGeometries([new THREE.ConeGeometry(.01, .022, 4).rotateZ(.35).translate(-.016, .178, 0), new THREE.ConeGeometry(.01, .022, 4).rotateZ(-.35).translate(.016, .178, 0), new THREE.CylinderGeometry(.004, .003, .06, 6).rotateX(-.9).translate(0, .06, -.035)]);
-  } else if (kind === "bunny") {
-    g.extra = both((s) => cap(.007, .045).scale(1, 1, .5).rotateZ(-s * .15).translate(s * .011, .2, 0));
-  } else if (kind === "blob") {
-    g.torso = sph(.04).scale(1, .85, 1).translate(0, .07, 0);
-    g.head = sph(.024).translate(0, .125, 0);
-    g.face = PERSON.face.clone().translate(0, -.026, -.002);
-  }
-  return (personGeos[kind] = g);
+const WHITE = new THREE.Color(1, 1, 1), SOLDIER_TINT = new THREE.Color(.55, .8, .45);
+// the people of each planet are real animated creatures (Quaternius, CC0): models/creatures/<kind>.glb with clips walk, idle, cheer (and run)
+const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Little imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons" };
+const FLOATERS = new Set(["sprout", "stack", "ghost", "wisp", "squidle", "glub", "buzzer", "alpaking", "dragon"]); // they hover instead of walking
+const OLD_KINDS = { human: "frog", green: "greys", robot: "bee", cyclops: "sprout", cat: "panda", bunny: "pinkblob", blob: "pinkblob" }; // older saves
+const PLANET_KINDS = { Bubblegum: "pinkblob", "Gouda Prime": "mushroom", Melonia: "frog", Inferno: "imp", "Disco Fever": "flamingo", Gloop: "glub", Frostbite: "yeti", "Terra Nova": "panda", "Zorg Prime": "greys", "Krell Station": "dino",
+  Jellyheart: "squidle", Cubix: "stack", Spikestar: "dragon", "Eyeball Prime": "sprout", "Twin Bean": "spikecap", "Mirror Pear": "ghost", "Void Potato": "wisp", "Rainbow Disc": "buzzer" };
+const CROWD_FRAMES = { walk: 10, run: 8, idle: 8, cheer: 10 };
+const crowdKits = {};
+function crowdKit(kind) { // load a creature once and bake its clips into still frames, so a whole crowd can be drawn as a few instanced meshes
+  if (crowdKits[kind] !== undefined) return crowdKits[kind];
+  crowdKits[kind] = null;
+  new GLTFLoader().load("models/creatures/" + kind + ".glb", (gl) => {
+    const root = gl.scene, mixer = new THREE.AnimationMixer(root), meshes = [];
+    root.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    const src = meshes[0].material, mat = new THREE.MeshStandardMaterial({ map: src.map, color: src.color, roughness: .7, metalness: 0, envMapIntensity: .4, emissiveMap: src.map, emissive: new THREE.Color(.22, .22, .22) }); // a little glow of their own so they still read in shade
+    if (src.map) { src.map.generateMipmaps = false; src.map.minFilter = src.map.magFilter = THREE.NearestFilter; } // a small color palette: no blurring the colors together far away
+    const bake = () => { // every mesh's vertices as they are posed right now, in one geometry
+      root.updateMatrixWorld(true);
+      const pos = [], uv = [], idx = []; const v = new THREE.Vector3();
+      for (const m of meshes) {
+        const g = m.geometry, base = pos.length / 3, n = g.attributes.position.count;
+        for (let i = 0; i < n; i++) { m.getVertexPosition(i, v); v.applyMatrix4(m.matrixWorld); pos.push(v.x, v.y, v.z); if (g.attributes.uv) uv.push(g.attributes.uv.getX(i), g.attributes.uv.getY(i)); else uv.push(0, 0); }
+        if (g.index) for (let i = 0; i < g.index.count; i++) idx.push(base + g.index.getX(i)); else for (let i = 0; i < n; i++) idx.push(base + i);
+      }
+      const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); geo.setIndex(idx);
+      return geo;
+    };
+    const clips = {}, dur = {};
+    for (const [name, n] of Object.entries(CROWD_FRAMES)) {
+      const clip = gl.animations.find((a) => a.name === name) || gl.animations.find((a) => a.name === (name === "run" ? "walk" : "idle")); if (!clip) continue;
+      mixer.stopAllAction(); const act = mixer.clipAction(clip); act.play(); dur[name] = clip.duration;
+      clips[name] = Array.from({ length: n }, (_, i) => { mixer.setTime(clip.duration * i / n); return bake(); });
+    }
+    if (FLOATERS.has(kind)) { clips.run = clips.walk; dur.run = dur.walk; clips.walk = clips.idle; dur.walk = dur.idle; } // flyers hover along, and only zoom when scared
+    const box = new THREE.Box3(); clips.idle[0].computeBoundingBox(); box.copy(clips.idle[0].boundingBox);
+    const k = .21 / Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) * .8, (box.max.z - box.min.z) * .8), lift = FLOATERS.has(kind) ? .05 : 0; // every creature about the size of an old person, a bit bigger
+    for (const frames of Object.values(clips)) for (const g of frames) { g.translate(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2); g.scale(k, k, k); g.translate(0, lift, 0); g.computeVertexNormals(); }
+    crowdKits[kind] = { clips, dur, mat };
+  }, undefined, () => { crowdKits[kind] = undefined; });
+  return null;
 }
-function peopleStyle(d) { // what the people of a planet look like
-  const p = d.design && d.design.people; if (p && PEOPLE_KINDS[p.kind]) return p;
-  const kinds = Object.keys(PEOPLE_KINDS), seed = ((d.design && d.design.seed) || 1) + (d.name || "").length * 7;
-  return { kind: d.name === "Zorg Prime" ? "green" : d.name === "Krell Station" ? "robot" : kinds[seed % kinds.length], skin: "", shirt: "", pants: "#2c3550", size: 1 };
+function peopleStyle(d) { // what the people of a planet look like: each planet has its own creatures
+  const p = d.design && d.design.people;
+  if (p && OLD_KINDS[p.kind]) p.kind = OLD_KINDS[p.kind];
+  if (p && PEOPLE_KINDS[p.kind]) return p;
+  const kinds = Object.keys(PEOPLE_KINDS), seed = ((d.design && d.design.seed) || 1) + [...(d.name || "")].reduce((a, c) => a * 31 + c.charCodeAt(0), 7);
+  return { kind: PLANET_KINDS[d.name] || kinds[Math.abs(seed) % kinds.length], size: 1 };
 }
 
 // ================= planet =================
@@ -1932,22 +1867,22 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     else { this.syncPeople(true); this.addSoldiers(data.troops, null); }
   }
   get R() { return this.data.R; }
-  setStyle() { // build the people of this planet in its own look
+  setStyle() { // the people of this planet: its own kind of creature
     this.style = peopleStyle(this.data);
-    const geo = personGeo(this.style.kind), IM = (g, m) => new THREE.InstancedMesh(g, m, 140);
-    if (this.parts) for (const im of Object.values(this.parts)) { this.spin.remove(im); im.dispose(); }
-    if (!this.pantsMat) this.pantsMat = pantsMat.clone();
-    this.pantsMat.color.set(this.style.pants || "#2c3550");
-    this.parts = { torso: IM(geo.torso, personMat), head: IM(geo.head, personMat), face: IM(geo.face, faceMat), armL: IM(geo.arm, personMat), armR: IM(geo.arm, personMat), legL: IM(geo.leg, this.pantsMat), legR: IM(geo.leg, this.pantsMat) };
-    if (geo.extra) this.parts.extra = IM(geo.extra, personMat);
-    for (const im of Object.values(this.parts)) { im.count = 0; im.frustumCulled = false; if (im.material === personMat) im.setColorAt(0, SHIRTS[0]); }
-    this.spin.add(...Object.values(this.parts));
-    for (const p of this.people) this.colorPerson(p);
+    if (this.crowd && this.crowd.kind === this.style.kind) return;
+    if (this.crowd) for (const im of this.crowd.meshes) this.spin.remove(im);
+    this.crowd = { kind: this.style.kind, meshes: [], by: null };
   }
-  colorPerson(p) {
-    const st = this.style, i = p.ci;
-    p.skin = st.skin ? new THREE.Color(st.skin) : st.kind === "human" ? SKINS[i % SKINS.length] : new THREE.Color(KIND_SKIN[st.kind]).offsetHSL(((i % 5) - 2) * .02, 0, ((i % 3) - 1) * .05);
-    p.shirt = p.soldier ? ARMY : st.shirt ? new THREE.Color(st.shirt) : SHIRTS[i % SHIRTS.length];
+  crowdMeshes() { // one instanced mesh per baked frame, made once the creature has loaded
+    const c = this.crowd; if (c.by) return c.by;
+    const kit = crowdKit(c.kind); if (!kit) return null;
+    c.by = {};
+    for (const [name, frames] of Object.entries(kit.clips)) c.by[name] = frames.map((g) => { const im = new THREE.InstancedMesh(g, kit.mat, 140); im.count = 0; im.frustumCulled = false; im.setColorAt(0, WHITE); c.meshes.push(im); this.spin.add(im); return im; });
+    c.dur = kit.dur;
+    return c.by;
+  }
+  colorPerson(p) { // a little shade change for each one, soldiers wear army green
+    const i = p.ci; p.tint = p.soldier ? SOLDIER_TINT : new THREE.Color(1, 1, 1).multiplyScalar(.86 + (i % 5) * .05);
   }
   get alive() { return !this.data.dead; }
   loadForm() {
@@ -2154,7 +2089,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     if (this.moon) { const a = t * .12 + this.R; this.moon.position.set(Math.cos(a) * this.R * 3.2, Math.sin(a * .7) * this.R * .5, Math.sin(a) * this.R * 3.2); this.moon.rotation.y += dt * .1; }
     for (const sat of this.sats) { const o = sat.userData.orbit; o.a += dt * o.sp; sat.position.set(Math.cos(o.a) * o.r, 0, Math.sin(o.a) * o.r).applyQuaternion(o.tilt); sat.rotation.y += dt * .5; }
     const fast = clock() < (this.alienWaveUntil || 0);
-    for (const o of this.decor.children) if (o.userData.wave) o.userData.wave.rotation.z = -.35 + Math.sin(t * (fast ? 9 : 3) + o.position.x * 5) * (fast ? .6 : .3); // aliens wave
+    for (const o of this.decor.children) if (o.userData.fig) animFig(o.userData.fig, t, fast); // big creatures wave
     const a = this.data.design.around;
     if (a && a.smoke && this.vents && this.vents.length && this.alive && camera.position.distanceTo(this.group.position) < this.R * 40) { // colored smoke rising from the ground
       let n = 14 * dt * (ui.low ? .5 : 1);
@@ -2298,40 +2233,27 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
       if (!signing || clock() > sp.userData.until || pr.state !== "walk") { this.spin.remove(sp); sp.material.dispose(); this.signs.splice(i, 1); continue; }
       const k = Math.sqrt(this.R / 1.6) * (this.style.size || 1); sp.position.copy(pr.dir).multiplyScalar(this.radiusAt(pr.dir) + .45 * k); sp.scale.set(1.15 * k, .36 * k, 1);
     }
-    // pose every person: walking legs and arms, waving when happy, flailing when scared or thrown
-    let k = 0;
-    const x = new THREE.Vector3(), P = this.parts, sc = .85 * Math.sqrt(this.R / 1.6) * (this.style.size || 1), M = new THREE.Matrix4(), L = new THREE.Matrix4(), R = new THREE.Matrix4(), e = new THREE.Euler();
+    // pose every creature: walking, running when scared, cheering, thrown around after a blast
+    const by = this.crowdMeshes(); if (!by) return;
+    const x = new THREE.Vector3(), sc = .85 * Math.sqrt(this.R / 1.6) * (this.style.size || 1), M = new THREE.Matrix4(), dur = this.crowd.dur;
+    for (const im of this.crowd.meshes) im.count = 0;
     _s.setScalar(sc);
     for (const p of this.people) {
-      let swing = 0, armUp = .12, wave = 0;
-      if (p.state === "fly") { _q.setFromAxisAngle(p.axis, p.spinA); _v.copy(p.pos); armUp = 2.4; wave = Math.sin(t * 30 + p.phase) * .6; swing = Math.sin(t * 25 + p.phase) * .9; }
+      let clip = "walk", rate = 1;
+      if (p.state === "fly") { _q.setFromAxisAngle(p.axis, p.spinA); _v.copy(p.pos); clip = "run"; rate = 2; }
       else {
         x.crossVectors(p.dir, p.head);
         _m.makeBasis(x, p.dir, p.head); _q.setFromRotationMatrix(_m);
         const cheering = cheer && !p.soldier, scared = panic && !p.soldier, praying = worship && !p.soldier;
-        if (praying) _q.multiply(_q2.setFromAxisAngle(XAXIS, (Math.sin(t * 3 + p.phase * .3) * .5 + .5) * .8)); // bow down
-        const hop = cheering ? Math.abs(Math.sin(t * 9 + p.phase)) * .03 : Math.abs(Math.sin(t * 12 + p.phase)) * .004;
-        _v.copy(p.dir).multiplyScalar(this.radiusAt(p.dir) + hop);
-        if (praying) { armUp = 2.9; wave = Math.sin(t * 3 + p.phase * .3) * .2; }
-        else if (cheering) { armUp = 2.7; wave = Math.sin(t * 14 + p.phase) * .35; }
-        else if (scared) { armUp = 2.3; wave = Math.sin(t * 26 + p.phase) * .5; swing = Math.sin(t * 22 + p.phase) * .9; }
-        else swing = Math.sin(t * 11 + p.phase) * .6;
+        const hop = cheering ? Math.abs(Math.sin(t * 9 + p.phase)) * .03 : 0;
+        _v.copy(p.dir).multiplyScalar(this.radiusAt(p.dir) + hop * sc);
+        if (praying || cheering) clip = "cheer";
+        else if (scared || p.soldier) { clip = "run"; rate = scared ? 1.4 : 1; }
       }
-      M.compose(_v, _q, _s);
-      P.torso.setMatrixAt(k, M); P.head.setMatrixAt(k, M); P.face.setMatrixAt(k, M);
-      if (P.extra) { P.extra.setMatrixAt(k, M); P.extra.setColorAt(k, p.soldier ? HELMET : p.skin); }
-      for (const [name, side] of [["armL", 1], ["armR", -1]]) {
-        L.makeRotationFromEuler(e.set(-swing * side * .8, 0, side * (armUp + wave * side))); L.setPosition(LIMB[name]);
-        P[name].setMatrixAt(k, R.multiplyMatrices(M, L)); P[name].setColorAt(k, p.skin);
-      }
-      for (const [name, side] of [["legL", 1], ["legR", -1]]) {
-        L.makeRotationX(swing * side); L.setPosition(LIMB[name]);
-        P[name].setMatrixAt(k, R.multiplyMatrices(M, L));
-      }
-      P.torso.setColorAt(k, p.shirt); P.head.setColorAt(k, p.soldier ? HELMET : p.skin);
-      k++;
+      const frames = by[clip] || by.walk, n = frames.length, im = frames[Math.floor(((t * rate / (dur[clip] || 1) + p.phase * .1618) % 1) * n) % n];
+      M.compose(_v, _q, _s); im.setMatrixAt(im.count, M); im.setColorAt(im.count, p.tint); im.count++;
     }
-    for (const im of Object.values(P)) { im.count = k; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+    for (const im of this.crowd.meshes) { im.visible = im.count > 0; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
   }
   explode() {
     if (!this.alive) return;
@@ -2486,7 +2408,7 @@ function megaBoom(planet, center, R) {
 let home, planets = [];
 function liftAliens(p) { // older saves kept the giant alien in Design; it is a decoration now
   const a = p.design.around || {};
-  if (a.alien) { p.decor.push({ type: "alien", kind: "zorg", pose: "sit", text: a.alienText || "HELLO!", size: 3, n: [.15, .8, .58] }); delete a.alien; delete a.alienText; }
+  if (a.alien) { p.decor.push({ type: "alien", kind: PLANET_KINDS[p.name] || "greys", pose: "stand", text: a.alienText || "HELLO!", size: 3, n: [.15, .8, .58] }); delete a.alien; delete a.alienText; }
 }
 function buildWorld() {
   for (const p of [state.home, ...state.others]) liftAliens(p);
@@ -3331,7 +3253,7 @@ function updateHint() {
 }
 // ---- signs: text, size and an optional picture
 let editSign = null, draftImg = "";
-const draftAlien = { kind: "classic", pose: "sit", holds: true };
+const draftAlien = { kind: "greys", pose: "stand", holds: true };
 function signFields() {
   const f = { text: ($("signText").value.trim() || "HI").toUpperCase(), size: +$("signSize").value, img: editSign ? editSign.img || "" : draftImg };
   if (tool === "alien") Object.assign(f, draftAlien);
@@ -3347,8 +3269,8 @@ function showSignBox() {
 function renderAlienBox() {
   const a = editSign && editSign.type === "alien" ? editSign : draftAlien;
   const changed = () => { if (editSign) { home.rebuildDecor(); save(); } else setTool("alien"); showSignBox(); };
-  choiceRow($("alienKinds"), ALIENS, (k) => (a.kind || "classic") === k, (k) => { a.kind = k; changed(); });
-  choiceRow($("alienPose"), { sit: "Sitting", stand: "Standing", sign: "Holds a sign", nosign: "No sign" },
+  choiceRow($("alienKinds"), PEOPLE_KINDS, (k) => (PEOPLE_KINDS[a.kind] ? a.kind : ALIEN_OLD[a.kind] || "greys") === k, (k) => { a.kind = k; changed(); });
+  choiceRow($("alienPose"), { sit: "Chilling", stand: "Waving", sign: "Holds a sign", nosign: "No sign" },
     (k) => (k === "sit" || k === "stand" ? (a.pose || "sit") === k : (k === "sign") === (a.holds !== false)),
     (k) => { if (k === "sit" || k === "stand") a.pose = k; else a.holds = k === "sign"; changed(); });
 }
@@ -3421,13 +3343,10 @@ function renderDesign() {
 const PS = () => D().people || (D().people = { ...peopleStyle(state.home) });
 function renderPeople() {
   const st = PS();
-  choiceRow($("peopleKinds"), PEOPLE_KINDS, (k) => st.kind === k, (k) => { st.kind = k; st.skin = ""; peopleChanged(); });
-  choiceRow($("peopleMix"), { skin: "Mixed skin", shirt: "Mixed shirts" }, (k) => !st[k], (k) => { st[k] = st[k] ? "" : $("pp-" + k).value; peopleChanged(); });
-  $("pp-skin").value = st.skin || KIND_SKIN[st.kind] || "#f2c9a0"; $("pp-shirt").value = st.shirt || "#ff5a6e"; $("pp-pants").value = st.pants || "#2c3550"; $("pp-size").value = st.size || 1;
+  choiceRow($("peopleKinds"), PEOPLE_KINDS, (k) => st.kind === k, (k) => { st.kind = k; peopleChanged(); });
+  $("pp-size").value = st.size || 1;
 }
 function peopleChanged() { home.setStyle(); renderPeople(); save(); }
-for (const k of ["skin", "shirt", "pants"]) $("pp-" + k).addEventListener("input", (e) => { PS()[k] = e.target.value; home.setStyle(); save(); });
-for (const k of ["skin", "shirt", "pants"]) $("pp-" + k).addEventListener("change", () => renderPeople());
 $("pp-size").addEventListener("input", (e) => { PS().size = +e.target.value; save(); });
 $("resetForm").addEventListener("click", () => { D().form = null; D().shape = "round"; home.loadForm(); home.refreshBase(); designChanged(); });
 $("s-shapeAmt").addEventListener("input", (e) => { D().shapeAmt = +e.target.value; home.refreshBase(); home.rebuild(); home.placeDecor(); save(); });
@@ -6573,7 +6492,7 @@ $("reset").addEventListener("click", () => {
   $("resetConfirm").hidden = true; $("resetAskRow").hidden = false;
   resetPlayerStuff();
   if (net.me) { const b = defaults().home; net.send({ t: "resetPlanet", planet: { design: b.design, decor: b.decor } }); setTool(null); toast("Everything is back to the start: money, ship, weapons, missions and your planet"); save(); return; }
-  for (const p of planets) for (const im of Object.values(p.parts)) im.count = 0;
+  for (const p of planets) if (p.crowd) for (const im of p.crowd.meshes) im.count = 0;
   state = defaults(); setNav(null); mapSel = null; mailPlanet = null; setTool(null); draftImg = ''; showSignPreview('');
   buildWorld(); buildShip(); spawnNpcs(); renderDesign(); renderHangar(); renderMail(); renderChat(); renderInfo(); save(); setView("main");
   toast("Everything is back to the start");

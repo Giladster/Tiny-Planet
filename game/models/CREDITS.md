@@ -28,3 +28,11 @@ CC BY 4.0 (credit the maker) or Sketchfab Standard (use in a project, no reselli
 | solar_system.glb (Sun + planets set) | [Solar System](https://sketchfab.com/3d-models/solar-system-0bebd0fe3124417dba7e7a4b62bbc8a3) | per.rb1 | CC BY 4.0 |
 | planet_toi561b.glb (5 pieces spread along X) | [The unusal super Earth TOI-561b](https://sketchfab.com/3d-models/the-unusal-super-earth-toi-561b-00379c7774d54fa7b934a93a70a25243) | Ignazio Pillitteri | CC BY 4.0 |
 | planet_uranus.glb (Uranus, rings, moon Miranda; ring rocks thinned to 12%) | [Uranus](https://sketchfab.com/3d-models/uranus-0009a69dbace44608c0bd09af9ba20db) | NestaEric | CC BY 4.0 |
+
+## Creatures (the people of every planet, and the big waving aliens)
+All by **Quaternius** (https://quaternius.com), **CC0 1.0** (public domain, free for paid games, credit not required but given).
+Only the clips the game uses are kept (walk, idle, cheer, run). How they are made: `art/creatures/`.
+| Files in creatures/ | Pack |
+|---|---|
+| greys, frog, bee, flamingo, panda, sprout, stack | [Ultimate Space Kit](https://quaternius.com/packs/ultimatespacekit.html) |
+| dino, imp, mushroom, spikecap, pinkblob, wizard, yeti, ghost, wisp, squidle, glub, buzzer, alpaking, dragon | [Ultimate Monsters](https://quaternius.com/packs/ultimatemonsters.html) |

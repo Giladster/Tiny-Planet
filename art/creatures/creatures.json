@@ -1,0 +1,23 @@
+{
+  "greys":    { "src": "Enemy_Large.gltf", "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "frog":     { "src": "Astronaut_FinnTheFrog.gltf", "drop": ["Cube.074"], "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "bee":      { "src": "Astronaut_BarbaraTheBee.gltf", "drop": ["Cube.074"], "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "flamingo": { "src": "Astronaut_FernandoTheFlamingo.gltf", "drop": ["Cube.074"], "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "panda":    { "src": "Astronaut_RaeTheRedPanda.gltf", "drop": ["Cube.074"], "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "dino":     { "src": "Dino.gltf", "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "imp":      { "src": "Demon.gltf", "drop": ["Cylinder.005"], "clips": {"walk":"Walk","idle":"Idle","cheer":"Wave","run":"Run"} },
+  "mushroom": { "src": "Mushnub.gltf", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
+  "spikecap": { "src": "Blob_Mushnub_Evolved.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
+  "pinkblob": { "src": "Blob_PinkBlob.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
+  "wizard":   { "src": "Blob_Wizard.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
+  "yeti":     { "src": "Blob_Yeti.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
+  "sprout":   { "src": "Enemy_Small.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "stack":    { "src": "Enemy_Flying.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "ghost":    { "src": "Ghost.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "wisp":     { "src": "Hywirl.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "squidle":  { "src": "Squidle.glb", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "glub":     { "src": "Glub_Evolved.glb", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "buzzer":   { "src": "Armabee.glb", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "alpaking": { "src": "Alpaking.glb", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
+  "dragon":   { "src": "Dragon.glb", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} }
+}
