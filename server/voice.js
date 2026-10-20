@@ -3,7 +3,7 @@
 // Lines are kept in memory, so repeated lines (tutorial, tips) cost nothing after the first time.
 // Each player can only ask for a limited number of new lines, so nobody can burn through the credits.
 const KEY = process.env.ELEVENLABS_API_KEY;
-const VOICE = process.env.ELEVENLABS_VOICE || "nPczCjzI2devNBz1zQrb"; // "Brian": deep, calm and clear
+const VOICE = process.env.ELEVENLABS_VOICE || "jwjWpCFQUCpnHneBySsF"; // picked by Gilad from the ElevenLabs voice library
 const MODEL = process.env.ELEVENLABS_MODEL || "eleven_flash_v2_5"; // fast and half the price
 const API = process.env.ELEVENLABS_URL || "https://api.elevenlabs.io";
 export const voiceReady = !!KEY;
