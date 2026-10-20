@@ -4,7 +4,7 @@
 // Each player can only ask for a limited number of new lines, so nobody can burn through the credits.
 const KEY = process.env.ELEVENLABS_API_KEY;
 const VOICE = process.env.ELEVENLABS_VOICE || "jwjWpCFQUCpnHneBySsF"; // picked by Gilad from the ElevenLabs voice library
-const MODEL = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2"; // the most fluent, natural model (flash sounded choppy, word by word)
+const MODEL = process.env.ELEVENLABS_MODEL || "eleven_turbo_v2_5"; // smooth and natural, and lets us force English (flash was choppy, multilingual misread words)
 const API = process.env.ELEVENLABS_URL || "https://api.elevenlabs.io";
 export const voiceReady = !!KEY;
 
@@ -41,7 +41,7 @@ export function speak(text, ip) {
   const p = roomFor(text.length).then((ok) => !ok ? null : fetch(`${API}/v1/text-to-speech/${VOICE}?output_format=mp3_44100_64`, {
     method: "POST",
     headers: { "xi-api-key": KEY, "content-type": "application/json", accept: "audio/mpeg" },
-    body: JSON.stringify({ text, model_id: MODEL, voice_settings: { stability: .4, similarity_boost: .8, style: 0, use_speaker_boost: true } }),
+    body: JSON.stringify({ text, model_id: MODEL, language_code: "en", apply_text_normalization: "on", voice_settings: { stability: .4, similarity_boost: .8, style: 0, use_speaker_boost: true } }),
   }).then(async (r) => {
     if (!r.ok) { lastError = `speech ${r.status}: ${(await r.text()).slice(0, 200)}`; console.warn("ElevenLabs", lastError); return null; }
     made++; return Buffer.from(await r.arrayBuffer());
