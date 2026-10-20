@@ -5488,7 +5488,57 @@ const MODEL_PLANETS = [
   }, undefined, (e) => console.warn(p.file + " did not load", e));
   return g;
 });
+// ================= 3D nebulas: real clouds of glowing gas out in space that you can fly into and through =================
+// Each is hundreds of soft cloud puffs (always facing you) in clumps and wisps. Puffs fade as you get close, so flying in feels like a mist.
+const NEB_PUFF = (() => { // 4 different cloud puffs in one picture
+  const S = 256, cv = document.createElement("canvas"); cv.width = cv.height = S * 2; const x = cv.getContext("2d"), img = x.createImageData(S * 2, S * 2), d = img.data;
+  for (let q = 0; q < 4; q++) for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const u = i / S * 2 - 1, v = j / S * 2 - 1, r = Math.hypot(u, v), n = fbm(u, v, q * 3.1, 2.2, 11 + q * 7), m = fbm(u, v, q * 1.7, 5, 31 + q);
+    const a = Math.max(0, 1 - r * (1.05 + (n - .5) * 1.4)) ** 1.6 * (.45 + .9 * n * m), k = ((j + (q >> 1) * S) * S * 2 + i + (q & 1) * S) * 4;
+    d[k] = d[k + 1] = d[k + 2] = 255; d[k + 3] = Math.min(255, a * 255);
+  }
+  x.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.NoColorSpace; return t;
+})();
+const NEBULAS = [ // where: world spot, size, colors (inner, outer), how many puffs
+  { c: [520, 140, -640], R: 170, cols: [[1, .35, .6], [.25, .4, 1]], n: 260, seed: 1 },
+  { c: [-760, -90, 380], R: 230, cols: [[.35, 1, .85], [.3, .35, 1]], n: 300, seed: 2 },
+  { c: [180, -170, 860], R: 140, cols: [[1, .7, .35], [1, .3, .4]], n: 200, seed: 3 },
+  { c: [3200, 0, 900], R: 520, cols: [[.85, .45, 1], [.3, .5, 1]], n: 520, seed: 4 }, // the Nebula Reach
+  { c: [8300, 2750, -12200], R: 420, cols: [[1, .3, .9], [1, .75, .2]], n: 420, seed: 5 }, // Prism Galaxy
+  { c: [7600, 2400, -12900], R: 330, cols: [[.3, 1, .9], [1, .35, .8]], n: 340, seed: 6 },
+];
+const nebMat = new THREE.ShaderMaterial({
+  uniforms: { map: { value: NEB_PUFF }, time: FIRE_T }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+  vertexShader: `attribute vec3 aPos, aCol; attribute vec4 aInfo; uniform float time; varying vec2 vUv; varying vec3 vC; varying float vA;
+    void main(){ vec4 mv = modelViewMatrix * vec4(aPos, 1.); float size = aInfo.x, rot = aInfo.y + time * aInfo.w * .02, dist = length(mv.xyz);
+      vec2 c = position.xy; c = vec2(c.x * cos(rot) - c.y * sin(rot), c.x * sin(rot) + c.y * cos(rot));
+      vUv = position.xy * .5 + .5; vUv = vUv * .5 + vec2(mod(aInfo.z, 2.), floor(aInfo.z / 2.)) * .5; // pick one of the 4 puffs
+      vC = aCol; vA = smoothstep(size * .35, size * 1.4, dist) * (1. - smoothstep(4200., 5800., dist)); // thin out when you are inside it
+      mv.xy += c * size; gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: `uniform sampler2D map; varying vec2 vUv; varying vec3 vC; varying float vA;
+    void main(){ float a = texture2D(map, vUv).a * vA; gl_FragColor = vec4(vC * a, a); }`,
+});
+const nebulas = NEBULAS.map((o) => {
+  let seed = o.seed * 9301 + 49297; const r = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
+  const g = new THREE.InstancedBufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]), 3)); g.setIndex([0, 1, 2, 1, 3, 2]);
+  const P = new Float32Array(o.n * 3), C = new Float32Array(o.n * 3), I = new Float32Array(o.n * 4), v = new THREE.Vector3(), a = new THREE.Color(...o.cols[0]), b = new THREE.Color(...o.cols[1]);
+  const clumps = Array.from({ length: 6 }, () => v.clone().randomDirection().multiplyScalar(o.R * (.2 + r() * .55)).multiply(new THREE.Vector3(1, .45, 1))); // a few bright clumps, flattened like real nebulas
+  for (let i = 0; i < o.n; i++) {
+    const cl = clumps[i % clumps.length], spread = o.R * (.18 + r() * .35); v.set(r() - .5, (r() - .5) * .6, r() - .5).multiplyScalar(2 * spread).add(cl);
+    if (i % 5 === 0) v.multiplyScalar(1.25 + r() * .4); // wisps further out
+    P.set([v.x, v.y, v.z], i * 3);
+    const inner = 1 - Math.min(1, v.length() / o.R), hot = i % 9 === 0, col = b.clone().lerp(a, inner * .9 + r() * .2), br = (.025 + .13 * r() * r()) * (i % 5 === 0 ? .6 : 1) * (hot ? 1.8 : 1);
+    if (hot) col.lerp(new THREE.Color(1, .95, .9), .45); // small glowing hearts
+    C.set([col.r * br, col.g * br, col.b * br], i * 3);
+    I.set([o.R * (.12 + r() * .22) * (i % 5 === 0 ? .7 : 1) * (hot ? .4 : 1), r() * 6.28, (r() * 4) | 0, r() - .5], i * 4);
+  }
+  g.setAttribute("aPos", new THREE.InstancedBufferAttribute(P, 3)); g.setAttribute("aCol", new THREE.InstancedBufferAttribute(C, 3)); g.setAttribute("aInfo", new THREE.InstancedBufferAttribute(I, 4)); g.instanceCount = o.n;
+  const mesh = new THREE.Mesh(g, nebMat); mesh.frustumCulled = false; mesh.renderOrder = 1; scene.add(mesh); // after the sky, so the sky never paints over it
+  return { o, mesh, at: V(o.c) };
+});
+function nebulaStep() { for (const n of nebulas) n.mesh.position.copy(n.at).sub(WORLD_OFFSET); }
 function farStep(dt, t) {
+  nebulaStep();
   for (const g of MODEL_PLANETS) {
     g.group.position.copy(g.at).sub(WORLD_OFFSET);
     if (g.spinner) { g.spinner.rotateY(dt * g.spin); g.mixer?.update(dt); }
