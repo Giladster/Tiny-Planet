@@ -1536,10 +1536,12 @@ function makeAlien(text, R) { // a huge friendly alien sitting on the planet, wa
 }
 const photoTex = (file) => { const t = new THREE.TextureLoader().load("textures/" + file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
 const moonPhoto = photoTex("moon.jpg");
+const ROCK = photoTex("mercury.jpg"); ROCK.wrapS = ROCK.wrapT = THREE.MirroredRepeatWrapping; // real rock detail for mountains and cliffs, close up
 // real surface photos under every planet's own colors: craters, canyons and lava flows from Solar System Scope (textures/CREDITS.md)
 const PHOTO_CACHE = {}, photoOnce = (f) => PHOTO_CACHE[f] || (PHOTO_CACHE[f] = f === "moon.jpg" ? moonPhoto : photoTex(f));
 const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg"], .9], lava: [["venus_surface.jpg"], 1], ice: [["eris_fictional.jpg"], .9], candy: [["haumea_fictional.jpg"], .75],
   cheese: [["moon.jpg"], 1], melon: [["makemake_fictional.jpg"], .6], disco: [[], 0], toxic: [["makemake_fictional.jpg"], .9] };
+const SEA_PHOTOS = { lava: ["venus_surface.jpg", 1], toxic: ["jupiter.jpg", .9], candy: ["saturn.jpg", .8], ice: ["venus_atmosphere.jpg", .5], earth: ["jupiter.jpg", .25] };
 function planetPhoto(d) { const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
 function makeSatellite() {
@@ -1728,6 +1730,16 @@ const _v = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matr
 
 const CLOUD_TIME = { value: 0 };
 // GLSL 3D noise shared by planet ground and clouds: gives every planet sharp detail up close (rocks, ridges, soft cloud edges)
+// look up an equirect photo by direction, with no seam where it wraps around
+const GLSL_PHOTO = `
+vec3 photoAt(sampler2D t, vec3 d){ d = normalize(d); vec2 uv = vec2(atan(d.z, d.x) * .1591549 + .5, asin(clamp(d.y, -1., 1.)) * .3183099 + .5);
+  vec2 gx = dFdx(uv), gy = dFdy(uv), uv2 = vec2(fract(uv.x + .5), uv.y), gx2 = dFdx(uv2), gy2 = dFdy(uv2);
+  if (abs(gx2.x) + abs(gy2.x) < abs(gx.x) + abs(gy.x)) { gx = gx2; gy = gy2; }
+  return textureGrad(t, uv, gx, gy).rgb; }
+vec3 photoMean(sampler2D t){ return max(textureLod(t, vec2(.5), 12.).rgb, vec3(.03)); }
+vec3 rockAt(sampler2D t, vec3 p, vec3 n){ vec3 w = pow(abs(n), vec3(4.)); w /= w.x + w.y + w.z; // real rock photo wrapped from 3 sides, so it tiles on any slope
+  return texture(t, p.yz).rgb * w.x + texture(t, p.xz).rgb * w.y + texture(t, p.xy).rgb * w.z; }
+`;
 const GLSL_NOISE = `
 float pn_h(vec3 p){ p=fract(p*.3183099+.1); p*=17.; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
 float pn(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.-2.*f);
@@ -1766,16 +1778,17 @@ class Planet {
       sh.uniforms.pR = { value: this.data.R }; sh.uniforms.pSeed = { value: (this.data.design.seed || 1) % 97 };
       sh.uniforms.cSeed = { value: ((this.data.design.seed || 1) * 7.31) % 53 }; sh.uniforms.cTime = CLOUD_TIME; sh.uniforms.cRot = { value: 0 }; sh.uniforms.cOn = { value: 0 };
       sh.uniforms.pAtmo = { value: new THREE.Color(this.data.design.atmo || "#88ccff") }; this.groundSh = sh;
-      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k };
+      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k }; sh.uniforms.pRock = { value: ROCK };
       sh.vertexShader = "attribute float glow;\nattribute float city;\nattribute float real;\nvarying float vGlow;\nvarying float vCity;\nvarying float vReal;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vReal = real; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal); vWR = normalize(mat3(modelMatrix) * position);");
-      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK;\nuniform sampler2D pPhoto;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + sh.fragmentShader
+      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK;\nuniform sampler2D pPhoto, pRock;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + GLSL_PHOTO + sh.fragmentShader
         .replace("#include <color_fragment>", `#include <color_fragment>
 if (pPhotoK > 0.) { // the real surface photo, recolored to this spot's own color: its craters, canyons and lava flows show in the planet's palette
-  vec3 pd = normalize(vDir); vec2 puv = vec2(atan(pd.z, pd.x) * .1591549 + .5, asin(clamp(pd.y, -1., 1.)) * .3183099 + .5);
-  vec2 pgx = dFdx(puv), pgy = dFdy(puv), puv2 = vec2(fract(puv.x + .5), puv.y), pgx2 = dFdx(puv2), pgy2 = dFdy(puv2);
-  if (abs(pgx2.x) + abs(pgy2.x) < abs(pgx.x) + abs(pgy.x)) { pgx = pgx2; pgy = pgy2; } // no seam where the photo wraps around
-  vec3 ph = textureGrad(pPhoto, puv, pgx, pgy).rgb, pm = max(textureLod(pPhoto, vec2(.5), 12.).rgb, vec3(.03)); // the whole photo's average color
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(ph / pm, .15, 2.6), pPhotoK * vReal);
+  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(photoAt(pPhoto, vDir) / photoMean(pPhoto), .15, 2.6), pPhotoK * vReal);
+}
+{ // real rock up close: cliffs and mountains get a sharp rock photo, flat ground a light touch of it
+  float rs = 1. - clamp(dot(normalize(vWN), normalize(vWR)), 0., 1.), rk = (.25 + .75 * smoothstep(.05, .2, rs)) * vReal;
+  vec3 rp = vDir * 7.;
+  diffuseColor.rgb *= mix(1., clamp(dot(rockAt(pRock, rp, vDir), vec3(.3, .59, .11)) / dot(photoMean(pRock), vec3(.3, .59, .11)), .3, 1.8), rk * .8);
 }
 // ground detail: patches of lighter and darker soil, and bare rock on steep slopes
 vec3 gp = vDir * 9. + pSeed; float gfw = length(fwidth(gp));
@@ -1805,10 +1818,7 @@ if (cOn > .5) { // cloud shadows drifting over the ground
   vec3 r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
   normal = normalize(abs(det) * normal - sign(det) * (dH.x * r1 + dH.y * r2));
   if (pPhotoK > 0.) { // the photo's craters and ridges stand out in 3D: bright = high, dark = low
-    vec3 pd = normalize(vDir); vec2 puv = vec2(atan(pd.z, pd.x) * .1591549 + .5, asin(clamp(pd.y, -1., 1.)) * .3183099 + .5);
-    vec2 pgx = dFdx(puv), pgy = dFdy(puv), puv2 = vec2(fract(puv.x + .5), puv.y), pgx2 = dFdx(puv2), pgy2 = dFdy(puv2);
-    if (abs(pgx2.x) + abs(pgy2.x) < abs(pgx.x) + abs(pgy.x)) { pgx = pgx2; pgy = pgy2; }
-    float ph = dot(textureGrad(pPhoto, puv, pgx, pgy).rgb, vec3(.3, .59, .11)) * pR * .035 * pPhotoK * vReal;
+    float ph = dot(photoAt(pPhoto, vDir), vec3(.3, .59, .11)) * pR * .035 * pPhotoK * vReal + dot(rockAt(pRock, vDir * 7., vDir), vec3(.3, .59, .11)) * pR * .006 * vReal;
     vec2 dP = vec2(dFdx(ph), dFdy(ph)); r1 = cross(sy, normal); r2 = cross(normal, sx); det = dot(sx, r1);
     normal = normalize(abs(det) * normal - sign(det) * (dP.x * r1 + dP.y * r2));
   }
@@ -1821,6 +1831,14 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     };
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.userData.planet = this;
     this.ocean = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ roughness: .1, metalness: .1, transparent: true, opacity: .92, envMapIntensity: .3, normalMap: WAVES, normalScale: new THREE.Vector2(.45, .45) }));
+    this.seaU = { value: null }; this.seaK = { value: 0 };
+    this.ocean.material.onBeforeCompile = (sh) => { // seas get real swirls too: lava flows, gas-giant storms in slime and candy seas
+      sh.uniforms.sPhoto = this.seaU; sh.uniforms.sK = this.seaK;
+      sh.vertexShader = "varying vec3 vOD;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvOD = position;");
+      sh.fragmentShader = "uniform sampler2D sPhoto;\nuniform float sK;\nvarying vec3 vOD;\n" + GLSL_PHOTO + sh.fragmentShader
+        .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 seaR = sK > 0. ? mix(vec3(1.), clamp(photoAt(sPhoto, vOD) / photoMean(sPhoto), .2, 2.4), sK) : vec3(1.);\ndiffuseColor.rgb *= seaR;")
+        .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance *= seaR * seaR;");
+    };
     this.clouds = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, depthWrite: false, roughness: 1, envMapIntensity: .3 }));
     { const seed = ((this.data.design.seed || 1) * 7.31) % 53; // sharp, swirly clouds drawn per pixel, so they never look blurry up close
       this.clouds.material.onBeforeCompile = (sh) => {
@@ -1967,6 +1985,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.geo.attributes.position.needsUpdate = this.geo.attributes.color.needsUpdate = this.geo.attributes.glow.needsUpdate = this.geo.attributes.city.needsUpdate = this.geo.attributes.real.needsUpdate = true;
     this.geo.computeVertexNormals(); this.geo.computeBoundingSphere();
     this.ocean.visible = hasSea; this.ocean.scale.setScalar(R);
+    { const sp = SEA_PHOTOS[d.template]; this.seaU.value = sp ? photoOnce(sp[0]) : null; this.seaK.value = sp ? sp[1] : 0; }
     this.ocean.material.color.set(d.sea); this.ocean.material.emissive.set(d.sea); this.ocean.material.emissiveIntensity = (d.glow || 0) * .45;
     this.clouds.visible = !!d.clouds; if (d.clouds) this.clouds.material.color.set(d.clouds);
     this.clouds.scale.setScalar(R * 1.04);
