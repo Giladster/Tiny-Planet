@@ -30,6 +30,14 @@ html, body { height: 100%; margin: 0; }
 body { background: var(--void); color: var(--text); font: 14px/1.45 var(--body); overflow: hidden; }
 canvas#scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 body.flying canvas#scene { cursor: none; }
+#landUi { left: 50%; transform: translateX(-50%); bottom: calc(86px + env(safe-area-inset-bottom, 0px)); padding: 6px 8px; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+#landUi[hidden] { display: none; }
+#landBtn { font-size: 15px; padding: 8px 16px; animation: landPulse 1.1s ease-in-out infinite alternate; }
+#landBtn small { opacity: .6; font-weight: 600; margin-left: 4px; }
+#landHelp { opacity: .8; max-width: 380px; }
+#landHelp:empty { display: none; }
+@keyframes landPulse { to { box-shadow: 0 0 22px var(--cyan); } }
+body.walking canvas#scene { cursor: grab; }
 .hud { position: fixed; z-index: 2; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(10px); }
 .label { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
 button { font: 500 13px var(--display); letter-spacing: .04em; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
@@ -521,6 +529,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <div id="toasts"></div>
 <div id="flash"></div>
 <div class="hint" id="hint"></div>
+<div id="landUi" class="hud" hidden><button class="go" id="landBtn"></button><span id="landHelp"></span></div>
 
 <div id="pad" aria-hidden="true">
   <button data-k="KeyW">GO</button><button data-k="ShiftLeft">BOOST</button>
@@ -1064,6 +1073,29 @@ const sfx = (() => {
         out(g, .22 * v, V.rev ?? .4); ti += len * (V.gap || 1.1);
       }
     },
+    airRush(sec) { // coming in through the air: a rising roar of wind
+      if (!ok()) return; const t = ac.currentTime, n = noise(t, sec, .9), bp = filt("bandpass", 300, 1400, t, sec * .7, .8), g = gain();
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + sec * .6); g.gain.exponentialRampToValueAtTime(.0001, t + sec); n.connect(bp).connect(g); out(g, .35, .3);
+    },
+    padRoar(sec) { // landing thrusters: a deep steady roar
+      if (!ok()) return; const t = ac.currentTime, n = noise(t, sec, .55), lp = filt("lowpass", 1100, 380, t, sec, .7), g = gain();
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .35); g.gain.setValueAtTime(1, t + sec * .7); g.gain.exponentialRampToValueAtTime(.0001, t + sec); n.connect(lp).connect(g); out(g, .42, .25);
+      const o = osc("sawtooth", 62, 44, t, sec), ol = filt("lowpass", 240, 140, t, sec), og = gain();
+      og.gain.setValueAtTime(.0001, t); og.gain.exponentialRampToValueAtTime(1, t + .4); og.gain.exponentialRampToValueAtTime(.0001, t + sec); o.connect(ol).connect(og); out(og, .2, .15);
+    },
+    touchdown() { // the landing legs hit the ground
+      if (!ok()) return; const t = ac.currentTime, o = osc("sine", 90, 32, t, .5), g = env(gain(), t, .004, .5); o.connect(g); out(g, .55, .3);
+      const n = noise(t, .35, .6), lp = filt("lowpass", 700, 120, t, .35), g2 = env(gain(), t, .003, .35); n.connect(lp).connect(g2); out(g2, .45, .3);
+      const c = osc("square", 180, 120, t + .05, .06), cg = env(gain(), t + .05, .002, .06); c.connect(filt("bandpass", 900, 900, t, .1, 4)).connect(cg); out(cg, .08, .2); // a metal clunk
+    },
+    step(heavy) { // a soft footstep on the ground
+      if (!ok()) return; const t = ac.currentTime, n = noise(t, .08, rnd(.8, 1.2)), bp = filt("bandpass", rnd(500, 800), 300, t, .08, 1.2), g = env(gain(), t, .003, heavy ? .12 : .07); n.connect(bp).connect(g); out(g, heavy ? .22 : .1, .05);
+    },
+    hop() { if (!ok()) return; const t = ac.currentTime, o = osc("sine", 300, 620, t, .14), g = env(gain(), t, .005, .14); o.connect(g); out(g, .06, .2); },
+    beam(up) { // the hatch beam: a shimmery sweep
+      if (!ok()) return; const t = ac.currentTime;
+      [0, 1, 2, 3].forEach((i) => { const f = up ? 400 * 1.3 ** i : 1400 / 1.3 ** i, o = osc("sine", f, f * (up ? 2 : .5), t + i * .08, .5), g = env(gain(), t + i * .08, .02, .45); o.connect(g); out(g, .05, .7); });
+    },
     cheer() { if (!ok()) return; const t = ac.currentTime; [523, 659, 784, 1046].forEach((f, i) => { const o = osc("triangle", f, f, t + i * .1, .4), g = env(gain(), t + i * .1, .01, .35); o.connect(g); out(g, .08, .7); }); },
     zap() { if (!ok()) return; const t = ac.currentTime, o = osc("sawtooth", 2400, 700, t, .06), g = env(gain(), t, .002, .05); o.connect(g); out(g, .02, .2); },
     place() { if (!ok()) return; const t = ac.currentTime, o = osc("sine", 520, 980, t, .1), g = env(gain(), t, .005, .18); o.connect(g); out(g, .14, .4); },
@@ -1335,6 +1367,7 @@ varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5)
 }
 
 // ================= particles =================
+const NEAR_FADE = { value: 1 }; // particles fade out right in front of the camera; smaller while you walk on a planet
 class Particles {
   constructor(n, additive) {
     this.n = n; this.i = 0;
@@ -1346,9 +1379,9 @@ class Particles {
     g.setAttribute("position", new THREE.BufferAttribute(this.pos, 3)); g.setAttribute("pcol", new THREE.BufferAttribute(this.col, 3));
     g.setAttribute("psize", new THREE.BufferAttribute(this.size, 1)); g.setAttribute("palpha", new THREE.BufferAttribute(this.alpha, 1));
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { scale: { value: 400 } }, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-      vertexShader: `attribute vec3 pcol; attribute float psize; attribute float palpha; uniform float scale; varying vec3 vC; varying float vA;
-        void main(){ vC=pcol; vec4 mv=modelViewMatrix*vec4(position,1.); vA=palpha*smoothstep(.2,2.5,-mv.z); gl_Position=projectionMatrix*mv; gl_PointSize=min(512., psize*scale/max(.05,-mv.z)); }`,
+      uniforms: { scale: { value: 400 }, nearK: NEAR_FADE }, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      vertexShader: `attribute vec3 pcol; attribute float psize; attribute float palpha; uniform float scale, nearK; varying vec3 vC; varying float vA;
+        void main(){ vC=pcol; vec4 mv=modelViewMatrix*vec4(position,1.); vA=palpha*smoothstep(.2*nearK,2.5*nearK,-mv.z); gl_Position=projectionMatrix*mv; gl_PointSize=min(512., psize*scale/max(.05,-mv.z)); }`,
       fragmentShader: additive
         ? `
 float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
@@ -2247,7 +2280,8 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
   }
   updatePeople(dt, t) {
     const panic = clock() - this.lastHit < 8, cheer = clock() < this.cheerUntil;
-    const worship = this.isHome && !panic && ship.visible && ship.position.distanceTo(this.group.position) < this.R * 9; // your people love you
+    const worship = this.isHome && !panic && ship.visible && !walkingOn(this) && ship.position.distanceTo(this.group.position) < this.R * 9; // your people love you
+    const vis = this.visitor && clock() < this.visitor.until ? this.visitor : null; // you, walking on this planet
     const shipLocal = worship ? this.mesh.worldToLocal(ship.position.clone()) : null;
     if ((worship || panic) && this.style && mode === "fly" && clock() - (this.voxAt || 0) > rnd(2.5, 4.5)) { this.voxAt = clock(); sfx.creature(this.style.kind, panic ? "panic" : "hello", this.group.position); } // the crowd chatters in its own voice
     const civ = this.civilians();
@@ -2269,8 +2303,14 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
           if (p.target.dir.dot(p.dir) > Math.cos(.16) && clock() > p.nextShot) { p.nextShot = clock() + rnd(1, 2.2); soldierShot(this, p, p.target); }
         }
         speed = p.speed * 1.6;
+      } else if (vis && !panic && (p.dir.dot(vis.n) > vis.meet || clock() < (p.talkUntil || 0))) { // you are right here: stop, turn to face you, step back if you bump into them
+        const to = vis.n.clone().sub(p.dir).projectOnPlane(p.dir), c = p.dir.dot(vis.n); p.meet = true;
+        if (to.lengthSq() > 1e-9) { to.normalize(); p.head.lerp(to, Math.min(1, dt * 5)); if (c > vis.push) p.dir.addScaledVector(to, -dt * .25).normalize(); }
+        speed = 0;
       } else {
-        _q.setFromAxisAngle(p.dir, (Math.random() - .5) * dt * (panic ? 8 : 2.5)); p.head.applyQuaternion(_q);
+        p.meet = false;
+        if (vis && p.curious && !panic && p.dir.dot(vis.n) > vis.call) { const to = vis.n.clone().sub(p.dir).projectOnPlane(p.dir); if (to.lengthSq() > 1e-9) p.head.lerp(to.normalize(), Math.min(1, dt * 3)); speed *= 2.2; } // they come over to see the visitor
+        else { _q.setFromAxisAngle(p.dir, (Math.random() - .5) * dt * (panic ? 8 : 2.5)); p.head.applyQuaternion(_q); }
       }
       const next = p.dir.clone().addScaledVector(p.head, speed * dt).normalize();
       if (this.isLand(next)) p.dir.copy(next); else p.head.negate();
@@ -2301,7 +2341,8 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
         const cheering = cheer && !p.soldier, scared = panic && !p.soldier, praying = worship && !p.soldier;
         const hop = cheering ? Math.abs(Math.sin(t * 9 + p.phase)) * .03 : 0;
         _v.copy(p.dir).multiplyScalar(this.radiusAt(p.dir) + hop * sc);
-        if (praying || cheering) clip = "cheer";
+        if (praying || cheering || (p.meet && clock() < (p.greetUntil || 0))) clip = "cheer";
+        else if (p.meet && !scared) clip = "idle";
         else if (scared || p.soldier) { clip = "run"; rate = scared ? 1.4 : 1; }
       }
       const frames = by[clip] || by.walk, n = frames.length, im = frames[Math.floor(((t * rate / (dur[clip] || 1) + p.phase * .1618) % 1) * n) % n];
@@ -3146,6 +3187,7 @@ function setView(v) {
 }
 function goMain() { // Esc and the Home button: straight back to the normal view
   if (mode === "fly") return land();
+  if (mode === "walk") return takeOff();
   if (mode !== "home") return;
   ui.map = ui.mail = ui.chat = ui.pranks = ui.god = false;
   setView("main");
@@ -4797,6 +4839,7 @@ function decorHit() { // the decoration under the mouse, but not ones hidden beh
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 canvas.addEventListener("pointerdown", (e) => {
   down = [e.clientX, e.clientY];
+  if (mode === "walk") { walkDrag = true; if (!locked && e.pointerType === "mouse" && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} } return; }
   if (mode === "fly") {
     if (!locked && e.pointerType === "mouse" && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {} }
     setAimFromEvent(e); if (e.button === 2) fireWeapon("heavy"); else { firing = true; if (weapon !== "gun") fireWeapon(weapon); } return;
@@ -4807,8 +4850,9 @@ canvas.addEventListener("pointerdown", (e) => {
     if (hit) { brushing = true; controls.enabled = false; canvas.setPointerCapture(e.pointerId); if (tool === "grab") grab = { n: home.mesh.worldToLocal(hit.point.clone()).normalize(), x: e.clientX, y: e.clientY }; else brushAt(e); }
   }
 });
-addEventListener("pointerup", () => { firing = false; });
+addEventListener("pointerup", () => { firing = false; walkDrag = false; });
 canvas.addEventListener("pointermove", (e) => {
+  if (mode === "walk") { if (locked || walkDrag) { walkLook.x += e.movementX || 0; walkLook.y += e.movementY || 0; } return; }
   if (mode === "fly") { setAimFromEvent(e); mouseTurn.x += e.movementX || 0; mouseTurn.y += e.movementY || 0; return; }
   if (brushing) return brushAt(e);
   if (mode !== "home") return;
@@ -5904,7 +5948,7 @@ function startFlying() { // only switches to flight; the ship waits until you pr
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
   $("hudShip").textContent = state.ship.name;
   if (navArrow) navArrow.visible = !!nav;
-  renderWeapons(); renderPanels(); tutEvent("fly"); loadBlackHole(); // ready before you warp home
+  renderWeapons(); renderPanels(); tutEvent("fly"); loadBlackHole(); loadAvatar(); // ready before you warp home
 }
 function land() { // fly into a black hole, come out next to home
   if (mode !== "fly") return;
@@ -5965,8 +6009,10 @@ addEventListener("keydown", (e) => {
   if (typing(e)) return;
   if (mode === "home" && (e.key === "+" || e.key === "=")) zoom(.8);
   if (mode === "home" && (e.key === "-" || e.key === "_")) zoom(1.25);
+  if (mode === "walk") { if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault(); if (!e.repeat) walkKey(e); keys.add(e.code); return; }
   if (mode !== "fly") return;
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
+  if (e.code === "Enter" && !e.repeat && landTarget) return startLanding(landTarget);
   if (e.code.startsWith("Digit")) { const w = Object.keys(WEAPONS)[+e.code.slice(5) - 1]; if (w) { weapon = w; renderWeapons(); } }
   if (!e.repeat) {
     if (e.code === "KeyF") fireWeapon("heavy");
@@ -6773,15 +6819,529 @@ addEventListener("resize", () => { resize(); if (mode === "home") frameCamera(.3
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const timer = new THREE.Clock();
 let mapTick = 0;
+// ---------- landing: fly very close to a planet, press Land, set down on its ground and walk among its people ----------
+// The planet stops spinning while you are on it, and everything is worked out in the planet's own coordinates (p.spin),
+// so the parked ship, you and Bolt stay put on the ground. u = how tall one of the planet's people is.
+let walk = null, landTarget = null;
+const walkingOn = (p) => !!walk && walk.p === p;
+const walkLook = new THREE.Vector2();
+let walkDrag = false;
+const AVATAR = "panda"; // you are a little astronaut (Quaternius Ultimate Space Kit, CC0)
+const avatar = { root: null, mixer: null, acts: {}, k: 1, cur: null, loading: false };
+function loadAvatar() {
+  if (avatar.root || avatar.loading) return; avatar.loading = true;
+  new GLTFLoader().load("models/creatures/" + AVATAR + ".glb", (gl) => {
+    const inner = gl.scene;
+    inner.traverse((o) => { if (!o.isMesh) return; o.frustumCulled = false; const m = o.material; if (m.map) { m.map.generateMipmaps = false; m.map.minFilter = m.map.magFilter = THREE.NearestFilter; m.map.needsUpdate = true; m.emissiveMap = m.map; } m.emissive = new THREE.Color(.16, .16, .16); m.roughness = .6; m.metalness = 0; });
+    const box = new THREE.Box3().setFromObject(inner);
+    inner.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
+    avatar.k = .21 / Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) * .8, (box.max.z - box.min.z) * .8); // same sizing as the planet people
+    avatar.root = new THREE.Group(); avatar.root.add(inner); avatar.root.visible = false; scene.add(avatar.root);
+    avatar.mixer = new THREE.AnimationMixer(inner);
+    for (const a of gl.animations) avatar.acts[a.name] = avatar.mixer.clipAction(a);
+    if (walk && (walk.phase === "exit" || walk.phase === "walk")) { avatar.root.visible = true; avatarPlay("cheer"); } // it finished loading after you landed
+  }, undefined, () => { avatar.loading = false; });
+}
+function avatarPlay(name, rate = 1) {
+  const a = avatar.acts[name] || avatar.acts.idle; if (!a) return;
+  a.setEffectiveTimeScale(rate); if (avatar.cur === a) return;
+  a.reset().setEffectiveWeight(1).fadeIn(.18).play(); if (avatar.cur) avatar.cur.fadeOut(.18); avatar.cur = a;
+}
+const boltBot = (() => { // Bolt, your robot buddy: a shiny ball with a glowing visor that floats at your shoulder
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color: 0xeef3ff, metalness: .5, roughness: .22, envMapIntensity: 1.2, emissive: 0x1a2030 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x070b16, metalness: .4, roughness: .15 });
+  const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(.6, 2.6, 3.2) });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(.5, 32, 24), shell));
+  const visor = new THREE.Mesh(new THREE.SphereGeometry(.515, 32, 16, Math.PI / 2 - 1.05, 2.1, 1.08, .86), dark); g.add(visor);
+  for (const x of [-.15, .15]) { const e = new THREE.Mesh(new THREE.CapsuleGeometry(.055, .07, 4, 10), glow); e.position.set(x, .04, .5); g.add(e); }
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(.09, .018, 6, 16, Math.PI), glow); mouth.rotation.z = Math.PI; mouth.position.set(0, -.12, .5); g.add(mouth);
+  for (const x of [-.5, .5]) { const ear = new THREE.Mesh(new THREE.CylinderGeometry(.13, .13, .08, 20).rotateZ(Math.PI / 2), shell); ear.position.x = x; g.add(ear); const eg = new THREE.Mesh(new THREE.CylinderGeometry(.07, .07, .1, 16).rotateZ(Math.PI / 2), glow); eg.position.x = x * 1.04; g.add(eg); }
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(.018, .018, .3, 8), dark); ant.position.y = .62; g.add(ant);
+  const tip = new THREE.Mesh(new THREE.SphereGeometry(.06, 12, 10), glow); tip.position.y = .8; g.add(tip);
+  const under = glowSprite(new THREE.Color(.4, 1.6, 2.4), 1.1); under.position.y = -.62; g.add(under);
+  g.visible = false; g.userData = { mouth, tip, under }; scene.add(g);
+  return g;
+})();
+const walkSky = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.ShaderMaterial({ // the air seen from the ground: a glowing horizon, the planet's own sky color, warm at sunset
+  side: THREE.BackSide, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { col: { value: new THREE.Color() }, up: { value: new THREE.Vector3(0, 1, 0) }, sun: { value: SUN_DIR }, k: { value: 0 } },
+  vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `uniform vec3 col, up, sun; uniform float k; varying vec3 vW;
+    void main(){ vec3 d = normalize(vW - cameraPosition); float e = dot(d, up), su = dot(up, sun);
+      float lit = .12 + .88 * smoothstep(-.3, .3, su), hz = pow(1. - clamp(abs(e), 0., 1.), 4.), zen = .16 * smoothstep(0., .6, e);
+      vec3 c = mix(vec3(1., .42, .18), col, smoothstep(-.05, .45, su));
+      float halo = pow(max(0., dot(d, sun)), 18.) * .7;
+      gl_FragColor = vec4((c * (hz * .85 + zen) + vec3(1., .82, .55) * halo) * lit * k, 1.); }`,
+}));
+walkSky.frustumCulled = false; walkSky.visible = false; scene.add(walkSky);
+const walkLight = new THREE.HemisphereLight(0xbfdcff, 0x6a5a48, 0); scene.add(walkLight); // soft sky light, so faces read up close
+const GREET = ["Hi there, traveler!", "Welcome to {planet}!", "Whoa, a real pilot!", "Is that your ship? So shiny!", "Hello! Hello! Hello!", "You came from the sky!", "Nice helmet!", "Want to be friends?", "We don't get many visitors!", "Wipe your boots, please!", "A space explorer! Wow!"];
+const CHAT = ["Have you seen the Prism Galaxy?", "I want to fly one day!", "The sunsets here are the best.", "Watch out for pirates up there.", "I'm late for work!", "Did you hear that boom last night?", "My cousin lives on {other}.", "Top 100? You can do it!", "I just had lunch. Yum!", "Don't step on my flowers!", "Your robot is so cute!", "Can I get a selfie with you?", "It's a tiny planet, but it's home.", "Race you around the planet!", "I can walk around the whole planet in a day!", "Is it true space has no snacks?", "Look, a shooting star!"];
+const HOME_LINES = ["Welcome home, {you}!", "Our hero is back!", "We kept your planet tidy!", "{you}! {you}! {you}!", "Thanks for building our town!"];
+const SPECIES_LINES = {
+  greys: ["Take me to your leader. Oh wait.", "We come in peace!"], frog: ["Ribbit! Welcome!", "Want a fly? They're crunchy."], bee: ["Bzz! Hi friend!", "Honey for sale! Bzz!"],
+  flamingo: ["I stand on one leg all day.", "Pink is the best color."], panda: ["Bamboo, anyone?", "Hey, you look like my cousin!"], dino: ["RAWR! Just kidding, hi!", "I'm a big scary dino. Grr."],
+  imp: ["Hehe, mischief time!", "I didn't do it! Hehe."], mushroom: ["It's a fun-gi planet!", "We grow up so fast."], spikecap: ["Careful, I'm pointy!", "No hugs, sorry. Spikes."],
+  pinkblob: ["Blub blub! Hug?", "I'm squishy!"], wizard: ["I sense... a visitor!", "Want to see a magic trick?"], yeti: ["Brrr... you look cold!", "Snowball fight later?"],
+  sprout: ["I grow a little every day!", "Sunshine is my snack."], stack: ["We stack together!", "Beep boop, hello!"], ghost: ["Boo! Did I scare you?", "I'm not see-through, you are!"],
+  wisp: ["Whooosh, hello!", "Catch me if you can!"], squidle: ["Eight arms to wave hi!", "Blub, the sky is nice today."], glub: ["Glub glub!", "Glub! (That means hi.)"],
+  buzzer: ["Bzzzt! Welcome!", "I'm the fastest buzzer here!"], alpaking: ["Long live the king! That's me.", "Bow to the Alpaking!"], dragon: ["I can almost breathe fire!", "One day I'll be huge!"],
+};
+const fillLine = (s, p) => s.replace(/\{planet\}/g, p.data.name).replace(/\{you\}/g, state.home.owner || "captain").replace(/\{other\}/g, () => { const o = planets.filter((q) => q !== p && !q.data.wild); return o.length ? o[(Math.random() * o.length) | 0].data.name : "the moon"; });
+function walkLine(p, kind) {
+  const sp = SPECIES_LINES[p.style?.kind] || [], pick = (a) => a[(Math.random() * a.length) | 0];
+  const pool = kind === "greet" ? (p.isHome ? HOME_LINES.concat(GREET) : GREET.concat(sp)) : CHAT.concat(sp, sp);
+  return fillLine(pick(pool), p);
+}
+function bubbleSprite(text) { // a white speech bubble with a little tail, drawn on a canvas
+  const c = document.createElement("canvas"), x = c.getContext("2d"), F = 46, font = `800 ${F}px Nunito, "Avenir Next", system-ui, sans-serif`;
+  x.font = font; const words = text.split(" "), lines = []; let cur = "";
+  for (const wd of words) { const t = cur ? cur + " " + wd : wd; if (x.measureText(t).width > 460 && cur) { lines.push(cur); cur = wd; } else cur = t; }
+  lines.push(cur);
+  const tw = Math.max(...lines.map((l) => x.measureText(l).width)), W = Math.ceil(tw + 64), lh = F * 1.18, BH = Math.ceil(lines.length * lh + 34), H = BH + 30;
+  c.width = W + 8; c.height = H + 8; x.font = font;
+  x.translate(4, 4); x.fillStyle = "#ffffff"; x.strokeStyle = "rgba(20,30,60,.35)"; x.lineWidth = 5;
+  const r = Math.min(34, BH / 2); x.beginPath();
+  x.moveTo(r, 0); x.lineTo(W - r, 0); x.quadraticCurveTo(W, 0, W, r); x.lineTo(W, BH - r); x.quadraticCurveTo(W, BH, W - r, BH);
+  x.lineTo(W / 2 + 18, BH); x.lineTo(W / 2 - 4, H); x.lineTo(W / 2 - 16, BH); x.lineTo(r, BH); x.quadraticCurveTo(0, BH, 0, BH - r); x.lineTo(0, r); x.quadraticCurveTo(0, 0, r, 0);
+  x.closePath(); x.fill(); x.stroke();
+  x.fillStyle = "#1b2133"; x.textAlign = "center"; x.textBaseline = "middle";
+  lines.forEach((l, i) => x.fillText(l, W / 2, 17 + lh * (i + .5)));
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, color: new THREE.Color(1.3, 1.3, 1.3) }));
+  sp.center.set(.5, 0); sp.renderOrder = 5; sp.userData.aspect = c.width / c.height; sp.userData.lines = lines.length;
+  return sp;
+}
+const groundRay = new THREE.Raycaster(), _gO = new THREE.Vector3(), _gD = new THREE.Vector3(), _gInv = new THREE.Matrix4();
+function groundHit(p, n) { // the exact ground under direction n (planet coordinates): how far from the middle, and land or sea
+  const far = p.R * (p.maxK || 1) * 2.5;
+  _gO.copy(n).multiplyScalar(far); p.spin.localToWorld(_gO); _gD.copy(n).transformDirection(p.spin.matrixWorld).negate();
+  groundRay.set(_gO, _gD); groundRay.far = far * 2;
+  const h = groundRay.intersectObject(p.mesh, false)[0], sea = p.ocean.visible;
+  if (!h) return { r: Math.max(p.radiusAt(n), sea ? p.R : 0), land: p.isLand(n) };
+  const r = far - h.distance;
+  return { r: sea ? Math.max(r, p.R) : r, land: !sea || r > p.R * 1.001 || !!p.land[h.face.a] };
+}
+const toLocalDir = (p, v) => v.clone().transformDirection(_gInv.copy(p.spin.matrixWorld).invert());
+const toWorldDir = (p, v) => v.clone().transformDirection(p.spin.matrixWorld);
+const basisQ = (x, y, z) => new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+function obstacles(p) { // buildings and the big alien: you walk around them
+  return p.decor.children.filter((o) => o.userData.decor && o.userData.decor.n).map((o) => ({ n: V(o.userData.decor.n).normalize(), r: .11 * p.R / 1.6 * (o.userData.size || 1) * (["castle", "base", "pisa", "eiffel", "magic", "alien"].includes(o.userData.type) ? 1.7 : 1) }));
+}
+function landSpot(p, clear) { // a flat bit of land under you, on the sunny side if possible, away from houses
+  const toShip = p.spin.worldToLocal(ship.position.clone()).normalize(), sun = toLocalDir(p, SUN_DIR);
+  const n0 = toShip.clone().addScaledVector(sun, .4).normalize(), obs = obstacles(p), R = p.R;
+  let best = n0, bestS = 1e9; const n = new THREE.Vector3(), t = new THREE.Vector3();
+  for (let i = 0; i < 90; i++) {
+    if (i) { t.randomDirection().projectOnPlane(n0).normalize(); n.copy(n0).addScaledVector(t, Math.sqrt(i / 90) * .8).normalize(); } else n.copy(n0);
+    let s = (p.isLand(n) ? 0 : 100) + n.angleTo(n0) * 3;
+    for (const o of obs) { const d = n.angleTo(o.n) * R; if (d < clear + o.r) s += 30 * (1 - d / (clear + o.r)); }
+    const r0 = p.radiusAt(n); let bump = 0; for (const a of [[.06, 0], [-.06, 0], [0, .06], [0, -.06]]) { t.set(a[0], a[1], 0).add(n).normalize(); bump += Math.abs(p.radiusAt(t) - r0); if (!p.isLand(t)) s += 8; }
+    s += bump / R * 120;
+    if (s < bestS) { bestS = s; best = n.clone(); }
+  }
+  return best;
+}
+function landable() { // the planet you are very close to, if any
+  if (mode !== "fly" || playerDead) return null;
+  let best = null, bd = 1e9;
+  for (const p of planets) {
+    if (!p.alive || p.remnant) continue;
+    const d = ship.position.distanceTo(p.group.position), edge = p.R * 1.2 * (p.maxK || 1) + ship.userData.radius, gap = d - edge;
+    if (gap < Math.max(.9, p.R * .55) && gap < bd) { bd = gap; best = p; }
+  }
+  return best;
+}
+function landUiStep() {
+  const el = $("landUi"), b = $("landBtn"), h = $("landHelp");
+  if (mode === "fly") {
+    landTarget = landable();
+    el.hidden = !landTarget; if (!landTarget) return;
+    const txt = `🛬 Land on ${landTarget.data.name}`; if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${esc(txt)} <small>Enter</small>`; h.textContent = ""; }
+  } else if (mode === "walk") {
+    el.hidden = false; const txt = "🚀 Take off";
+    if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${txt} <small>Enter</small>`; h.textContent = "WASD walk · Shift run · Space jump · E say hi · drag the mouse to look"; }
+  } else el.hidden = true;
+}
+function startLanding(p) {
+  if (mode !== "fly" || playerDead || !p) return;
+  loadAvatar();
+  if (document.pointerLockElement) document.exitPointerLock();
+  mode = "landing"; keys.clear(); firing = false; uncloak();
+  for (const id of ["crosshair", "weapons", "target", "lockBox", "flyHud"]) $(id).hidden = true; lockTarget = lockCand = null;
+  if (navArrow) navArrow.visible = false;
+  p.spin.updateMatrixWorld(true);
+  const u = .21 * .85 * Math.sqrt(p.R / 1.6) * (p.style?.size || 1), L = ship.userData.len, s = THREE.MathUtils.clamp(u * 3.8 / L, .25, 3); // parked, the ship is about four people long
+  // how far the bottom of the hull is below its middle
+  const q0 = ship.quaternion.clone(); ship.quaternion.identity(); model.quaternion.identity(); model.position.set(0, 0, 0); ship.updateMatrixWorld(true);
+  const box = new THREE.Box3(); model.traverse((o) => { if (o.isMesh && o.visible && !ship.userData.flames.includes(o) && o.geometry) { o.geometry.computeBoundingBox(); box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld)); } });
+  const bottom = Math.max(.05 * L, ship.position.y - box.min.y); ship.quaternion.copy(q0); ship.updateMatrixWorld(true);
+  const n = landSpot(p, L * s * .6), g = groundHit(p, n).r;
+  const spinQ = p.spin.getWorldQuaternion(new THREE.Quaternion()), Q0 = spinQ.clone().invert().multiply(ship.quaternion);
+  let f = FWD.clone().applyQuaternion(Q0).projectOnPlane(n); if (f.lengthSq() < 1e-4) f = new THREE.Vector3(1, 0, 0).projectOnPlane(n); f.normalize();
+  const x = new THREE.Vector3().crossVectors(n, f);
+  const P0 = p.spin.worldToLocal(ship.position.clone()), V0 = toLocalDir(p, vel).multiplyScalar(vel.length());
+  const T = n.clone().multiplyScalar(g + bottom * s), H = n.clone().multiplyScalar(g + bottom * s + L * s * 2);
+  // the movie camera: off to the side and a little in front, low, so you see the dust blow out under the ship
+  const camL = T.clone().addScaledVector(n, L * s * .7).addScaledVector(x, L * s * 2.3).addScaledVector(f, L * s * 1.5);
+  { const cn = camL.clone().normalize(), cg = groundHit(p, cn).r; if (camL.length() < cg + u * 2) camL.setLength(cg + u * 2); }
+  const dustK = groundColor(p, n).lerp(new THREE.Color(0xd8ccb8), .35); // dust the color of the ground you land on
+  walk = { p, phase: "approach", t: 0, n, f, x, g, u, s, L, bottom, P0, V0, Q0, QT: basisQ(x, n, f), T, H, camL, cam0: p.spin.worldToLocal(camera.position.clone()), up0: camera.up.clone(),
+    dust: [dustK.r, dustK.g, dustK.b], ringT: 0, obs: obstacles(p), bubbles: [], chatT: 3, stepT: 0 };
+  walk.obs.push({ n: n.clone(), r: L * s * .42, ship: true });
+  clearLines(); radio(`🛬 Landing on ${p.data.name}. Hold on, I'll fire the landing thrusters!`);
+  sfx.airRush(2.6); setTimeout(() => mode === "landing" && sfx.padRoar(3.8), 2300);
+  missionEvent("visit", p.data.id || p.data.name);
+  renderPanels();
+}
+function clearLines() { if (!walk) return; for (const b of walk.bubbles) { walk.p.spin.remove(b.sp); b.sp.material.map.dispose(); b.sp.material.dispose(); } walk.bubbles.length = 0; }
+function setWalkLook(on) { // the sky glow, soft light and particles that work up close
+  const w = walk, p = w.p;
+  walkSky.visible = on; walkLight.intensity = on ? .55 : 0; NEAR_FADE.value = on ? .05 : 1;
+  if (on) { walkSky.material.uniforms.col.value.set(p.data.design.atmo || "#88ccff"); walkLight.color.set(p.data.design.atmo || "#bfdcff").lerp(new THREE.Color(0xffffff), .5); walkLight.groundColor.set(p.data.design.low || "#6a5a48").multiplyScalar(.6); }
+  p.atmoBack.visible = p.atmoRim.visible = !on; // the walk sky takes over from the planet's own air shells
+  p.clouds.visible = !on && !!p.data.design.clouds; // up close the cloud shell would cut through the air around you
+}
+function padJets(power, k) { // four landing thrusters under the hull, firing straight down
+  const L = walk.L * walk.s, q = ship.quaternion, t = clock();
+  [[.2, .26], [-.2, .26], [.2, -.24], [-.2, -.24]].forEach(([px, pz], i) => {
+    const j = jets.get("pad" + i), lv = power * (.85 + Math.random() * .3);
+    j.g.visible = lv > .03; if (!j.g.visible) return;
+    j.g.position.set(px * L, -walk.bottom * walk.s * .7, pz * L).applyQuaternion(q).add(ship.position);
+    j.g.quaternion.setFromUnitVectors(UP, _v.set(0, -1, 0).applyQuaternion(q));
+    const w = L * .06 * (.7 + .3 * lv); j.g.scale.set(w, L * (.16 + .14 * k) * lv * (.85 + Math.sin(t * 40 + i) * .15), w);
+    if (lv > .25 && Math.random() < .7) fire.spawn(j.g.position, _v.set(0, -1, 0).applyQuaternion(q).multiplyScalar(L * rnd(2, 3.5)), rnd(.1, .2), L * rnd(.04, .07), C(state.ship.flame, 2.2), C(state.ship.flame, .2), 1.5); // hot exhaust shooting down
+  });
+}
+function kickDust(rate) { // dust and air blasted out across the ground under the thrusters
+  const w = walk, p = w.p, nW = toWorldDir(p, w.n), L = w.L * w.s, t = new THREE.Vector3(), at = new THREE.Vector3(), v = new THREE.Vector3();
+  const cnt = Math.round(rate * 12);
+  for (let i = 0; i < cnt; i++) {
+    t.randomDirection().projectOnPlane(w.n).normalize();
+    const dn = w.n.clone().addScaledVector(t, (L * rnd(.15, .55)) / w.g).normalize();
+    at.copy(dn).multiplyScalar(groundAtGrid(p, dn) + w.u * .1); p.spin.localToWorld(at);
+    v.copy(toWorldDir(p, t)).multiplyScalar(L * rnd(1.4, 3.2) * (.5 + rate)).addScaledVector(nW, L * rnd(.05, .4));
+    const c = w.dust, k = rnd(.75, 1.15);
+    smoke.spawn(at, v, rnd(.7, 1.6), L * rnd(.012, .03), [c[0] * k, c[1] * k, c[2] * k], [c[0] * .8, c[1] * .8, c[2] * .8], 6, 2.2);
+  }
+  if (Math.random() < rate * .8) { at.copy(w.n).multiplyScalar(w.g + w.u * .05); p.spin.localToWorld(at); fire.spawn(at, v.set(0, 0, 0), .25, L * rnd(.2, .35), C(0xff9a50, .9 * rate), C(0xff5020, .1)); } // the ground glows hot under the jets
+  for (let i = 0; i < 2; i++) if (Math.random() < rate) { // little stones and grass bits flicked up
+    t.randomDirection().projectOnPlane(w.n).normalize(); const dn = w.n.clone().addScaledVector(t, L * rnd(.2, .5) / w.g).normalize();
+    at.copy(dn).multiplyScalar(groundAtGrid(p, dn) + w.u * .05); p.spin.localToWorld(at);
+    chunks.spawn(at.clone(), toWorldDir(p, t).multiplyScalar(L * rnd(1, 2.5)).addScaledVector(nW, L * rnd(.6, 1.4)), w.u * rnd(.03, .07), new THREE.Color(w.dust[0] * .7, w.dust[1] * .7, w.dust[2] * .7), rnd(1, 2));
+  }
+}
+function groundColor(p, n) { // the painted color of the ground nearest to direction n
+  let bi = 0, bd = -2; for (let u = 0; u < p.U; u++) { const d = p.dirs[u * 3] * n.x + p.dirs[u * 3 + 1] * n.y + p.dirs[u * 3 + 2] * n.z; if (d > bd) { bd = d; bi = u; } }
+  const c = p.geo.attributes.color.array; return new THREE.Color(c[bi * 3], c[bi * 3 + 1], c[bi * 3 + 2]);
+}
+const groundAtGrid = (p, n) => Math.max(p.radiusAt(n), p.ocean.visible ? p.R : 0);
+function walkFrame(dt, realDt) {
+  const w = walk, p = w.p;
+  if (!planets.includes(p) || !p.alive) return leaveNow();
+  w.t += realDt;
+  for (const f of ship.userData.flames) f.visible = false;
+  if (w.phase === "approach" || w.phase === "descend" || w.phase === "settle" || w.phase === "exit") landingStep(realDt);
+  else if (w.phase === "walk") walkStep(dt);
+  else takeoffStep(realDt);
+  if (!walk) return; // just took off
+  if (avatar.mixer && avatar.root.visible) avatar.mixer.update(dt);
+  if (w.phase !== "approach") { p.visitor = w.pn ? { n: w.pn, meet: Math.cos(w.u * 2.6 / w.g), push: Math.cos(w.u * .75 / w.g), call: Math.cos(w.u * 14 / w.g), until: clock() + .5 } : null; peopleTalk(dt); }
+  walkSky.position.copy(p.group.position); walkSky.scale.setScalar(w.g + w.u * 40); walkSky.material.uniforms.up.value.copy(camera.position).sub(p.group.position).normalize();
+  walkSky.material.uniforms.k.value = Math.min(1, walkSky.material.uniforms.k.value + realDt * .6);
+}
+function placeShip(Pl, Ql, s) { const p = walk.p; ship.position.copy(Pl); p.spin.localToWorld(ship.position); ship.quaternion.copy(p.spin.getWorldQuaternion(_q)).multiply(Ql); ship.scale.setScalar(s); model.quaternion.identity(); model.position.set(0, 0, 0); }
+function camTo(Pl, lookL, upL, k) { // move the camera (planet coordinates), k = how fast it catches up
+  const p = walk.p; _v.copy(Pl);
+  { const lo = groundAtGrid(p, _v.clone().normalize()) + walk.u * .45; if (_v.length() < lo) _v.setLength(lo); } // never dip under the ground on the way
+  p.spin.localToWorld(_v);
+  camera.position.lerp(_v, k); camera.up.lerp(toWorldDir(p, upL), k).normalize();
+  _v.copy(lookL); p.spin.localToWorld(_v); camera.lookAt(_v);
+}
+function landingStep(dt) {
+  const w = walk, p = w.p, L = w.L * w.s;
+  const A = 2.6, D = 3.6, S = .9, X = 1.6;
+  if (w.phase === "approach") {
+    const k = Math.min(1, w.t / A), e = ss(0, 1, k);
+    const P1 = w.P0.clone().addScaledVector(w.V0, .45), P2 = w.H.clone().addScaledVector(w.n, L * 2.5), a = 1 - e;
+    const pos = w.P0.clone().multiplyScalar(a * a * a).addScaledVector(P1, 3 * a * a * e).addScaledVector(P2, 3 * a * e * e).addScaledVector(w.H, e * e * e);
+    const prev = w.prevPos || pos.clone(); w.prevPos = pos.clone();
+    placeShip(pos, w.Q0.clone().slerp(w.QT, ss(0, .85, k)), THREE.MathUtils.lerp(1, w.s, ss(0, .9, k)));
+    // coming in through the air: hot plasma at the nose, then streaks of wind rushing past
+    const mv = pos.clone().sub(prev), sp = mv.length() / Math.max(dt, .001);
+    if (sp > .5) {
+      const dirW = toWorldDir(p, mv.normalize()), heat = (1 - k) * Math.min(1, sp / 8);
+      for (let i = 0; i < 5; i++) {
+        const at = ship.position.clone().addScaledVector(dirW, L * .45).add(_v.randomDirection().multiplyScalar(L * .2));
+        if (i < 3) fire.spawn(at, dirW.clone().multiplyScalar(-sp * rnd(.3, .7)).add(_v.randomDirection().multiplyScalar(.3)), rnd(.15, .3), L * rnd(.03, .06), C(0xffe0a0, 2.6 * heat), C(0xff4010, .3 * heat), 1.5, 2);
+        const side = ship.position.clone().add(_v.randomDirection().multiplyScalar(L * rnd(.5, 1.3)));
+        fire.spawn(side, dirW.clone().multiplyScalar(-sp * rnd(.8, 1.4)), rnd(.15, .3), L * rnd(.012, .025), C(0xdfefff, .9), C(0x88aaff, 0));
+      }
+      if (heat > .2) shake = Math.max(shake, .015 * heat);
+    }
+    const cine = w.camL.clone(), back = pos.clone().sub(w.T).normalize(), chase = w.cam0.clone().lerp(pos.clone().addScaledVector(back, L * 3.6).addScaledVector(w.n, L * .9), ss(0, .45, k)); // behind the ship, looking past it at the ground
+    camTo(chase.lerp(cine, ss(.35, 1, k)), pos.clone().lerp(w.T, THREE.MathUtils.lerp(.3, .45, ss(.35, 1, k))), w.n, 1); // keep the ground in the picture as you come in
+    if (camera.fov !== 55) { camera.fov += (55 - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+    if (k >= 1) { w.phase = "descend"; w.t = 0; setWalkLook(true); camera.fov = 55; camera.updateProjectionMatrix(); }
+  } else if (w.phase === "descend") {
+    const k = Math.min(1, w.t / D), e = 1 - (1 - k) ** 2.2, hgt = (1 - e) * L * 2;
+    const sway = w.x.clone().multiplyScalar(Math.sin(w.t * 2.1) * L * .04 * (1 - k)).addScaledVector(w.f, Math.sin(w.t * 1.4) * L * .03 * (1 - k));
+    const pos = w.T.clone().addScaledVector(w.n, hgt).add(sway);
+    const wob = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(w.t * 1.7) * .05 * (1 - k), 0, Math.sin(w.t * 2.3) * .06 * (1 - k)));
+    placeShip(pos, w.QT.clone().multiply(wob), w.s);
+    padJets(1.15 - k * .35, 1 - k);
+    const rate = ss(L * 2.6, 0, hgt); if (rate > .02) kickDust(rate);
+    shake = Math.max(shake, .006 * rate);
+    const orbit = w.camL.clone().applyAxisAngle(w.n, -k * .25);
+    camTo(orbit, pos.clone().lerp(w.T, .4), w.n, 1 - Math.exp(-dt * 6));
+    if (k >= 1) { // touchdown!
+      w.phase = "settle"; w.t = 0; sfx.touchdown(); shake = Math.max(shake, .05 * L);
+      for (let i = 0; i < 4; i++) kickDust(1.6);
+      p.cheerUntil = clock() + 5; // the locals cheer: a visitor!
+      const civ = p.civilians().sort((a, b) => b.dir.dot(w.n) - a.dir.dot(w.n)).slice(0, 12); for (const c of civ) c.curious = true; // the nearest ones come over to see you
+    }
+  } else if (w.phase === "settle") {
+    const k = Math.min(1, w.t / S), dip = Math.sin(k * Math.PI) * (1 - k * .5) * L * .03;
+    placeShip(w.T.clone().addScaledVector(w.n, -dip), w.QT, w.s);
+    padJets(.8 * (1 - k) ** 2, 0); if (k < .5) kickDust(.6 * (1 - k * 2));
+    camTo(w.camL.clone().applyAxisAngle(w.n, -.25), w.T, w.n, 1 - Math.exp(-dt * 6));
+    if (k >= 1) { // you hop out of the side hatch, Bolt pops out after you
+      w.phase = "exit"; w.t = 0;
+      { // hop out on whichever side of the ship has dry land, facing open ground
+        let best = null;
+        for (let a = 0; a < 12 && !best; a++) for (const sg of [1, -1]) {
+          const dir = w.x.clone().applyAxisAngle(w.n, sg * a * Math.PI / 12), pn = w.n.clone().addScaledVector(dir, (L * .78) / w.g).normalize();
+          if (!groundHit(p, pn).land || w.obs.some((o) => !o.ship && pn.angleTo(o.n) * w.g < o.r)) continue;
+          const side = new THREE.Vector3().crossVectors(w.n, dir); let face = null;
+          for (const fs of [side, side.clone().negate(), dir]) { const ahead = pn.clone().addScaledVector(fs.clone().addScaledVector(dir, .5).normalize(), w.u * 3 / w.g).normalize(); if (groundHit(p, ahead).land) { face = fs.clone().addScaledVector(dir, .5).normalize(); break; } }
+          best = { pn, face: face || dir }; break;
+        }
+        best ||= { pn: w.n.clone().addScaledVector(w.x, (L * .78) / w.g).normalize(), face: w.f.clone() };
+        w.pn = best.pn; w.face = best.face.clone().projectOnPlane(w.pn).normalize(); w.cf = w.face.clone(); w.pitch = .36; w.hgt = 0; w.vy = 0; w.ground = true; w.spd = 0; w.moveDir = w.face.clone(); // you stand beside the ship, looking the way it points
+      }
+      w.from = w.T.clone().addScaledVector(w.pn.clone().projectOnPlane(w.n).normalize(), L * .3).addScaledVector(w.n, w.bottom * w.s * .2);
+      w.as = avatar.k * w.u / .21 * 1.05;
+      if (avatar.root) { avatar.root.visible = true; avatarPlay("cheer"); }
+      boltBot.visible = true; boltBot.scale.setScalar(.001); boltBot.position.copy(ship.position);
+      sfx.beam(false);
+    }
+  } else if (w.phase === "exit") {
+    const k = Math.min(1, w.t / X), e = ss(0, .7, k);
+    w.g = groundHit(p, w.pn).r;
+    const to = w.pn.clone().multiplyScalar(w.g), pos = w.from.clone().lerp(to, e).addScaledVector(w.n, Math.sin(Math.min(1, k / .7) * Math.PI) * w.u * .9);
+    putAvatar(pos, w.face, w.as * Math.min(1, .3 + k * 2));
+    if (k > .7 && avatar.cur !== avatar.acts.cheer) avatarPlay("cheer");
+    if (k >= .7 && !w.landedPuff) { w.landedPuff = true; footDust(pos, 8); }
+    boltFollow(dt, Math.min(1, k * 1.5));
+    const camW = walkCam(w, pos);
+    const cine = w.camL.clone().applyAxisAngle(w.n, -.25);
+    camTo(cine.lerp(camW.pos, ss(.15, 1, k)), w.T.clone().lerp(camW.look, ss(0, .8, k)), w.n, 1);
+    if (k >= 1) startWalking();
+  }
+}
+function putAvatar(Pl, faceL, s) {
+  if (!avatar.root) return; const w = walk, p = w.p, up = Pl.clone().normalize();
+  avatar.root.position.copy(Pl); p.spin.localToWorld(avatar.root.position);
+  const f = faceL.clone().projectOnPlane(up).normalize(), x = new THREE.Vector3().crossVectors(up, f);
+  avatar.root.quaternion.copy(p.spin.getWorldQuaternion(_q)).multiply(basisQ(x, up, f)); avatar.root.scale.setScalar(s);
+}
+function footDust(Pl, n) {
+  const w = walk, p = w.p, up = Pl.clone().normalize(), t = new THREE.Vector3();
+  for (let i = 0; i < n; i++) { t.randomDirection().projectOnPlane(up).normalize(); const at = Pl.clone().addScaledVector(t, w.u * .15); p.spin.localToWorld(at); const c = w.dust; smoke.spawn(at, toWorldDir(p, t).multiplyScalar(w.u * rnd(.6, 1.4)).addScaledVector(toWorldDir(p, up), w.u * .3), rnd(.5, .9), w.u * rnd(.12, .2), c, [c[0] * .7, c[1] * .7, c[2] * .7], 2, 2); }
+}
+function walkCam(w, Pl) { // behind and a little above you; you look around with the mouse
+  const up = Pl.clone().normalize(), cf = w.cf.clone().projectOnPlane(up).normalize(), dist = w.u * (5.6 + w.pitch * 2.4);
+  const pos = Pl.clone().addScaledVector(up, w.u * 1.2).addScaledVector(cf, -Math.cos(w.pitch) * dist).addScaledVector(up, Math.sin(w.pitch) * dist);
+  const cg = groundAtGrid(w.p, pos.clone().normalize()); if (pos.length() < cg + w.u * .45) pos.setLength(cg + w.u * .45);
+  return { pos, look: Pl.clone().addScaledVector(up, w.u * 1.25).addScaledVector(cf, w.u * 1.8), up };
+}
+function boltFollow(dt, grow = 1) {
+  const w = walk, p = w.p, Pl = w.pn.clone().multiplyScalar(w.g + w.hgt), up = w.pn, right = new THREE.Vector3().crossVectors(w.face, up), t = clock();
+  const want = Pl.clone().addScaledVector(up, w.u * (1.45 + Math.sin(t * 2.2) * .08)).addScaledVector(right, w.u * 1.05).addScaledVector(w.face, w.u * .25);
+  p.spin.localToWorld(want);
+  boltBot.position.lerp(want, 1 - Math.exp(-dt * 5)); boltBot.scale.setScalar(w.u * .38 * grow);
+  const lookAt = w.talkTo ? w.talkTo.clone() : Pl.clone().addScaledVector(w.face, w.u * 3).addScaledVector(up, w.u * .8);
+  if (!w.talkTo) p.spin.localToWorld(lookAt);
+  boltBot.up.copy(toWorldDir(p, up)); boltBot.lookAt(lookAt);
+  const talk = clock() < (w.boltTalkUntil || 0); boltBot.userData.mouth.scale.y = talk ? .6 + Math.abs(Math.sin(t * 18)) * 1.2 : 1;
+  boltBot.userData.tip.visible = Math.sin(t * 5) > -.4; boltBot.userData.under.material.opacity = .55 + Math.sin(t * 9) * .15;
+}
+function startWalking() {
+  const w = walk; w.phase = "walk"; w.t = 0; mode = "walk"; document.body.classList.remove("flying"); document.body.classList.add("walking");
+  walkLook.set(0, 0); w.camNow = null;
+  radio(`We're on ${w.p.data.name}! Walk with W A S D, run with Shift, jump with Space. Go say hi with E. Press Enter to take off.`); w.boltTalkUntil = clock() + 4;
+  renderPanels(); tutEvent("land");
+}
+function walkStep(dt) {
+  const w = walk, p = w.p, k = (c) => keys.has(c);
+  // look around: the mouse turns the camera around you
+  const SENS = (ui.sens || .0026) * 1.1;
+  if (walkLook.x) w.cf.applyAxisAngle(w.pn, -walkLook.x * SENS);
+  w.pitch = THREE.MathUtils.clamp(w.pitch + walkLook.y * SENS * .8, -.15, 1.15); walkLook.set(0, 0);
+  const fwdIn = (k("KeyW") || k("ArrowUp") ? 1 : 0) - (k("KeyS") || k("ArrowDown") ? 1 : 0), sideIn = (k("KeyD") || k("ArrowRight") ? 1 : 0) - (k("KeyA") || k("ArrowLeft") ? 1 : 0);
+  const run = k("ShiftLeft") || k("ShiftRight"), right = new THREE.Vector3().crossVectors(w.cf, w.pn);
+  const move = w.cf.clone().multiplyScalar(fwdIn).addScaledVector(right, sideIn), moving = move.lengthSq() > .01;
+  if (moving) { move.normalize(); w.moveDir.lerp(move, 1 - Math.exp(-dt * 14)).projectOnPlane(w.pn).normalize(); w.face.lerp(move, 1 - Math.exp(-dt * 9)).projectOnPlane(w.pn).normalize(); }
+  w.spd += ((moving ? w.u * (run ? 4.4 : 2) : 0) - w.spd) * Math.min(1, dt * (moving ? 8 : 12));
+  if (w.spd > w.u * .02) { // step across the curved ground; slide round houses, the ship and the sea
+    let done = false;
+    for (const [ang, m] of [[0, 1], [.7, .7], [-.7, .7], [1.3, .4], [-1.3, .4]]) {
+      const dir = w.moveDir.clone().applyAxisAngle(w.pn, ang), next = w.pn.clone().addScaledVector(dir, w.spd * m * dt / w.g).normalize();
+      const gh = groundHit(p, next);
+      if (!gh.land && w.onLand) { w.seaBump = (w.seaBump || 0) + dt; continue; }
+      if (w.ground && (gh.r - w.g) / Math.max(1e-5, w.spd * m * dt) > 1.6) continue; // a wall: too steep to walk up
+      if (w.obs.some((o) => { const a = next.angleTo(o.n) * w.g; return a < o.r && a < w.pn.angleTo(o.n) * w.g; })) continue;
+      w.pn.copy(next); w.onLand = gh.land; if (w.ground) w.g = gh.r; else w.gUnder = gh.r; done = true; break;
+    }
+    if (!done) w.spd *= .3;
+    if (w.seaBump > .6 && clock() > (w.seaSaid || 0)) { w.seaSaid = clock() + 20; w.seaBump = 0; radio("🌊 Whoa, that's deep water. We can't swim, explorer!"); w.boltTalkUntil = clock() + 3; }
+    for (const v of [w.cf, w.face, w.moveDir]) v.projectOnPlane(w.pn).normalize(); // carry your facing over the curve
+  } else if (w.ground) { const gh = groundHit(p, w.pn); w.g = gh.r; w.onLand = gh.land; }
+  // jumping: low gravity, so you float a little
+  if (k("Space") && w.ground && !w.jumpHeld) { w.ground = false; w.vy = w.u * 5.6; w.hgt = 0; w.jumpHeld = true; sfx.hop(); }
+  if (!k("Space")) w.jumpHeld = false;
+  if (!w.ground) {
+    w.vy -= w.u * 15 * dt; w.hgt += w.vy * dt;
+    const under = w.gUnder ?? w.g; if (w.g + w.hgt <= under) { w.g = under; w.hgt = 0; w.ground = true; w.gUnder = null; footDust(w.pn.clone().multiplyScalar(w.g), 6); sfx.step(true); }
+  }
+  const Pl = w.pn.clone().multiplyScalar(w.g + w.hgt);
+  putAvatar(Pl, w.face, w.as);
+  if (!w.ground) avatarPlay("run", .8);
+  else if (w.spd > w.u * .3) avatarPlay(w.spd > w.u * 3 ? "run" : "walk", Math.max(.6, w.spd / (w.u * (w.spd > w.u * 3 ? 4.4 : 2))));
+  else avatarPlay(clock() < (w.waveUntil || 0) ? "cheer" : "idle");
+  if (w.ground && w.spd > w.u * .3) { // footsteps and little puffs of dust when you run
+    w.stepT += dt * w.spd / (w.u * .9);
+    if (w.stepT > 1) { w.stepT = 0; sfx.step(false); if (run) footDust(Pl, 2); }
+  }
+  boltFollow(dt);
+  const cam = walkCam(w, Pl);
+  if (!w.camNow) w.camNow = cam.pos.clone(); else w.camNow.lerp(cam.pos, 1 - Math.exp(-dt * 10));
+  camTo(w.camNow, cam.look, cam.up, 1);
+  const fovWant = 60 + Math.min(6, w.spd / w.u * 1.2); if (Math.abs(camera.fov - fovWant) > .05) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+  sfx.music("calm");
+}
+function nearestPerson(maxA, front) {
+  const w = walk, p = w.p; let best = null, bc = Math.cos(maxA);
+  for (const q of p.people) {
+    if (q.soldier || q.state !== "walk") continue;
+    const c = q.dir.dot(w.pn); if (c < bc) continue;
+    if (front && q.dir.clone().sub(w.pn).dot(w.face) < -w.u * .2 / w.g) continue;
+    bc = c; best = q;
+  }
+  return best;
+}
+function personTop(q) { const w = walk, p = w.p, fl = FLOATERS.has(p.style?.kind) ? .25 : 0; return q.dir.clone().multiplyScalar(p.radiusAt(q.dir) + w.u * (1.12 + fl)); }
+function sayLine(q, text, ms) { // a creature says something: a bubble over its head, in its own voice
+  const w = walk, p = w.p;
+  const old = w.bubbles.findIndex((b) => b.q === q); if (old >= 0) { const b = w.bubbles.splice(old, 1)[0]; p.spin.remove(b.sp); b.sp.material.map.dispose(); b.sp.material.dispose(); }
+  while (w.bubbles.length >= 4) { const b = w.bubbles.shift(); p.spin.remove(b.sp); b.sp.material.map.dispose(); b.sp.material.dispose(); }
+  const sp = bubbleSprite(text); p.spin.add(sp);
+  const dur = ms || Math.max(2.8, text.length * .085);
+  w.bubbles.push({ sp, q, born: clock(), until: clock() + dur });
+  q.talkUntil = clock() + dur;
+  const at = personTop(q); p.spin.localToWorld(at); sfx.creature(p.style?.kind, "hello", at);
+}
+function peopleTalk(dt) {
+  const w = walk, p = w.p; if (!w.pn || w.phase === "takeoff" || w.phase === "board" || w.phase === "lift") return;
+  const greetC = Math.cos(w.u * 2.2 / w.g);
+  for (const q of p.people) { // say hi when you walk up to them
+    if (q.soldier || q.state !== "walk") continue;
+    const c = q.dir.dot(w.pn);
+    if (c > greetC && clock() > (q.greetAgain || 0) && clock() > (q.talkUntil || 0)) { q.greetAgain = clock() + 25; q.greetUntil = clock() + 2.2; q.curious = false; sayLine(q, walkLine(p, "greet")); }
+  }
+  if ((w.chatT -= dt) < 0) { // others chat now and then
+    w.chatT = rnd(2.5, 5);
+    const farC = Math.cos(w.u * 10 / w.g), near = p.people.filter((q) => !q.soldier && q.state === "walk" && q.dir.dot(w.pn) > farC && clock() > (q.talkUntil || 0));
+    if (near.length && w.bubbles.length < 3) sayLine(near[(Math.random() * near.length) | 0], walkLine(p, "chat"));
+  }
+  for (let i = w.bubbles.length - 1; i >= 0; i--) { // bubbles pop in, follow their speaker, and pop away
+    const b = w.bubbles[i], age = clock() - b.born, left = b.until - clock();
+    if (left <= 0 || b.q.state !== "walk" || !p.people.includes(b.q)) { p.spin.remove(b.sp); b.sp.material.map.dispose(); b.sp.material.dispose(); w.bubbles.splice(i, 1); continue; }
+    const pop = Math.min(1, age / .18) * (1 + Math.sin(Math.min(1, age / .3) * Math.PI) * .12) * Math.min(1, left / .2);
+    const h = w.u * .8 * (.7 + .3 * b.sp.userData.lines) * pop;
+    b.sp.position.copy(personTop(b.q)); b.sp.scale.set(h * b.sp.userData.aspect, h, 1);
+  }
+  const talker = w.bubbles.length ? w.bubbles[w.bubbles.length - 1] : null; // Bolt looks at whoever talked last
+  w.talkTo = talker && clock() - talker.born < 3 ? p.spin.localToWorld(personTop(talker.q)) : null;
+}
+function sayHi() { // E: wave at the nearest one and chat
+  const w = walk; if (!w || w.phase !== "walk") return;
+  w.waveUntil = clock() + 1.6;
+  const q = nearestPerson(w.u * 3.2 / w.g, true) || nearestPerson(w.u * 3.2 / w.g, false);
+  if (!q) { if (clock() > (w.boltTalkUntil || 0)) { radio(["Nobody close by. Walk up to someone!", "Try the ones over there, they look friendly.", "Hello? Anybody? Let's walk closer."][(Math.random() * 3) | 0]); w.boltTalkUntil = clock() + 3; } return; }
+  q.greetUntil = clock() + 2.2; q.curious = false;
+  setTimeout(() => walk && walk.phase === "walk" && sayLine(q, walkLine(walk.p, Math.random() < .3 ? "greet" : "chat")), 350);
+}
+function takeOff() {
+  const w = walk; if (mode !== "walk" || !w) return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  mode = "takeoff"; w.phase = "board"; w.t = 0; keys.clear(); clearLines();
+  w.boardFrom = w.pn.clone().multiplyScalar(w.g + w.hgt); w.camFrom = p0cam();
+  document.body.classList.remove("walking"); sfx.beam(true); renderPanels();
+}
+const p0cam = () => walk.p.spin.worldToLocal(camera.position.clone());
+function takeoffStep(dt) {
+  const w = walk, p = w.p, L = w.L * w.s, B = 1, LI = 2.2, LV = 1.8;
+  const camSide = w.camL.clone().applyAxisAngle(w.n, -.25);
+  if (w.phase === "board") { // a beam pulls you and Bolt up into the hatch
+    const k = Math.min(1, w.t / B), e = ss(0, 1, k), hatch = w.T.clone().addScaledVector(w.x, L * .3);
+    putAvatar(w.boardFrom.clone().lerp(hatch, e), w.face, w.as * (1 - e * .9));
+    if (avatar.root) avatar.root.visible = k < .98;
+    const hw = hatch.clone(); p.spin.localToWorld(hw); boltBot.position.lerp(hw, 1 - Math.exp(-dt * 6)); boltBot.scale.setScalar(w.u * .3 * (1 - e));
+    const at = w.boardFrom.clone().lerp(hatch, e); p.spin.localToWorld(at);
+    for (let i = 0; i < 4; i++) fire.spawn(at.clone().add(_v.randomDirection().multiplyScalar(w.u * .4)), _v.randomDirection().multiplyScalar(w.u * .3), .4, w.u * .08, C(0x9fe8ff, 2), C(0x4080ff, 0));
+    camTo(w.camFrom.clone().lerp(camSide, ss(0, 1, k)), w.T, w.n, 1);
+    if (k >= 1) { w.phase = "lift"; w.t = 0; boltBot.visible = false; if (avatar.root) avatar.root.visible = false; p.visitor = null; sfx.padRoar(LI + .6); }
+  } else if (w.phase === "lift") { // thrusters on, dust everywhere, up we go
+    const k = Math.min(1, w.t / LI), e = k * k, hgt = e * L * 2;
+    const wob = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(w.t * 1.9) * .04 * k, 0, Math.sin(w.t * 2.5) * .05 * k));
+    placeShip(w.T.clone().addScaledVector(w.n, hgt), w.QT.clone().multiply(wob), w.s);
+    padJets(.6 + k * .6, k); const rate = ss(L * 2.6, 0, hgt) * Math.min(1, w.t * 3); if (rate > .02) kickDust(rate);
+    shake = Math.max(shake, .008 * rate);
+    camTo(camSide, w.T.clone().addScaledVector(w.n, hgt * .8), w.n, 1 - Math.exp(-dt * 5));
+    if (k >= 1) { w.phase = "leave"; w.t = 0; setWalkLook(false); sfx.boostKick(); w.QU = basisQ(w.x, w.f.clone().negate(), w.n); }
+  } else { // nose up and blast off into space
+    const k = Math.min(1, w.t / LV), e = k * k * k, pos = w.T.clone().addScaledVector(w.n, L * 2 + e * L * 26 + k * L * 2);
+    placeShip(pos, w.QT.clone().slerp(w.QU, ss(0, .6, k)), THREE.MathUtils.lerp(w.s, 1, ss(.2, 1, k)));
+    for (const f of ship.userData.flames) f.visible = k > .25; if (k > .25) setFlames(ship.userData, 1 + k * 2, k > .5);
+    padJets(.8 * (1 - k), 1);
+    const nose = w.n.clone(), chase = pos.clone().addScaledVector(nose, -ship.userData.len * 4.2).addScaledVector(w.f, ship.userData.len * 1.1);
+    camTo(camSide.clone().lerp(chase, ss(.1, .9, k)), pos, w.n.clone().lerp(w.f.clone().negate(), ss(.3, 1, k)), 1 - Math.exp(-dt * 8));
+    if (k >= 1) { const v = toWorldDir(p, w.n).multiplyScalar(30); resumeFlying(v); }
+  }
+}
+function resumeFlying(v) {
+  const w = walk; if (w && w.p) { w.p.visitor = null; if (walkSky.visible) setWalkLook(false); }
+  clearLines(); walk = null; walkSky.visible = false; walkSky.material.uniforms.k.value = 0; walkLight.intensity = 0; NEAR_FADE.value = 1;
+  if (avatar.root) avatar.root.visible = false; boltBot.visible = false; jets.hide();
+  document.body.classList.remove("walking"); document.body.classList.add("flying");
+  mode = "fly"; ship.scale.setScalar(1); model.quaternion.identity(); model.position.set(0, 0, 0);
+  head.copy(ship.quaternion); turn.set(0, 0, 0); mouseTurn.set(0, 0); pendingTurn.set(0, 0); angVel.set(0, 0); rcs.spin.set(0, 0, 0); rcs.acc.set(0, 0, 0); rcs.fv = rcs.fa = rcs.sx = rcs.sy = 0; lean.set(0, 0); leanQ.identity(); roll = null; throttle = .4;
+  vel.copy(v || new THREE.Vector3()); camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0);
+  $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
+  if (navArrow) navArrow.visible = !!nav;
+  renderWeapons(); renderPanels();
+}
+function leaveNow() { // the planet blew up or changed under you: Bolt beams you straight back into the ship
+  const w = walk; if (w) ship.position.copy(w.p.group.position).addScaledVector(toWorldDir(w.p, w.n || UP), w.p.R * 2.5 + 2);
+  toast("🚀 Bolt beamed you back to your ship!"); resumeFlying(null);
+}
+function walkKey(e) {
+  if (e.code === "Enter") takeOff();
+  if (e.code === "KeyE") sayHi();
+}
+$("landBtn").addEventListener("click", () => (mode === "walk" ? takeOff() : landTarget && startLanding(landTarget)));
+
 function frame() {
   const realDt = Math.min(timer.getDelta(), .05), dt = realDt * slow, t = timer.elapsedTime;
   drawMinimap(); updateThreats(); checkDiscover();
   sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t; FIRE_T.value = t;
   WAVES.offset.set(t * .004, t * .0025); CLOUD_TIME.value = t;
   const still = reduce || brushing || (mode === "home" && (!!tool || view === "design" || view === "build"));
-  if (!still) home.spin.rotation.y += dt * .04;
+  if (!still && !walkingOn(home)) home.spin.rotation.y += dt * .04;
   for (const p of planets) {
-    if (p !== home) p.spin.rotation.y += dt * .03;
+    if (p !== home && !walkingOn(p)) p.spin.rotation.y += dt * .03; // the planet you stand on holds still
     p.clouds.rotation.y += dt * .012;
     if (p.groundSh) { p.groundSh.uniforms.cRot.value = p.clouds.rotation.y; p.groundSh.uniforms.cOn.value = p.clouds.visible && !ui.low ? 1 : 0; }
     if (p.remnant) p.remnant.rotation.y += dt * .05;
@@ -6798,6 +7358,7 @@ function frame() {
   if (mode !== "fly") { jets.hide(); boostFx.g.visible = false; warpTunnel.mesh.visible = false; updateEngineGlow(0, false); }
   if (mode === "fly") flyStep(dt);
   else if (mode === "warp") warpStep(realDt);
+  else if (walk) walkFrame(dt, realDt); // landing, walking on a planet, taking off
   else {
     if (view === "hangar") { ship.position.copy(HANGAR_POS); ship.rotation.set(0, -.5, 0); ship.scale.setScalar(1); model.rotation.z = 0; } // you spin it with the mouse
     else { orbitT += dt * .3; placeOrbit(orbitT); model.rotation.z = Math.sin(t) * .1; }
@@ -6810,7 +7371,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t); busyStep(dt);
+  landUiStep(); boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t); busyStep(dt);
   if (mode !== "fly" || !nav) $("navTag").hidden = true;
   if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
@@ -6843,6 +7404,7 @@ function startGame() {
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
 window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
+window.__tp.landing = { get walk() { return walk; }, get landTarget() { return landTarget; }, startLanding, takeOff, sayHi, landable, walkLook, get avatar() { return avatar; } };
 </script>
 </body>
 </html>
