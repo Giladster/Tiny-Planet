@@ -5430,10 +5430,29 @@ const GIANT_PLANETS = [
   }
   return { ...p, at: V(p.at), group, body };
 });
+// downloaded planet models (Sketchfab, models/CREDITS.md): sized by their main ball, so rings and clouds keep their real proportions
+const MODEL_PLANETS = [
+  { file: "planet_earth.glb", at: [-1100, 500, 1300], R: 100, body: "Object_6", spin: .012 },
+  { file: "planet_lava.glb", at: [1100, -500, -1300], R: 70, body: "planet_planet_0", spin: .01 },
+  { file: "planet_uranus.glb", at: [-300, 750, -1950], R: 110, body: "0", hide: ["miranda_miranda_0"], spin: .006, tilt: 1.2 },
+  { file: "solar_system.glb", at: [200, -900, -2100], R: 50, body: "Object_8", spin: .004 }, // a whole little solar system: its sun sits in the middle
+  { file: "planet_toi561b.glb", at: [-1900, -450, -300], R: 45, body: "Object_4", hide: ["Object_6", "Object_8", "Object_10", "Object_12"], spin: .015 },
+].map((p) => {
+  const g = { ...p, at: V(p.at), group: new THREE.Group() }; scene.add(g.group);
+  new GLTFLoader().load("models/" + p.file, (gl) => {
+    const m = gl.scene; for (const n of p.hide || []) { const o = m.getObjectByName(n); if (o) o.visible = false; }
+    m.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(m.getObjectByName(p.body) || m), k = p.R * 2 / box.getSize(new THREE.Vector3()).x;
+    m.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1);
+    const holder = new THREE.Group(); holder.add(m); holder.scale.setScalar(k); if (p.tilt) holder.rotation.z = p.tilt; g.group.add(holder); g.spinner = holder;
+    if (gl.animations.length) { g.mixer = new THREE.AnimationMixer(m); for (const a of gl.animations) g.mixer.clipAction(a).play(); }
+  }, undefined, (e) => console.warn(p.file + " did not load", e));
+  return g;
+});
 function farStep(dt, t) {
   MARS.group.position.copy(MARS.at).sub(WORLD_OFFSET); if (MARS.spin) MARS.spin.rotation.y += dt * .01;
-  for (const g of GIANT_PLANETS) {
-    g.group.position.copy(g.at).sub(WORLD_OFFSET); g.body.rotation.y += dt * g.spin;
+  for (const g of [...GIANT_PLANETS, ...MODEL_PLANETS]) {
+    g.group.position.copy(g.at).sub(WORLD_OFFSET); if (g.body?.isMesh) g.body.rotation.y += dt * g.spin;
+    if (g.spinner) { g.spinner.rotateY(dt * g.spin); g.mixer?.update(dt); }
     if (mode === "fly") { const to = ship.position.clone().sub(g.group.position), min = g.R * (g.stretch || 1) + ship.userData.radius; if (to.length() < min) { ship.position.copy(g.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
   }
   if (mode === "fly") { const to = ship.position.clone().sub(MARS.group.position), min = MARS.R + ship.userData.radius; if (to.length() < min) { ship.position.copy(MARS.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
