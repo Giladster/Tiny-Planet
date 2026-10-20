@@ -4736,8 +4736,8 @@ function renderMapCard() {
   el.innerHTML = `<h2>${esc(d.name)}</h2>
     <div class="mcPics"><img class="shot" alt="${esc(d.name)}"><img class="fig" alt="${esc(PEOPLE_KINDS[kind])}"></div>
     <div class="owner">owner: ${esc(d.owner)}${p === home ? " (you)" : ""}</div>
-    <div class="stat"><span class="k">LIVING HERE</span><span>${esc(PEOPLE_KINDS[kind])}</span></div>
-    <div class="stat"><span class="k">BUILDINGS</span><span>${buildings}</span></div>
+    <div class="stat"><span class="k">SPECIES</span><span>${esc(PEOPLE_KINDS[kind])}</span></div>
+    <div class="stat"><span class="k">BUILT</span><span>${buildings} things</span></div>
     <div class="stat"><span class="k">HEALTH</span><div class="bar"><div class="fill" style="width:${d.hp}%"></div></div><span>${Math.ceil(d.hp)}%</span></div>
     <div class="stat"><span class="k">PEOPLE</span><span>${d.dead ? "destroyed · nobody left" : fmt(d.pop)}</span>${d.troops ? `<span class="small">· ${d.troops} of your troops</span>` : ""}</div>
     <div class="small">${fmt(dist * 1000)} km away</div>
