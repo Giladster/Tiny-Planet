@@ -399,7 +399,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 
 <section id="p-map" class="hud panel" data-panel="map" hidden>
   <div class="ph"><span class="label">Star map · click a planet</span><button class="x" data-close="map" aria-label="Close star map">×</button></div>
-  <div class="row" id="mapGals"><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
+  <div class="row" id="mapGals"><button data-gal="all">🔭 All galaxies</button><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
   <svg id="mapSvg" role="img" aria-label="Star map of all planets"></svg>
   <div id="mapCard"><span class="small">Click a planet on the map to see who owns it.</span></div>
 </section>
@@ -2452,10 +2452,7 @@ function buildBusyGalaxy() {
       glow.setColorAt(i, i % 2 ? new THREE.Color(1.6, 1.1, .5) : new THREE.Color(.5, 1.2, 1.8));
       cars.push({ t: Math.random(), dir: i % 2 ? 1 : -1, speed: rnd(.5, 1.1) * 9 / L, lane: rnd(-1, 1), size: rnd(.12, .3) });
     }
-    // the lane itself: a faint glowing dotted line you can follow
-    const lg = new THREE.BufferGeometry().setFromPoints(curve.getPoints(Math.round(L / 2)));
-    const line = new THREE.Points(lg, new THREE.PointsMaterial({ color: new THREE.Color(.35, .6, 1), size: .5, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthWrite: false }));
-    busy.group.add(glow, line); busy.lanes.push({ curve, parts, glow, cars, L });
+    busy.group.add(glow); busy.lanes.push({ curve, parts, glow, cars, L });
   }
   // asteroid belts around a few big planets
   const ringed = live.filter((p) => p !== home).sort((x, y) => y.R - x.R).slice(0, 3);
@@ -4495,22 +4492,51 @@ const mapPlanetColor = (p) => (p.data.design.pattern === "none" ? p.data.design.
 let mapGal = "main";
 const shipInPrism = () => ship.position.distanceTo(prismAt()) < PRISM.r * 2;
 const onMap = (p) => (mapGal === "prism") === !!p.data.far;
-document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.addEventListener("click", () => { mapGal = b.dataset.gal; mapSel = null; renderMap(); renderMapCard(); }));
+let mapSelGal = null;
+document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.addEventListener("click", () => { mapGal = b.dataset.gal; mapSel = mapSelGal = null; renderMap(); renderMapCard(); }));
+const galEdge = (g, fs, label) => { // a galaxy's edge: where it starts and ends
+  const c = V(g.c).sub(WORLD_OFFSET), col = g.color.replace(/[\d.]+\)$/, "1)");
+  return `<circle cx="${c.x}" cy="${c.z}" r="${g.r}" fill="${g.color.replace(/[\d.]+\)$/, ".05)")}" stroke="${col}" stroke-width="${fs * .16}" stroke-dasharray="${fs * .9} ${fs * .5}" opacity=".8"/>`
+    + (label ? `<text x="${c.x}" y="${c.z - g.r - fs * .5}" font-size="${fs * 1.1}" text-anchor="middle" style="fill:${col}">${esc(g.name)}${label === true ? "" : label}</text>` : "");
+};
+function renderGalaxyMap(svg) { // every galaxy seen from high above
+  const pts = GALAXIES.map((g) => [V(g.c).sub(WORLD_OFFSET), g.r]).concat([[ship.position.clone(), 300]]);
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const [p, r] of pts) { x0 = Math.min(x0, p.x - r); x1 = Math.max(x1, p.x + r); z0 = Math.min(z0, p.z - r); z1 = Math.max(z1, p.z + r); }
+  let w = (x1 - x0) * 1.1, h = (z1 - z0) * 1.1; if (w / h > 1.6) h = w / 1.6; else w = h * 1.6;
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, fs = w / 48;
+  svg.setAttribute("viewBox", `${cx - w / 2} ${cz - h / 2} ${w} ${h}`);
+  let s = `<defs>${GALAXIES.map((g, i) => `<radialGradient id="gg${i}"><stop offset="0" stop-color="#fff6e0" stop-opacity=".9"/><stop offset=".25" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity=".55"/><stop offset="1" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity="0"/></radialGradient>`).join("")}</defs>`;
+  for (let i = 0; i < 160; i++) { const r = seeded("gm" + i), x = cx - w / 2 + r() * w, z = cz - h / 2 + r() * h; s += `<circle cx="${x}" cy="${z}" r="${fs * .06}" fill="#fff" opacity="${(.2 + r() * .5).toFixed(2)}"/>`; }
+  if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
+  GALAXIES.forEach((g, i) => {
+    const c = V(g.c).sub(WORLD_OFFSET), d = ship.position.distanceTo(c), inside = d < g.r;
+    s += `<g class="mp" data-g="${i}"><circle cx="${c.x}" cy="${c.z}" r="${g.r * .8}" fill="url(#gg${i})"/>${galEdge(g, fs, inside ? " (you are here)" : ` · ${fmt(Math.max(0, d - g.r) * 1000)} km`)}`;
+    if (g === mapSelGal) s += `<circle cx="${c.x}" cy="${c.z}" r="${g.r * 1.08}" fill="none" stroke="#ffb547" stroke-width="${fs * .2}"/>`;
+    s += `<circle class="body" cx="${c.x}" cy="${c.z}" r="${g.r}" fill="transparent" stroke="none"/></g>`;
+  });
+  for (const p of planets) s += `<circle cx="${p.group.position.x}" cy="${p.group.position.z}" r="${fs * .12}" fill="${esc(p.data.design.sea)}" opacity=".9"/>`;
+  const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
+  s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * 1.2} ${fs * .75},${-fs * .8} 0,${-fs * .4} ${-fs * .75},${-fs * .8}" fill="#6fe3ff"/></g>`;
+  svg.innerHTML = s;
+}
 $("mapGalNav").addEventListener("click", () => { setNav(mapGal === "prism" ? PRISM_NAV : MAIN_NAV); if (mode === "home") startFlying(); renderMap(); });
 function renderMap() {
   const svg = $("mapSvg");
   document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.classList.toggle("on", b.dataset.gal === mapGal));
+  if (mapGal === "all") { $("mapGalNav").hidden = true; return renderGalaxyMap(svg); }
   const here = (mapGal === "prism") === shipInPrism(), gname = mapGal === "prism" ? "Prism Galaxy" : "Main Galaxy";
   $("mapGalNav").hidden = here; $("mapGalNav").textContent = `Navigate to ${gname}${mapGal === "prism" ? " · hold boost 10s for MEGA BOOST" : ""}`;
-  const pts = [...planets.filter(onMap).map((p) => p.group.position), ...(here ? [ship.position] : [])];
-  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  const pts = [...planets.filter(onMap).map((p) => p.group.position), ...(here ? [ship.position] : [])], gal = mapGal === "prism" ? PRISM : GALAXIES[0], gc = V(gal.c).sub(WORLD_OFFSET);
+  let x0 = gc.x - gal.r, x1 = gc.x + gal.r, z0 = gc.z - gal.r, z1 = gc.z + gal.r; // the whole galaxy, edge to edge
   for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
   let w = x1 - x0 + 90, h = z1 - z0 + 90; if (w / h > 1.6) h = w / 1.6; else w = h * 1.6;
   svg.setAttribute("viewBox", `${cx - w / 2} ${cz - h / 2} ${w} ${h}`);
   const fs = w / 48;
   let s = "";
-  for (let r = 100; r < w; r += 100) s += `<circle cx="0" cy="0" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
+  for (let r = 100; r < w; r += 100) s += `<circle cx="${gc.x}" cy="${gc.z}" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
+  for (const g of GALAXIES) s += galEdge(g, fs, g === gal ? " · edge" : true);
   if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
   planets.forEach((p, i) => {
     if (!onMap(p)) return;
@@ -4528,10 +4554,19 @@ function renderMap() {
   s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * .9} ${fs * .55},${-fs * .6} 0,${-fs * .3} ${-fs * .55},${-fs * .6}" fill="#6fe3ff"/></g>`;
   svg.innerHTML = s;
 }
-$("mapSvg").addEventListener("click", (e) => { const g = e.target.closest(".mp"); if (!g) return; mapSel = planets[+g.dataset.i]; renderMap(); renderMapCard(); });
+$("mapSvg").addEventListener("click", (e) => { const g = e.target.closest(".mp"); if (!g) return; if (g.dataset.g) { mapSelGal = GALAXIES[+g.dataset.g]; mapSel = null; } else mapSel = planets[+g.dataset.i]; renderMap(); renderMapCard(); });
 function renderMapCard() {
   const el = $("mapCard"), p = mapSel;
-  if (!p) { el.innerHTML = `<span class="small">Click a planet on the map to see who owns it.</span>`; return; }
+  if (mapGal === "all") {
+    const g = mapSelGal; if (!g) { el.innerHTML = `<span class="small">All galaxies from above. The dashed rings are where each galaxy starts and ends. Click one.</span>`; return; }
+    const i = GALAXIES.indexOf(g), d = ship.position.distanceTo(V(g.c).sub(WORLD_OFFSET)), far = g === PRISM;
+    el.innerHTML = `<h2>${esc(g.name)}</h2><div class="small">${d < g.r ? "You are inside it." : `Its edge is ${fmt((d - g.r) * 1000)} km away.`} It is ${fmt(g.r * 2000)} km wide.${far && d > g.r ? " Hold boost 10s for a MEGA BOOST to get there." : ""}</div>
+      <div class="row">${d < g.r ? "" : `<button class="go" id="mcGalNav">${nav === GAL_NAV[i] ? "Navigating…" : "Navigate"}</button>`}<button id="mcGalOpen">See its planets</button></div>`;
+    $("mcGalNav")?.addEventListener("click", () => { setNav(GAL_NAV[i]); if (mode === "home") startFlying(); });
+    $("mcGalOpen").addEventListener("click", () => { mapGal = far ? "prism" : "main"; mapSel = mapSelGal = null; renderMap(); renderMapCard(); });
+    return;
+  }
+  if (!p) { el.innerHTML = `<span class="small">Click a planet on the map to see who owns it. The dashed rings are galaxy edges.</span>`; return; }
   const d = p.data, dist = ship.position.distanceTo(p.group.position);
   el.innerHTML = `<h2>${esc(d.name)}</h2>
     <div class="owner">owner: ${esc(d.owner)}${p === home ? " (you)" : ""}</div>
@@ -5360,7 +5395,7 @@ function updateWarpTunnel(boostK) {
 }
 // ---- galaxies, minimap and danger arrows
 const GALAXIES = [ // the main crowded galaxy, and far ones for explorers
-  { name: "Main Galaxy", c: [0, 0, 0], r: 1100, color: "rgba(111,227,255,.55)" },
+  { name: "Main Galaxy", c: [0, 0, 0], r: 2250, color: "rgba(111,227,255,.55)" },
   { name: "Nebula Reach", c: [3200, 0, 900], r: 700, color: "rgba(200,162,255,.55)" },
   { name: "The Void Rim", c: [-2400, 0, -3000], r: 800, color: "rgba(255,181,71,.5)" },
   { name: "Prism Galaxy", c: [8000, 2600, -12500], r: 1500, color: "rgba(255,90,220,.6)" }, // far away: reached with a mega boost
@@ -5448,7 +5483,7 @@ function spiralTex(c1, c2, seed) {
 const skyGalaxies = [
   { g: PRISM, tex: spiralTex("rgba(255,90,220,A)", "rgba(255,200,90,A)", "prism") },
   { g: GALAXIES[0], tex: spiralTex("rgba(120,190,255,A)", "rgba(200,230,255,A)", "main") },
-].map((s) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: s.tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, rotation: .5 })); sky.add(m); return { ...s, m }; });
+].map((s) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: s.tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, rotation: .5 })); m.renderOrder = 1; sky.add(m); return { ...s, m }; }); // renderOrder: after the sky sphere, or the sky paints over it
 // inside the Prism Galaxy the whole sky turns pink, gold and green
 const prismSky = new THREE.Mesh(new THREE.SphereGeometry(2900, 48, 32), new THREE.MeshBasicMaterial({ side: THREE.BackSide, depthWrite: false, transparent: true, opacity: 0, map: sphereTexture(512, 256, (x, y, z) => {
   const n = fbm(x, y, z, 2.4, 61), m = fbm(x, y, z, 4.5, 83), band = Math.exp(-((x * .3 + y * .9 + z * .3) ** 2) / .06);
@@ -5551,7 +5586,7 @@ function farStep(dt, t) {
   prismSky.material.opacity = inside; NEB_MESH.material.opacity = NEB_CLOUDS.material.opacity = 1 - inside * .85;
   for (const s of skyGalaxies) { // the sprite shows the galaxy while it is too far for the real one
     const gc = V(s.g.c).sub(WORLD_OFFSET), gd = camera.position.distanceTo(gc), dir = gc.sub(camera.position).normalize();
-    s.m.position.copy(dir).multiplyScalar(2400); s.m.scale.setScalar(Math.min(2600, 2400 * 2.6 * s.g.r / Math.max(1, gd)));
+    s.m.position.copy(dir).multiplyScalar(2400); s.m.scale.setScalar(Math.max(70, Math.min(2600, 2400 * 1.6 * s.g.r / Math.max(1, gd)))); // never smaller than a bright star
     s.m.material.opacity = ss(s.g.r * 1.8, s.g.r * 3.5, gd) * (s.g === PRISM ? 1 : .8);
   }
   for (const g of farGiants) { // slow, lazy circles; they bob up and down
@@ -5585,8 +5620,8 @@ function megaStep(dt, boosting) {
   el.hidden = mode !== "fly" || (!mega && boostHold < 1.5);
   if (!el.hidden) { $("megaFill").style.width = (mega ? 100 : charge * 100) + "%"; $("megaText").textContent = mega ? "MEGA BOOST · let go of Shift to stop" : `MEGA BOOST CHARGING · ${Math.ceil(MEGA_AFTER - boostHold)}s`; el.classList.toggle("on", mega); }
 }
-const MAIN_NAV = { group: { get position() { return V(GALAXIES[0].c).sub(WORLD_OFFSET); } }, R: 150, data: { name: "Main Galaxy" }, galaxy: true };
-const PRISM_NAV = { group: { get position() { return prismAt(); } }, R: 150, data: { name: "Prism Galaxy" }, galaxy: true };
+const GAL_NAV = GALAXIES.map((g) => ({ group: { get position() { return V(g.c).sub(WORLD_OFFSET); } }, R: 150, data: { name: g.name }, galaxy: true }));
+const MAIN_NAV = GAL_NAV[0], PRISM_NAV = GAL_NAV[GALAXIES.indexOf(PRISM)];
 
 const mm = $("minimap"), mmg = mm.getContext("2d");
 function drawMinimap() {
@@ -5599,7 +5634,12 @@ function drawMinimap() {
   mmg.font = "600 18px ui-monospace, monospace"; mmg.textAlign = "center";
   for (const g of GALAXIES) { // galaxy borders
     const gc = V(g.c).sub(WORLD_OFFSET), [x, y] = toMap(gc), d = c.distanceTo(gc);
-    if (Math.abs(d - g.r) > range * 1.5 && d > g.r) continue;
+    if (Math.abs(d - g.r) > range * 1.5 && d > g.r) { // too far to draw: a little arrow on the rim points to where it starts
+      const a = Math.atan2(y - Rr, x - Rr), ex = Rr + Math.cos(a) * (Rr - 12), ey = Rr + Math.sin(a) * (Rr - 12);
+      mmg.fillStyle = g.color.replace(/[\d.]+\)$/, "1)"); mmg.beginPath(); mmg.moveTo(ex + Math.cos(a) * 9, ey + Math.sin(a) * 9); mmg.lineTo(ex + Math.cos(a + 2.4) * 8, ey + Math.sin(a + 2.4) * 8); mmg.lineTo(ex + Math.cos(a - 2.4) * 8, ey + Math.sin(a - 2.4) * 8); mmg.fill();
+      mmg.font = "600 14px ui-monospace, monospace"; mmg.fillText(g.name.replace(/^The /, "").split(" ")[0], Math.max(34, Math.min(W - 34, ex - Math.cos(a) * 22)), Math.max(30, Math.min(W - 16, ey - Math.sin(a) * 22 + 5))); mmg.font = "600 18px ui-monospace, monospace";
+      continue;
+    }
     mmg.setLineDash([10, 8]); mmg.strokeStyle = g.color; mmg.lineWidth = 3; mmg.beginPath(); mmg.arc(x, y, g.r * k, 0, 7); mmg.stroke(); mmg.setLineDash([]);
     if (d > g.r - range) { const a = Math.atan2(Rr - y, Rr - x), lx = x + Math.cos(a) * g.r * k, ly = y + Math.sin(a) * g.r * k; mmg.fillStyle = g.color; mmg.fillText(g.name, Math.max(40, Math.min(W - 40, lx)), Math.max(24, Math.min(W - 10, ly))); }
   }
@@ -5624,7 +5664,8 @@ function drawMinimap() {
   mmg.fillStyle = "#6fe3ff"; mmg.beginPath(); mmg.moveTo(sx, sy - 11); mmg.lineTo(sx + 8, sy + 8); mmg.lineTo(sx, sy + 4); mmg.lineTo(sx - 8, sy + 8); mmg.closePath(); mmg.fill();
   mmg.restore();
   const inG = GALAXIES.find((g) => c.distanceTo(V(g.c).sub(WORLD_OFFSET)) < g.r);
-  mmg.fillStyle = "rgba(230,235,255,.75)"; mmg.font = "600 17px ui-monospace, monospace"; mmg.textAlign = "center"; mmg.fillText(inG ? inG.name : "Deep space", Rr, W - 22);
+  mmg.fillStyle = "rgba(230,235,255,.75)"; mmg.font = "600 17px ui-monospace, monospace"; mmg.textAlign = "center"; mmg.fillText(inG ? inG.name : "Deep space", Rr, W - 30);
+  if (inG) { mmg.font = "500 13px ui-monospace, monospace"; mmg.fillStyle = "rgba(230,235,255,.55)"; mmg.fillText(`edge ${fmt((inG.r - c.distanceTo(V(inG.c).sub(WORLD_OFFSET))) * 1000)} km`, Rr, W - 13); }
 }
 const threatEls = [];
 function updateThreats() { // red boxes on people shooting at you, and arrows when they are off screen
