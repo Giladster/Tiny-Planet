@@ -840,6 +840,11 @@ const sfx = (() => {
   }
   return {
     unlock() { const c = ctx(); if (!c) return; if (c.state !== "running") c.resume().then(startLoops).catch(() => {}); else startLoops(); }, // also wakes sound that the browser paused (tab switch, sleep, headphones)
+    reroute() { // headphones plugged in or out: send the sound to the new speakers (some browsers keep playing to the old ones)
+      if (!ac) return;
+      const kick = () => ac.suspend().then(() => ac.resume()).catch(() => {});
+      if (ac.setSinkId) ac.setSinkId({ type: "none" }).catch(() => {}).then(() => ac.setSinkId("")).then(kick, kick); else kick(); // let go of the old speakers, then pick the current ones
+    },
     setMuted(m) { if (master) master.gain.setTargetAtTime(m ? 0 : .7, ac.currentTime, .1); },
     engine(thrust, boost, flying = true) {
       if (!eng) return; const t = ac.currentTime;
@@ -1039,6 +1044,7 @@ const sfx = (() => {
 })();
 addEventListener("pointerdown", () => sfx.unlock(), { capture: true });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) sfx.unlock(); });
+navigator.mediaDevices?.addEventListener?.("devicechange", () => { sfx.reroute(); setTimeout(() => sfx.reroute(), 1500); }); // Bluetooth can take a moment to be ready
 addEventListener("keydown", () => sfx.unlock(), { capture: true });
 
 // ================= renderer, scene, glow effect =================
