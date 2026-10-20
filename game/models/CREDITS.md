@@ -19,3 +19,12 @@ CC BY 4.0 (credit the maker) or Sketchfab Standard (use in a project, no reselli
 |---|---|---|---|
 | Black holes | [Black Hole](https://sketchfab.com/3d-models/black-hole-e410da98b1e5445eae2acafaaa53587d) | NestaEric | CC BY 4.0 |
 | Mars | [Mars](https://sketchfab.com/3d-models/mars-25b3f6f993de4f978de290b6e755ba87) | Nestaeric | CC BY 4.0 |
+
+## Planets (shrunk for the browser: 2K textures, PNG to JPEG where no see-through is needed)
+| File | Model | Maker | License |
+|---|---|---|---|
+| planet_earth.glb (Earth + see-through atmosphere) | [Earth](https://sketchfab.com/3d-models/earth-3f5d39aba2c142e38895cba7f7dfd924) | ScannerDev | CC BY 4.0 |
+| planet_lava.glb (lava world + cloud layer, has an animation) | [Lava planet](https://sketchfab.com/3d-models/lava-planet-9792612f76184ee3b48530c7515ce747) | FPSunreal | CC BY 4.0 |
+| solar_system.glb (Sun + planets set) | [Solar System](https://sketchfab.com/3d-models/solar-system-0bebd0fe3124417dba7e7a4b62bbc8a3) | per.rb1 | CC BY 4.0 |
+| planet_toi561b.glb (5 pieces spread along X) | [The unusal super Earth TOI-561b](https://sketchfab.com/3d-models/the-unusal-super-earth-toi-561b-00379c7774d54fa7b934a93a70a25243) | Ignazio Pillitteri | CC BY 4.0 |
+| planet_uranus.glb (Uranus, rings, moon Miranda; ring rocks thinned to 12%) | [Uranus](https://sketchfab.com/3d-models/uranus-0009a69dbace44608c0bd09af9ba20db) | NestaEric | CC BY 4.0 |
