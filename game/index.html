@@ -793,7 +793,7 @@ const sfx = (() => {
   }
   const bufs = {}; // recorded sounds from game/sounds, loaded once
   function loadBuf(name) { return bufs[name] ??= fetch("sounds/" + name).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).catch(() => null); }
-  let mus = null, drone = null, radioBed = null; const playing = new Set();
+  let mus = null, drone = null; const playing = new Set();
   function playMusic(kind) { // quiet music for normal play, loud music only in a fight; only one plays, they cross-fade
     if (!ac || mus?.kind === kind) return;
     const me = mus = { kind }, t = ac.currentTime;
@@ -862,18 +862,8 @@ const sfx = (() => {
       [[1320, 0], [1760, .07]].forEach(([f, d]) => { const o = osc("square", f, f, t + d, .06), g = env(gain(), t + d, .003, .06); o.connect(filt("bandpass", 1600, 1600, t, 1, 2)).connect(g); out(g, .05, .1); });
       const n = noise(t, .18, 1.6), b = filt("bandpass", 2400, 1200, t, .18, .8), g = env(gain(), t, .005, .17); n.connect(b).connect(g); out(g, .05, .05);
     },
-    botBleep() { // a tiny robot chirp
-      if (!ok()) return; const t = ac.currentTime, f = [880, 988, 1175, 1319, 1568][(Math.random() * 5) | 0];
-      const o = osc("square", f, f * (Math.random() < .5 ? 1.25 : .8), t, .05), g = env(gain(), t, .002, .05); o.connect(filt("lowpass", 3000, 3000, t, 1)).connect(g); out(g, .02, .1);
-    },
-    radioTalk(on) { // soft radio static and a faint machine hum while Bolt talks
-      if (!ac) return; const t = ac.currentTime;
-      if (!radioBed) {
-        const n = noise(t, 1e6, 1.4), b = filt("bandpass", 3000, 3000, t, 1, .6), h = osc("sawtooth", 100, 100, t, 1e6), hl = filt("lowpass", 400, 400, t, 1), hg = gain(), g = gain();
-        hg.gain.value = .25; g.gain.value = 0; n.connect(b).connect(g); h.connect(hl).connect(hg).connect(g); out(g, 1, 0); radioBed = g;
-      }
-      radioBed.gain.setTargetAtTime(on && !ui.muted ? .012 : 0, t, on ? .05 : .15);
-      if (!on && ok()) { const o = osc("square", 1100, 1100, t + .05, .04), g = env(gain(), t + .05, .002, .04); o.connect(g); out(g, .03, .05); } // over and out click
+    radioTalk() { // a soft "over" click when Bolt finishes talking
+      if (!ok()) return; const t = ac.currentTime, o = osc("square", 1100, 1100, t + .05, .04), g = env(gain(), t + .05, .002, .04); o.connect(g); out(g, .03, .05);
     },
     rush(spd, mk) {
       if (!eng) return; const t = ac.currentTime, k = Math.min(1, spd / 150);
@@ -4176,19 +4166,18 @@ function renderBolt() {
   el.scrollTop = el.scrollHeight;
   $("boltVoice").textContent = ui.boltVoice ? "🔊" : "🔇"; $("boltVoice").title = ui.boltVoice ? "Bolt talks out loud" : "Bolt is quiet";
 }
-function boltVoiceOf() { // a robot voice: the Mac's classic computer voices first, else a clear voice we make sound mechanical
+function boltVoiceOf() { // a smooth, clear "AI" voice: the most natural English voice this computer has
   const vs = speechSynthesis.getVoices().filter((x) => /^en/i.test(x.lang));
-  for (const re of [/^Fred\b/i, /^Ralph\b/i, /Google UK English Male/i, /Daniel|Alex|David|Guy|Ryan/i, /male/i]) { const v = vs.find((x) => re.test(x.name)); if (v) return v; }
-  return vs[0];
+  for (const re of [/Natural/i, /\((Premium|Enhanced)\)/i, /Google UK English Male/i, /Google US English/i, /^Daniel\b/i, /^Samantha\b/i, /Aria|Jenny|Guy|Ryan|Sonia/i]) { const v = vs.find((x) => re.test(x.name)); if (v) return v; }
+  return vs.find((x) => x.default) || vs[0];
 }
 function boltSpeak(text, queue) { // queue: radio lines wait their turn; chat answers cut in
   if (!ui.boltVoice || ui.muted || !window.speechSynthesis) return;
   if (!queue) speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ","));
   const v = boltVoiceOf(); if (v) u.voice = v;
-  const classic = v && /^(Fred|Ralph)\b/i.test(v.name); u.pitch = classic ? 1 : .35; u.rate = classic ? 1.05 : .92; // a low, flat pitch makes any voice sound like a machine
-  u.onstart = () => sfx.radioTalk(true); u.onend = u.onerror = () => sfx.radioTalk(false);
-  u.onboundary = (e) => { if (e.name === "word" && Math.random() < .45) sfx.botBleep(); }; // little computer chirps between his words
+  u.pitch = .95; u.rate = 1.04; // natural pitch and pace so he talks smoothly, like a calm ship AI
+  u.onend = () => sfx.radioTalk();
   speechSynthesis.speak(u);
 }
 function boltAnswer(text) {
