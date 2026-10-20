@@ -1146,12 +1146,11 @@ const NEB = sphereTexture(1024, 512, (x, y, z) => {
 });
 const NEB_MESH = new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 40), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, depthWrite: false, transparent: true }));
 sky.add(NEB_MESH);
-// sky pictures from Sketchfab (models/CREDITS.md) replace the drawn sky when they load: a galaxy swirl here, a nebula in the Prism Galaxy
+// sky pictures from Sketchfab (models/CREDITS.md) replace the drawn sky when they load: a nebula in the Prism Galaxy (the Main Galaxy keeps its drawn Milky Way)
 function skyPicture(file, mesh, starAt, dim = 1) {
   new THREE.TextureLoader().load("textures/" + file, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; mesh.material.map = t; mesh.material.color.setScalar(dim); mesh.material.needsUpdate = true; });
   if (starAt) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), starAt); // the picture's middle sits behind our sun
 }
-skyPicture("sky_deep_space.jpg", NEB_MESH, SUN_DIR, .7);
 {
   const N = 9000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N), tw = new Float32Array(N), v = new THREE.Vector3();
   for (let i = 0; i < N; i++) {

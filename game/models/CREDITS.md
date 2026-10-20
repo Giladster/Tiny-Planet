@@ -17,7 +17,6 @@ CC BY 4.0 (credit the maker) or Sketchfab Standard (use in a project, no reselli
 ## Space
 | In the game | Model | Maker | License |
 |---|---|---|---|
-| Main Galaxy sky | [Deep Space skybox (16k) with planets](https://sketchfab.com/3d-models/deep-space-skybox-16k-with-planets-6d7f12515ff44fb6aa83d95a77124946) | Jungle Jim | CC BY 4.0 |
 | Prism Galaxy sky | [Alien Space Nebula 1 (Skybox)](https://sketchfab.com/3d-models/alien-space-nebula-1-skybox-4a4e7aec37c04320a09ac4c7434b8810) | Jungle Jim | CC BY 4.0 |
 | Black holes | [Black Hole](https://sketchfab.com/3d-models/black-hole-e410da98b1e5445eae2acafaaa53587d) | NestaEric | CC BY 4.0 |
 | Mars | [Mars](https://sketchfab.com/3d-models/mars-25b3f6f993de4f978de290b6e755ba87) | Nestaeric | CC BY 4.0 |
