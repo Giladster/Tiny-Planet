@@ -363,11 +363,11 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="group" data-tab="ship"><span class="label">Ship name</span><input id="shipName" type="text" maxlength="18" aria-label="Ship name"></div>
   <div class="group" data-tab="ship"><label class="slider">Size<input type="range" id="shipSize" min="0.6" max="3" step="0.05"></label></div>
   <div class="group" data-tab="ship"><span class="label">Body</span><div class="choice" id="hulls"></div></div>
-  <div class="group" data-tab="ship" hidden><span class="label">Wings</span><div class="choice" id="wings"></div></div>
-  <div class="group" data-tab="ship" hidden><span class="label">Engines</span><div class="choice" id="engines"></div></div>
+  <div class="group never" data-tab="ship" hidden><span class="label">Wings</span><div class="choice" id="wings"></div></div>
+  <div class="group never" data-tab="ship" hidden><span class="label">Engines</span><div class="choice" id="engines"></div></div>
   <div class="group" data-tab="ship"><span class="small" id="shipCredit"></span> <a class="small" href="models/CREDITS.md" target="_blank" rel="noopener">All art credits</a></div>
-  <div class="group" data-tab="style" hidden><span class="label">Extras</span><div class="choice" id="extras"></div></div>
-  <div class="group" data-tab="style" hidden><span class="label">Finish</span><div class="choice" id="finishes"></div></div>
+  <div class="group never" data-tab="style" hidden><span class="label">Extras</span><div class="choice" id="extras"></div></div>
+  <div class="group never" data-tab="style" hidden><span class="label">Finish</span><div class="choice" id="finishes"></div></div>
   <div class="group" data-tab="style"><span class="label">Colors</span>
     <div class="row" hidden><label class="label">body <input type="color" id="sc-body"></label><label class="label">trim <input type="color" id="sc-accent"></label></div>
     <div class="row"><label class="label">glow <input type="color" id="sc-glow"></label></div>
@@ -597,7 +597,7 @@ function shapeK(x, y, z, s, amt, seed) { // how far the ground is from the centr
 const PATTERNS = { none: "None", stripes: "Stripes", checker: "Checks", holes: "Holes", spots: "Spots" };
 const designFrom = (key, seed = 1) => ({ template: key, seed, ...structuredClone(TEMPLATES[key]) });
 
-const HULLS = { fighter: "Light Fighter", hawk: "Silver Hawk", sparrow: "Star Sparrow", toy: "Toy Rocket", raven: "Raven", viper: "Red Viper", sunfire: "Sunfire", lancer: "CB-1 Lancer", alien: "Alien Stingray", wasp: "Krell Wasp", dart: "Krell Dart", talon: "Krell Talon", warlord: "Krell Warlord" };
+const HULLS = { hawk: "Silver Hawk", sparrow: "Star Sparrow", sunfire: "Sunfire", lancer: "CB-1 Lancer", alien: "Alien Stingray" }; // the Krell ships (wasp, dart, talon, warlord) fly only as pirates
 const WINGS = { none: "None", swept: "Swept", delta: "Delta", forward: "Forward swept", bat: "Bat", xwing: "X-wings", booms: "Twin booms", wide: "Wide", ring: "Ring" };
 const EXTRAS = { siren: "Police siren", flag: "Pirate flag", drill: "Drill", glow: "Glow strips", lights: "Wing lights", fins: "Tail fins", cannons: "Side cannons", turret: "Turret", spikes: "Spikes", antenna: "Antenna", spoiler: "Spoiler", shield: "Shield bubble", hat: "Party hat", eyes: "Googly eyes" };
 const FLAMES = { cone: "Cone", long: "Long jet", wide: "Wide", ball: "Plasma ball", twin: "Split", ring: "Ring" };
@@ -634,19 +634,11 @@ function syncArmsLook() { const a = loadout(); state.ship.armsMk = { gun: mkOf(a
 const dmgBoost = () => (wallet.style === "lava" ? 1.15 : 1) * (godOn("oneshot") ? 999 : 1); // lava civilizations hit harder
 const FINISHES = { metal: "Metal", chrome: "Chrome", matte: "Matte", carbon: "Carbon", neon: "Neon glow" };
 const PRESETS = { // every ship is a downloaded model (game/models); it keeps its own paint, the colors here are for its lights, trail and name
-  fighter:  { label: "Light Fighter", hull: "fighter", wings: "none", engines: 2, extras: [], body: "#d8deef", accent: "#ff5a6e", glow: "#c06bff", flame: "#c06bff", finish: "metal", size: 1.3 },
   hawk:     { label: "Silver Hawk", hull: "hawk", wings: "none", engines: 2, extras: [], body: "#c8ccd4", accent: "#3a4150", glow: "#6fe3ff", flame: "#6fe3ff", finish: "metal", size: 1.6 },
   sparrow:  { label: "Star Sparrow", hull: "sparrow", wings: "none", engines: 2, extras: [], body: "#b0122a", accent: "#151518", glow: "#4fa8ff", flame: "#4fa8ff", finish: "metal", size: 1.2 },
-  toy:      { label: "Toy Rocket", hull: "toy", wings: "none", engines: 2, extras: [], body: "#ffd23f", accent: "#ff8a1f", glow: "#ffe36a", flame: "#ffb547", finish: "metal", size: 1.1 },
-  raven:    { label: "Raven", hull: "raven", wings: "none", engines: 2, extras: [], body: "#9aa3b5", accent: "#3a5a8a", glow: "#8fd0ff", flame: "#8fd0ff", finish: "metal", size: 1.3 },
-  viper:    { label: "Red Viper", hull: "viper", wings: "none", engines: 2, extras: [], body: "#f2f5fb", accent: "#d01818", glow: "#ff6040", flame: "#ff8a3a", finish: "metal", size: 1.3 },
   sunfire:  { label: "Sunfire", hull: "sunfire", wings: "none", engines: 2, extras: [], body: "#b9bcc4", accent: "#ff8a1f", glow: "#ffb547", flame: "#ffb547", finish: "metal", size: 1.5 },
   lancer:   { label: "CB-1 Lancer", hull: "lancer", wings: "none", engines: 2, extras: [], body: "#9aa3b5", accent: "#3a5a8a", glow: "#c06bff", flame: "#c06bff", finish: "metal", size: 1.6 },
   alien:    { label: "Alien Stingray", hull: "alien", wings: "none", engines: 2, extras: [], body: "#2a3550", accent: "#ff5ad8", glow: "#ff5ad8", flame: "#ff5ad8", finish: "metal", size: 1.8 },
-  wasp:     { label: "Krell Wasp", hull: "wasp", wings: "none", engines: 2, extras: [], body: "#1a1010", accent: "#d01818", glow: "#ff3030", flame: "#ff5030", finish: "metal", size: 1.1 },
-  dart:     { label: "Krell Dart", hull: "dart", wings: "none", engines: 2, extras: [], body: "#1a1010", accent: "#d01818", glow: "#ff3030", flame: "#ff5030", finish: "metal", size: 1.2 },
-  talon:    { label: "Krell Talon", hull: "talon", wings: "none", engines: 2, extras: [], body: "#1a1010", accent: "#d01818", glow: "#ff3030", flame: "#ff5030", finish: "metal", size: 1.6 },
-  warlord:  { label: "Krell Warlord", hull: "warlord", wings: "none", engines: 2, extras: [], body: "#1a1010", accent: "#d01818", glow: "#ff3030", flame: "#ff5030", finish: "metal", size: 2.2 },
   random:    { label: "Surprise me" },
 };
 const WEAPONS = { // the weapon bar: your fitted gun, heavy weapon and gadget, then the tools for attacking planets
@@ -708,7 +700,7 @@ const defaults = () => ({
     ],
   },
   others: OTHERS.map(makeOther),
-  ship: { name: "Rusty Bucket", ...structuredClone(PRESETS.fighter) },
+  ship: { name: "Rusty Bucket", ...structuredClone(PRESETS.hawk) },
   chat: [
     { who: "luna", text: "anyone seen the blue planet near sector 4?", t: "10:02" },
     { who: "zork", text: "it's mine, don't shoot it pls", t: "10:03" },
@@ -730,7 +722,7 @@ function migrate() { // keep the planet and ship made in the older version
 let state = load(KEY) || migrate();
 OTHERS.forEach((o, i) => { if (!state.others.some((p) => p.name === o.name)) state.others.push(makeOther(o, i)); }); // add planets from newer versions
 for (const p of [state.home, ...state.others]) if (!p.design.around) p.design.around = structuredClone(AROUND[p.name] || {});
-for (const k of Object.keys(PRESETS.fighter)) if (state.ship[k] === undefined && k !== "label") state.ship[k] = PRESETS.fighter[k];
+for (const k of Object.keys(PRESETS.hawk)) if (state.ship[k] === undefined && k !== "label") state.ship[k] = PRESETS.hawk[k];
 delete state.ship.label;
 let ui = load(UIKEY) || { mail: true, chat: false, help: false, muted: false };
 if (ui.mail && ui.chat) ui.chat = false; // only one menu open at a time
@@ -2480,7 +2472,7 @@ function makeShipParts(c, root) {
   const glass = new THREE.MeshPhysicalMaterial({ color: 0x6fe3ff, emissive: 0x0d3a52, roughness: .05, metalness: .1, clearcoat: 1 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1c2028, metalness: .7, roughness: .35 });
   const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.glow || "#6fe3ff").multiplyScalar(1.1) });
-  const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.flame).multiplyScalar(1.6), transparent: true, opacity: .92, depthWrite: false });
+  const fireMat = makeFireMat(c);
   const add = (geo, mat, p = [0, 0, 0], r = [0, 0, 0], s = [1, 1, 1]) => { const m = geo.isObject3D ? geo : new THREE.Mesh(geo, mat); if (!geo.isObject3D) { m.position.set(...p); m.rotation.set(...r); m.scale.set(...s); } root.add(m); return m; };
   const H = Math.PI / 2, ex = new Set(c.extras || []), lights = [];
   let back = -.18, W = 1, top = .07, nose = .19, side = .07, muzzles = [[-.06, -.01, .12], [.06, -.01, .12]], wingY = -.01, wingZ = -.04;
@@ -2721,18 +2713,10 @@ function makeShipParts(c, root) {
 // ---- ships downloaded from Sketchfab (game/models, credits in models/CREDITS.md). Each keeps its own paint.
 // rot turns the model so its nose points +z; the game then centers it and makes it .62 long. flames: [x, y, z, size] at the nozzles.
 const MODEL_SHIPS = {
-  fighter: { file: "ship_lightfighter.glb", rot: [0, 0, 0], flames: [[0, .015, -.3, 1.3], [-.11, .005, -.29, .8], [.11, .005, -.29, .8]], muzzles: [[-.06, -.02, .28], [.06, -.02, .28]], radius: .3,
-    credit: ["LIGHT FIGHTER SPACESHIP - FREE -", "Kerem Kavalci", "https://sketchfab.com/3d-models/light-fighter-spaceship-free-51616ef53af84fe595c5603cd3e0f3e1", "Sketchfab Standard"] },
   hawk: { file: "silver_hawk.glb", rot: [0, 0, 0], flames: [[-.07, .015, -.3, 1.05], [.07, .015, -.3, 1.05]], muzzles: [[-.1, -.02, .26], [.1, -.02, .26]], radius: .2,
     credit: ["SpaceShip", "JazOone", "https://sketchfab.com/3d-models/spaceship-8dc6c42edd9e4ddeb9283bd5f47701fc", "CC BY 4.0"] },
   sparrow: { file: "ship_sparrow.glb", rot: [0, 0, 0], flames: [[0, -.105, -.3, 1]], muzzles: [[-.06, -.03, .28], [.06, -.03, .28]], radius: .25,
     credit: ["Star Sparrow Modular Spaceship", "Ebal Studios", "https://sketchfab.com/3d-models/star-sparrow-modular-spaceship-28806b168f8043bbb5c1c922f98452c9", "Sketchfab Standard"] },
-  toy: { file: "ship_toy.glb", rot: [0, 90, 0], flames: [[0, .02, -.3, 1.1], [-.2, -.045, -.28, .85], [.2, -.045, -.28, .85]], muzzles: [[-.2, -.04, .2], [.2, -.04, .2]], radius: .3,
-    credit: ["Toy spaceship", "awerty8", "https://sketchfab.com/3d-models/toy-spaceship-8cc3efa1537a4f8bbbc477f847a44e74", "CC BY 4.0"] },
-  raven: { file: "ship_raven.glb", rot: [0, 0, 0], flames: [[-.055, .005, -.3, .7], [.055, .005, -.3, .7]], muzzles: [[-.04, -.01, .3], [.04, -.01, .3]], radius: .17,
-    credit: ["Raven spaceship - Star Conflict (v.2)", "Polenta", "https://sketchfab.com/3d-models/raven-spaceship-star-conflict-v2-5edb70fdc0da4e6aa7d96f5f19f7a419", "CC BY 4.0"] },
-  viper: { file: "ship_viper.glb", rot: [0, 0, 0], flames: [[-.02, .03, -.3, .6], [.02, .03, -.3, .6]], muzzles: [[-.03, -.02, .31], [.03, -.02, .31]], radius: .2,
-    credit: ["Spaceship", "Jefferson Frenay", "https://sketchfab.com/3d-models/spaceship-1d2f6d0c373e497c83e7846ec3f5fad6", "CC BY-NC-ND 4.0"] },
   sunfire: { file: "ship_sunfire.glb", rot: [0, 0, 0], flames: [[-.155, -.06, -.28, 1.4], [.155, -.06, -.28, 1.4]], muzzles: [[-.05, -.03, .3], [.05, -.03, .3]], radius: .3,
     credit: ["SpaceShip", "JazOone", "https://sketchfab.com/3d-models/spaceship-6164a883f57f4f13938c3c5999bc0e1f", "CC BY 4.0"] },
   lancer: { file: "ship_cb1.glb", rot: [0, -90, 0], flames: [[0, 0, -.3, 1.3], [-.13, -.018, -.29, .8], [.13, -.018, -.29, .8]], muzzles: [[-.04, -.01, .31], [.04, -.01, .31]], radius: .24,
@@ -2746,8 +2730,8 @@ const MODEL_SHIPS = {
 };
 const PACK_CREDIT = ["LowPoly Spaceships", "Pedram Ashoori", "https://sketchfab.com/3d-models/lowpoly-spaceships-0d032f946bfb483ca3168b4616c624de", "CC BY 4.0"];
 const CREATURES = new Set(["squid", "crystal"]); // living things, still drawn in code
-const OLD_HULLS = { interceptor: "fighter", stealth: "raven", manta: "alien", hammerhead: "lancer", corvette: "sunfire", rocket: "sparrow", saucer: "alien", battleship: "warlord", warden: "warlord", raptor: "talon",
-  falcon: "hawk", shark: "wasp", beetle: "dart", needle: "viper", hauler: "lancer", cruiser: "fighter", van: "toy", duck: "toy", toaster: "toy", burger: "toy" }; // old saves and old players' ships
+const OLD_HULLS = { fighter: "hawk", toy: "sparrow", raven: "sunfire", viper: "hawk", interceptor: "hawk", stealth: "sunfire", manta: "alien", hammerhead: "lancer", corvette: "sunfire", rocket: "sparrow", saucer: "alien", battleship: "warlord", warden: "warlord", raptor: "talon",
+  falcon: "hawk", shark: "wasp", beetle: "dart", needle: "hawk", hauler: "lancer", cruiser: "hawk", van: "sparrow", duck: "sparrow", toaster: "sparrow", burger: "sparrow" }; // old saves and old players' ships
 const modelKey = (h) => (MODEL_SHIPS[h] ? h : CREATURES.has(h) ? null : OLD_HULLS[h] || "hawk");
 const shipCredit = (h) => { const m = MODEL_SHIPS[modelKey(h)]; return m && (m.credit === "pack" ? PACK_CREDIT : m.credit); };
 function loadShipModel(hull) { // models load the first time a ship needs them, so the game starts fast
@@ -2776,18 +2760,50 @@ function shipModelLoaded(hull) { // swap the model in everywhere a ship was wait
 function makeModelShip(bm, c, root) {
   root.clear();
   if (bm.scene) root.add(bm.scene.clone(true));
-  const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(c.flame).multiplyScalar(1.6), transparent: true, opacity: .92, depthWrite: false });
+  const fireMat = makeFireMat(c);
   if (bm.scene) for (const [x, y, z, s] of bm.flames) {
     const f = new THREE.Mesh(flameGeo(c.flameShape), fireMat); f.position.set(x, y, z); f.rotation.x = -Math.PI / 2; f.name = "flame"; f.userData.fs = (c.flameSize || 1) * s; f.scale.setScalar(f.userData.fs); root.add(f);
+    const core = new THREE.Mesh(f.geometry, fireMat.userData.core); core.scale.set(.42, .55, .42); core.renderOrder = 3; f.add(core); f.renderOrder = 2;
   }
   root.scale.setScalar(c.size);
   const info = { muzzles: bm.muzzles.map((p) => V(p)), len: .62 * c.size * 1.05, radius: bm.radius * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
   collectParts(root, info);
   return info;
 }
+const FIRE_T = { value: 0 }; // shared clock for every engine flame
+function makeFireMat(c) { // engine fire: a white-hot core fading through the engine color into soft flickering edges, with shock diamonds when boosting
+  const U = { color: { value: new THREE.Color(c.flame).multiplyScalar(1.6) }, boost: { value: 0 }, time: FIRE_T };
+  const opts = (core) => ({ uniforms: U, defines: core ? { CORE: 1 } : {}, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: `attribute float fl; varying float vF, vA; varying vec3 vN, vV;
+      void main(){ vF = fl; vA = atan(position.x, position.z); vec4 mv = modelViewMatrix * vec4(position, 1.); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform vec3 color; uniform float time, boost; varying float vF, vA; varying vec3 vN, vV;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + 1.), f.x), f.y); }
+      void main(){
+        float face = abs(dot(normalize(vN), normalize(vV)));
+        float n = n2(vec2(vA * 2., vF * 7. - time * 19.)) * .6 + n2(vec2(vA * 5. + 3., vF * 16. - time * 33.)) * .4;
+        float fade = pow(max(1. - vF, 0.), 1.7) * smoothstep(0., .05, vF + .01);
+        float dia = boost * pow(.5 + .5 * cos(vF * 30. - .6), 8.) * fade;
+      #ifdef CORE
+        float a = (.35 + .65 * face) * fade * (.8 + .3 * n);
+        vec3 col = mix(vec3(1., .97, .92), color, smoothstep(.15, .9, vF));
+        gl_FragColor = vec4(col * a * 1.5, a);
+      #else
+        float a = (.18 + .82 * pow(face, 2.)) * fade * (.45 + .75 * n) + dia * face * .9;
+        vec3 col = mix(mix(vec3(1., .95, .85), color, smoothstep(0., .35, vF)), color * .5, smoothstep(.5, 1., vF));
+        gl_FragColor = vec4(col * a, a);
+      #endif
+      }` });
+  const m = new THREE.ShaderMaterial(opts(false)); m.userData.core = new THREE.ShaderMaterial(opts(true)); return m;
+}
 const flameGeos = {};
 function flameGeo(kind = "cone") { // engine fire shapes; the base sits at the nozzle and the fire grows backward
   if (flameGeos[kind]) return flameGeos[kind];
+  const done = (g) => { const P = g.attributes.position, top = new THREE.Box3().setFromBufferAttribute(P).max.y, a = new Float32Array(P.count); for (let i = 0; i < P.count; i++) a[i] = Math.max(0, P.getY(i)) / top; g.setAttribute("fl", new THREE.BufferAttribute(a, 1)); return (flameGeos[kind] = g); };
+  if (!kind || kind === "cone") { // a plume that swells just past the nozzle, then tapers to a point
+    const pts = []; for (let i = 0; i <= 14; i++) { const t = i / 14; pts.push(new THREE.Vector2(.03 * Math.pow(1 - t, .75) * (1 + .35 * Math.sin(t * Math.PI * .9)) + (i === 14 ? 0 : .0005), t * .2)); }
+    return done(new THREE.LatheGeometry(pts, 28));
+  }
   let g;
   if (kind === "long") g = new THREE.ConeGeometry(.018, .34, 16).translate(0, .17, 0);
   else if (kind === "wide") g = new THREE.ConeGeometry(.045, .12, 20).translate(0, .06, 0);
@@ -2795,11 +2811,11 @@ function flameGeo(kind = "cone") { // engine fire shapes; the base sits at the n
   else if (kind === "twin") g = mergeGeometries([new THREE.ConeGeometry(.013, .17, 10).translate(-.014, .085, 0), new THREE.ConeGeometry(.013, .17, 10).translate(.014, .085, 0)]);
   else if (kind === "ring") g = mergeGeometries([new THREE.TorusGeometry(.03, .007, 8, 24).rotateX(Math.PI / 2).translate(0, .03, 0), new THREE.TorusGeometry(.022, .006, 8, 24).rotateX(Math.PI / 2).translate(0, .08, 0), new THREE.TorusGeometry(.014, .005, 8, 24).rotateX(Math.PI / 2).translate(0, .13, 0)]);
   else g = new THREE.ConeGeometry(.026, .16, 20).translate(0, .08, 0);
-  return (flameGeos[kind] = g);
+  return done(g);
 }
 function setFlames(info, len, boosting) { // grow, flicker and color the engine fire
   for (const f of info.flames) { const fs = f.userData.fs || 1; f.scale.set(fs, fs * len, fs); }
-  if (info.fireMat) info.fireMat.color.copy(boosting ? info.boostCol : info.flameCol);
+  if (info.fireMat) { info.fireMat.uniforms.color.value.copy(boosting ? info.boostCol : info.flameCol); info.fireMat.uniforms.boost.value += ((boosting ? 1 : 0) - info.fireMat.uniforms.boost.value) * .15; }
 }
 function collectParts(root, info) { // find flames, lights and turrets (also after cloning a model)
   info.flames = []; info.lights = []; info.turret = null; info.spinners = [];
@@ -2958,7 +2974,7 @@ function renderTabs() {
   document.querySelectorAll("[data-tabs]").forEach((bar) => {
     const panel = bar.parentElement, btns = [...bar.querySelectorAll("[data-tab]")], cur = ui.tabs[bar.dataset.tabs] || btns[0].dataset.tab;
     btns.forEach((b) => b.classList.toggle("on", b.dataset.tab === cur));
-    panel.querySelectorAll(":scope > [data-tab]").forEach((g) => (g.hidden = g.dataset.tab !== cur));
+    panel.querySelectorAll(":scope > [data-tab]").forEach((g) => (g.hidden = g.dataset.tab !== cur || g.classList.contains("never"))); // "never" rows do not fit the downloaded ships
   });
 }
 document.querySelectorAll("[data-tabs] [data-tab]").forEach((b) => b.addEventListener("click", () => { ui.tabs[b.closest("[data-tabs]").dataset.tabs] = b.dataset.tab; saveUi(); renderTabs(); }));
@@ -3195,7 +3211,9 @@ function renderHangar() {
   });
   [...$("presets").children].forEach((b, i) => { const k = Object.keys(PRESETS)[i], need = PRESET_LEVEL[k]; if (need && lvl() < need) b.textContent = `🔒 ${PRESETS[k].label} · Lv ${need}`; });
   choiceRow($("hulls"), HULLS, (k) => modelKey(s.hull) === k, pick("hull"));
-  { const cr = shipCredit(s.hull), el = $("shipCredit"); el.textContent = ""; if (cr) { const a = document.createElement("a"); a.href = cr[2]; a.target = "_blank"; a.rel = "noopener"; a.textContent = cr[0]; el.append("Model: ", a, ` by ${cr[1]} (${cr[3]})`); } }
+  { const cr = shipCredit(s.hull), el = $("shipCredit"); el.textContent = ""; if (cr) { const a = document.createElement("a"); a.href = cr[2]; a.target = "_blank"; a.rel = "noopener"; a.textContent = cr[0]; el.append(`${HULLS[modelKey(s.hull)] || "This ship"} was made by ${cr[1]}. Model: `, a, ` on Sketchfab (${cr[3]}).`); } }
+  [...$("presets").children].forEach((b, i) => { const cr = shipCredit(PRESETS[Object.keys(PRESETS)[i]].hull); if (cr) b.title = `Made by ${cr[1]} · ${cr[0]} on Sketchfab (${cr[3]})`; });
+  [...$("hulls").children].forEach((b, i) => { const cr = shipCredit(Object.keys(HULLS)[i]); if (cr) b.title = `Made by ${cr[1]} · ${cr[0]} on Sketchfab (${cr[3]})`; });
   choiceRow($("wings"), WINGS, (k) => s.wings === k, pick("wings"));
   choiceRow($("engines"), { 1: "One", 2: "Two", 3: "Three", 4: "Four" }, (k) => +k === s.engines, pick("engines"));
   choiceRow($("finishes"), FINISHES, (k) => (s.finish || "metal") === k, pick("finish"));
@@ -3798,7 +3816,7 @@ $("freePlayBtn").addEventListener("click", () => {
 wallet.stats ||= {}; wallet.friends ||= [];
 // ---- level rewards: every level unlocks something real
 var DECOR_LEVEL = { base: 2, turret: 2, castle: 3, pisa: 4, eiffel: 5, magic: 6 };
-var PRESET_LEVEL = { sparrow: 2, toy: 2, raven: 3, viper: 3, sunfire: 4, lancer: 4, wasp: 5, dart: 5, alien: 6, talon: 7, warlord: 8 };
+var PRESET_LEVEL = { sparrow: 2, sunfire: 3, lancer: 4, alien: 6 };
 var FEATURE_LEVEL = { style: 3, pvp: 5 };
 function unlocksAt(lv) {
   const out = [];
@@ -4473,14 +4491,15 @@ function buildTags() {
 const NPC_TYPES = { // role: trader = flies planet to planet, guard = protects its planet, pirate = attacks when close,
   // orbit = circles a planet, patrol = space police, drift = a slow giant
   trader:  { role: "trader", name: "Space trader", hp: 40, speed: 14, cfg: { hull: "lancer", wings: "none", engines: 3, extras: ["lights"], body: "#8a8f99", accent: "#d8a040", glow: "#ffd080", flame: "#ffb547", finish: "matte", size: 1.6 } },
-  guard:   { role: "guard", name: "Zorgon guard", hp: 30, speed: 34, cfg: { hull: "raven", wings: "none", engines: 2, extras: [], body: "#2f6a24", accent: "#9dff6a", glow: "#9dff6a", flame: "#9dff6a", finish: "metal", size: 1.1 } },
+  guard:   { role: "guard", name: "Zorgon guard", hp: 30, speed: 34, cfg: { hull: "hawk", wings: "none", engines: 2, extras: [], body: "#2f6a24", accent: "#9dff6a", glow: "#9dff6a", flame: "#9dff6a", finish: "metal", size: 1.1 } },
   pirate:  { role: "pirate", name: "Krell pirate", hp: 25, speed: 38, cfg: { hull: "wasp", wings: "none", engines: 2, extras: ["flag", "spikes"], body: "#2a1a1a", accent: "#601010", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 1.1 } },
   miner:   { role: "orbit", name: "Space miner", hp: 35, speed: 10, low: true, cfg: { hull: "sunfire", wings: "none", engines: 2, extras: ["lights", "drill"], body: "#e0b020", accent: "#333338", glow: "#ffd060", flame: "#ffb547", finish: "matte", size: 1.3 } },
-  tourist: { role: "orbit", name: "Tourist rocket", hp: 20, speed: 16, cfg: { hull: "toy", wings: "none", engines: 1, extras: ["lights", "hat", "eyes"], body: "#ff9ad5", accent: "#ffffff", glow: "#ffe36a", flame: "#ff9ad5", finish: "matte", size: 1.1 } },
-  police:  { role: "patrol", name: "Space police", hp: 35, speed: 44, cfg: { hull: "fighter", wings: "swept", engines: 2, extras: ["siren", "lights"], body: "#f2f5fb", accent: "#1f4fd7", glow: "#4fa8ff", flame: "#6fe3ff", finish: "metal", size: 1.2 } },
+  tourist: { role: "orbit", name: "Space tourist", hp: 20, speed: 16, cfg: { hull: "sparrow", wings: "none", engines: 1, extras: ["lights", "hat", "eyes"], body: "#ff9ad5", accent: "#ffffff", glow: "#ffe36a", flame: "#ff9ad5", finish: "matte", size: 1.1 } },
+  police:  { role: "patrol", name: "Space police", hp: 35, speed: 44, cfg: { hull: "hawk", wings: "swept", engines: 2, extras: ["siren", "lights"], body: "#f2f5fb", accent: "#1f4fd7", glow: "#4fa8ff", flame: "#6fe3ff", finish: "metal", size: 1.2 } },
   squid:   { role: "orbit", name: "Space squid", hp: 30, speed: 12, cfg: { hull: "squid", wings: "none", engines: 1, extras: [], body: "#9a4fd0", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 1.4 } },
-  racer:   { role: "trader", name: "Space racer", hp: 20, speed: 45, cfg: { hull: "viper", wings: "none", engines: 1, extras: ["spoiler"], body: "#ff3a3a", accent: "#ffffff", glow: "#ffb547", flame: "#ffb547", flameShape: "long", finish: "metal", size: 1.2 } },
+  racer:   { role: "trader", name: "Space racer", hp: 20, speed: 45, cfg: { hull: "sunfire", wings: "none", engines: 1, extras: ["spoiler"], body: "#ff3a3a", accent: "#ffffff", glow: "#ffb547", flame: "#ffb547", flameShape: "long", finish: "metal", size: 1.2 } },
   crystal: { role: "drift", name: "Crystal being", hp: 60, speed: 6, cfg: { hull: "crystal", wings: "none", engines: 1, extras: ["glow"], body: "#9df0ff", accent: "#c8a2ff", glow: "#c8a2ff", flame: "#c8a2ff", flameShape: "ball", finish: "chrome", size: 2.2 } },
+  pirateDart: { role: "pirate", name: "Krell pirate", hp: 25, speed: 40, cfg: { hull: "dart", wings: "none", engines: 2, extras: ["flag", "spikes"], body: "#2a1a1a", accent: "#601010", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 1.2 } },
   pirateBoss: { role: "pirate", name: "Pirate captain", hp: 90, speed: 34, cfg: { hull: "talon", wings: "bat", engines: 3, extras: ["flag", "spikes", "cannons"], body: "#1a1010", accent: "#b01818", glow: "#ff3030", flame: "#ff5030", finish: "carbon", size: 2.4 } },
   escort:  { role: "guard", name: "Convoy escort", hp: 35, speed: 30, cfg: { hull: "sparrow", wings: "delta", engines: 2, extras: ["lights"], body: "#8a8f99", accent: "#d8a040", glow: "#ffd080", flame: "#ffb547", finish: "metal", size: 1.1 } },
   kraken:  { role: "drift", wild: true, name: "Space kraken", hp: 800, speed: 5, big: true, high: true, cfg: { hull: "squid", wings: "none", engines: 1, extras: [], body: "#6a2a8a", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 16 } },
@@ -4532,6 +4551,7 @@ function dmgNumber(at, amount) { // a number pops out of the ship you hit
 }
 class Npc {
   constructor(type, opts) {
+    if (type === "pirate" && Math.random() < .5) type = "pirateDart"; // pirates fly Krell Wasps and Krell Darts
     const T = NPC_TYPES[type];
     if (!npcTemplates[type]) { const g = new THREE.Group(); makeShipModel(T.cfg, g); npcTemplates[type] = g; }
     this.type = type; this.T = T; this.role = T.role; this.name = T.name; this.hp = this.maxHp = T.hp; this.speed = T.speed; this.opts = opts;
@@ -4980,7 +5000,7 @@ function showJoin(world) { // first visit: pick a name and a planet
     const base = defaults().home;
     base.design = { ...designFrom(tpl, (Math.random() * 1000) | 0), around: { sats: 1 } };
     base.decor = [{ type: "mailbox", n: [-.35, .35, .87] }, { type: "sign", n: [.1, .55, .83], text: (planetName || name).toUpperCase().slice(0, 20) }]; // a brand new planet: just your flag and a mailbox
-    net.send({ t: "join", name, planetName: planetName || name + "'s Planet", planet: { design: base.design, decor: base.decor }, ship: { ...structuredClone(PRESETS.fighter), name: name + "'s Ship" } });
+    net.send({ t: "join", name, planetName: planetName || name + "'s Planet", planet: { design: base.design, decor: base.decor }, ship: { ...structuredClone(PRESETS.hawk), name: name + "'s Ship" } });
     $("joinForm").hidden = true; $("joinWait").hidden = false; $("wakeText").textContent = "Creating your planet…";
   };
   $("joinGo").onclick = go;
@@ -4993,7 +5013,7 @@ function enterWorld(you, world) {
   const mineP = world.planets.find((p) => p.id === you.planetId);
   WORLD_OFFSET.fromArray(mineP.pos);
   for (const p of world.planets) { if (!p.design.around) p.design.around = {}; p.mail ||= []; p.decor ||= []; }
-  state = { home: mineP, others: world.planets.filter((p) => p !== mineP), ship: you.ship || { name: you.name + "'s Ship", ...structuredClone(PRESETS.fighter) }, chat: world.chat || [] };
+  state = { home: mineP, others: world.planets.filter((p) => p !== mineP), ship: you.ship || { name: you.name + "'s Ship", ...structuredClone(PRESETS.hawk) }, chat: world.chat || [] };
   delete state.ship.label;
   lastSent = { name: JSON.stringify(mineP.name), design: JSON.stringify(mineP.design), decor: JSON.stringify(mineP.decor), sculpt: JSON.stringify(mineP.sculpt ?? null), paint: JSON.stringify(mineP.paint ?? null), ship: JSON.stringify(state.ship) };
   $("p-join").hidden = true;
@@ -5256,7 +5276,7 @@ const farGiants = [];
 const GIANT_CFGS = [
   { hull: "alien", wings: "ring", engines: 4, extras: ["lights", "glow", "turret", "antenna"], body: "#3a2a5a", accent: "#ff5ad8", glow: "#ff5ad8", flame: "#ff5ad8", finish: "chrome", size: 420 },
   { hull: "crystal", wings: "none", engines: 1, extras: ["glow", "lights"], body: "#ffd88a", accent: "#ff8a1f", glow: "#ffd23f", flame: "#ffd23f", flameShape: "ball", finish: "chrome", size: 540 },
-  { hull: "warlord", wings: "wide", engines: 4, extras: ["lights", "glow", "antenna", "turret"], body: "#2a4a5a", accent: "#29ffe0", glow: "#29ffe0", flame: "#29ffe0", finish: "metal", size: 630 },
+  { hull: "lancer", wings: "wide", engines: 4, extras: ["lights", "glow", "antenna", "turret"], body: "#2a4a5a", accent: "#29ffe0", glow: "#29ffe0", flame: "#29ffe0", finish: "metal", size: 630 },
   { hull: "squid", wings: "none", engines: 1, extras: ["glow"], body: "#5a2a8a", accent: "#c88af0", glow: "#7dffcf", flame: "#7dffcf", finish: "matte", size: 500 },
 ];
 function buildFarGiants() {
@@ -6268,7 +6288,7 @@ function resetPlayerStuff() { // money, weapons, missions, and everyone's anger 
   try { localStorage.removeItem(MISSIONKEY); localStorage.removeItem(SEENKEY); } catch {}
   tut = { step: 0, n: 0 }; store(TUTKEY, tut); radioQ = []; renderLevel(); tutEnter();
   lastPlayerAttack = -99; lastHitNpc = null; shipHp = 100;
-  state.ship = { ...structuredClone(PRESETS.fighter), name: state.ship.name }; delete state.ship.label; buildShip();
+  state.ship = { ...structuredClone(PRESETS.hawk), name: state.ship.name }; delete state.ship.label; buildShip();
   spawnNpcs(); renderHangar(); renderMissions(); renderLocks(); renderGameInfo();
 }
 $("reset").addEventListener("click", () => {
@@ -6296,7 +6316,7 @@ let mapTick = 0;
 function frame() {
   const realDt = Math.min(timer.getDelta(), .05), dt = realDt * slow, t = timer.elapsedTime;
   drawMinimap(); updateThreats();
-  sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t;
+  sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t; FIRE_T.value = t;
   WAVES.offset.set(t * .004, t * .0025); CLOUD_TIME.value = t;
   const still = reduce || brushing || (mode === "home" && (!!tool || view === "design" || view === "build"));
   if (!still) home.spin.rotation.y += dt * .04;
