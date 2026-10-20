@@ -26,3 +26,8 @@ Gilad downloaded them; they were shrunk for the browser (planets 2048x1024, skie
 
 Left out on purpose: "Grassland planet" (its file is named after Star Wars' Dantooine and the maker/license could not be found)
 and "Need some space?" star cloud by Loïc Norgeot (license could not be confirmed; he uses NonCommercial on some models).
+
+Taken out of downloaded models (see game/models/CREDITS.md for the full credits, all CC BY 4.0):
+- earth_day.jpg: from "Earth" by ScannerDev (flipped right side up)
+- uranus.jpg: from "Uranus" by NestaEric (the band part of its texture)
+- toi561b.jpg: from "The unusal super Earth TOI-561b" by Ignazio Pillitteri

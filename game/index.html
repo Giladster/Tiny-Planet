@@ -1583,7 +1583,8 @@ const PHOTO_CACHE = {}, photoOnce = (f) => PHOTO_CACHE[f] || (PHOTO_CACHE[f] = f
 const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg"], .9], lava: [["venus_surface.jpg"], 1], ice: [["eris_fictional.jpg"], .9], candy: [["haumea_fictional.jpg"], .75],
   cheese: [["moon.jpg"], 1], melon: [["makemake_fictional.jpg"], .6], disco: [[], 0], toxic: [["makemake_fictional.jpg"], .9] };
 const SEA_PHOTOS = { lava: ["venus_surface.jpg", 1], toxic: ["jupiter.jpg", .9], candy: ["saturn.jpg", .8], ice: ["venus_atmosphere.jpg", .5], earth: ["jupiter.jpg", .25] };
-function planetPhoto(d) { const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
+function planetPhoto(d) { if (d.photo) return { tex: photoOnce(d.photo), k: d.flat ? .2 : 1, real: 1 }; // gas giants stay smooth
+  const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
 const SOLAR_MAT = (() => { // solar cells: dark blue squares with thin silver lines between them
   const c = document.createElement("canvas"); c.width = 256; c.height = 128; const g = c.getContext("2d");
@@ -1826,12 +1827,14 @@ class Planet {
       sh.uniforms.pR = { value: this.data.R }; sh.uniforms.pSeed = { value: (this.data.design.seed || 1) % 97 };
       sh.uniforms.cSeed = { value: ((this.data.design.seed || 1) * 7.31) % 53 }; sh.uniforms.cTime = CLOUD_TIME; sh.uniforms.cRot = { value: 0 }; sh.uniforms.cOn = { value: 0 };
       sh.uniforms.pAtmo = { value: new THREE.Color(this.data.design.atmo || "#88ccff") }; this.groundSh = sh;
-      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k }; sh.uniforms.pRock = { value: ROCK };
+      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k }; sh.uniforms.pTrue = this.photoTrue = { value: ph.real || 0 }; sh.uniforms.pRock = { value: ROCK };
       sh.vertexShader = "attribute float glow;\nattribute float city;\nattribute float real;\nvarying float vGlow;\nvarying float vCity;\nvarying float vReal;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vReal = real; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal); vWR = normalize(mat3(modelMatrix) * position);");
-      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK;\nuniform sampler2D pPhoto, pRock;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + GLSL_PHOTO + sh.fragmentShader
+      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK, pTrue;\nuniform sampler2D pPhoto, pRock;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + GLSL_PHOTO + sh.fragmentShader
         .replace("#include <color_fragment>", `#include <color_fragment>
 if (pPhotoK > 0.) { // the real surface photo, recolored to this spot's own color: its craters, canyons and lava flows show in the planet's palette
-  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(photoAt(pPhoto, vDir) / photoMean(pPhoto), .15, 2.6), pPhotoK * vReal);
+  vec3 phc = photoAt(pPhoto, vDir); // wild planets show the photo as it is; lived planets get it recolored to their own palette
+  diffuseColor.rgb = pTrue > .5 ? mix(diffuseColor.rgb, phc * (.75 + .5 * dot(diffuseColor.rgb, vec3(.3, .59, .11)) / max(.05, dot(photoMean(pPhoto), vec3(.3, .59, .11)))), vReal)
+    : mix(diffuseColor.rgb, diffuseColor.rgb * clamp(phc / photoMean(pPhoto), .15, 2.6), pPhotoK * vReal);
 }
 { // real rock up close: cliffs and mountains get a sharp rock photo, flat ground a light touch of it
   float rs = 1. - clamp(dot(normalize(vWN), normalize(vWR)), 0., 1.), rk = (.25 + .75 * smoothstep(.05, .2, rs)) * vReal;
@@ -2039,7 +2042,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.clouds.scale.setScalar(R * 1.04);
     this.atmoBack.material.uniforms.col.value.set(d.atmo); this.atmoRim.material.uniforms.col.value.set(d.atmo);
     if (this.groundSh) this.groundSh.uniforms.pAtmo.value.set(d.atmo || "#88ccff");
-    if (this.photoU) { const ph = planetPhoto(d); this.photoU.value = ph.tex; this.photoK.value = ph.k; }
+    if (this.photoU) { const ph = planetPhoto(d); this.photoU.value = ph.tex; this.photoK.value = ph.k; this.photoTrue.value = ph.real || 0; }
     this.atmoBack.scale.setScalar(R * 1.16); this.atmoRim.scale.setScalar(R * 1.05);
     const disco = d.template === "disco";
     this.mat.metalness = disco ? .75 : 0; this.mat.roughness = disco ? .22 : .82; this.mat.envMapIntensity = disco ? .9 : .15;
@@ -2166,7 +2169,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     }
     this.dirty = true;
     const at = this.mesh.localToWorld(n.clone().multiplyScalar(this.R));
-    boom(at, 1.6 * this.R); breakOff(this, n, 30, size); this.fling(n, size, 3);
+    boom(at, 1.6 * (this.data.wild ? Math.min(this.R, 9) : this.R)); breakOff(this, n, 30, size); this.fling(n, size, 3); // big wild planets: a cave-in, not a blinding flash
     sfx.rumble(at); setTimeout(() => sfx.boom(2.5, at), 300);
     shake = Math.max(shake, .12 * Math.max(0, 1 - camera.position.distanceTo(at) / 40));
     toast(`⚠ ${esc(this.data.name)} is breaking apart!`, "boom", 2200);
@@ -2197,16 +2200,17 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     }
   }
   leak(dt) { // smoke, lava drips and sparks pour out of a hurt planet
-    const hurt = 1 - this.data.hp / 100;
+    const hurt = 1 - this.data.hp / 100, R = this.data.wild ? Math.min(this.R, 7) : this.R; // big wild planets leak thin streams, not planet-sized clouds
     if (hurt < .04 || !this.hot.length) return;
     const emit = (rate, fn) => { let n = rate * dt; while (n > 0) { if (n >= 1 || Math.random() < n) fn(); n--; } };
     const spot = () => { const u = this.hot[(Math.random() * this.hot.length) | 0]; const d = V([this.dirs[u * 3], this.dirs[u * 3 + 1], this.dirs[u * 3 + 2]]); return { d, at: this.mesh.localToWorld(d.clone().multiplyScalar(this.radius[u])), out: d.clone().transformDirection(this.mesh.matrixWorld) }; };
-    emit(4 + hurt * hurt * 50, () => { const s = spot(); smoke.spawn(s.at, s.out.multiplyScalar(this.R * rnd(.15, .4)).add(new THREE.Vector3().randomDirection().multiplyScalar(.05)), rnd(2.5, 4.5), this.R * rnd(.06, .16), SMOKE0, SMOKE1, 3.5, .35); });
-    emit(hurt * hurt * 70, () => { const s = spot(); fire.spawn(s.at, s.out.multiplyScalar(this.R * rnd(.05, .35)), rnd(.6, 1.6), this.R * rnd(.015, .04), C(0xffb050, 2.4), C(0x601000, .4), .3, .4); });
-    if (hurt > .55 && Math.random() < dt * hurt * 1.5) { const s = spot(); for (let i = 0; i < 30; i++) fire.spawn(s.at, s.out.clone().multiplyScalar(this.R * rnd(.4, 1.1)).add(new THREE.Vector3().randomDirection().multiplyScalar(this.R * .15)), rnd(.8, 1.6), this.R * rnd(.02, .05), C(0xffd080, 3), C(0xa02000, .5), .2, .6); if (Math.random() < .5) breakOff(this, s.d, 3, .05); }
+    emit(4 + hurt * hurt * 50, () => { const s = spot(); smoke.spawn(s.at, s.out.multiplyScalar(R * rnd(.15, .4)).add(new THREE.Vector3().randomDirection().multiplyScalar(.05)), rnd(2.5, 4.5), R * rnd(.06, .16), SMOKE0, SMOKE1, 3.5, .35); });
+    const fl = this.data.design.fluid; // each planet bleeds its own fluid: lava, water, gas
+    emit(hurt * hurt * 70, () => { const s = spot(); fire.spawn(s.at, s.out.multiplyScalar(R * rnd(.05, .35)), rnd(.6, 1.6), R * rnd(.015, .04), fl ? C(fl, 2.4) : C(0xffb050, 2.4), fl ? C(fl, .3) : C(0x601000, .4), .3, .4); });
+    if (hurt > .55 && Math.random() < dt * hurt * 1.5) { const s = spot(); for (let i = 0; i < 30; i++) fire.spawn(s.at, s.out.clone().multiplyScalar(R * rnd(.4, 1.1)).add(new THREE.Vector3().randomDirection().multiplyScalar(R * .15)), rnd(.8, 1.6), R * rnd(.02, .05), C(0xffd080, 3), C(0xa02000, .5), .2, .6); if (Math.random() < .5) breakOff(this, s.d, 3, .05); }
   }
   checkDeath() { // online, the server decides
-    if (net.me || !this.alive || (this.data.hp > 0 && this.data.pop > 0)) return;
+    if ((net.me && !this.data.wild) || !this.alive || (this.data.hp > 0 && (this.data.pop > 0 || this.data.wild))) return;
     if (this.data.hp > 0 && !this.isHome && this.soldiers() > 0 && !this.data.conqueredBy) return setConquered(this, { id: "me", name: state.home.owner }, this.data.maxPop * .3);
     this.explode();
   }
@@ -2480,7 +2484,7 @@ function buildWorld() {
   for (const p of [state.home, ...state.others]) liftAliens(p);
   for (const p of planets) scene.remove(p.group);
   home = new Planet(state.home, 40, true);
-  planets = [home, ...state.others.map((o) => new Planet(o, 26, false)), ...FAR_PLANETS.map((f, i) => new Planet(farPlanetData(f, i), 26, false))];
+  planets = [home, ...state.others.map((o) => new Planet(o, 26, false)), ...FAR_PLANETS.map((f, i) => new Planet(farPlanetData(f, i), 26, false)), ...WILD_PLANETS.map((w, i) => new Planet(wildPlanetData(w, i), 40, false))];
   buildTags(); buildBusyGalaxy();
 }
 // ---- a busy galaxy: space lanes with streams of little ships between neighbor planets, and rocky asteroid belts
@@ -2500,7 +2504,7 @@ function buildBusyGalaxy() {
   }
   if (busy.group) scene.remove(busy.group);
   busy.group = new THREE.Group(); busy.lanes = []; busy.belts = []; scene.add(busy.group);
-  const live = planets.filter((p) => !p.data.far), used = new Set();
+  const live = planets.filter((p) => !p.data.far && !p.data.wild), used = new Set();
   // lanes: each planet links to its nearest neighbor, like highways between cities
   for (const a of live) {
     const b = live.filter((x) => x !== a).sort((x, y) => x.group.position.distanceTo(a.group.position) - y.group.position.distanceTo(a.group.position))[0];
@@ -4183,7 +4187,7 @@ function removeNpc(n) { // dead ones stay a moment so their wreck can finish bre
 const BOUNTY_NAMES = ["Captain Rustbeard", "Baron Von Zap", "Sneaky Pete", "Madame Laser", "The Toaster Bandit", "Big Gloop", "Admiral Crumbs", "Lady Nebula", "One-Eyed Zorx", "Doctor Kaboom"];
 const bounties = []; let nextBounty = 0;
 function spawnBounty() {
-  const spots = planets.filter((p) => p.alive && !p.data.far && p !== home), at = spots[(Math.random() * spots.length) | 0]; if (!at) return;
+  const spots = planets.filter((p) => p.alive && !p.data.far && !p.data.wild && p !== home), at = spots[(Math.random() * spots.length) | 0]; if (!at) return;
   const name = BOUNTY_NAMES.filter((x) => !bounties.some((b) => b.wantedName === x))[(Math.random() * 6) | 0] || "Space Bandit";
   const n = new Npc("pirateBoss", { planet: at.data.name }); n.wantedName = name; n.name = "🎯 WANTED · " + name; n.reward = 100 + lvl() * 30 + ((Math.random() * 4) | 0) * 25; npcs.push(n); bounties.push(n);
 }
@@ -4200,7 +4204,7 @@ function huntNav(b) { return { get group() { return b.group; }, R: .3, data: { n
 const gameEvents = []; let nextEvent = clock() + rnd(150, 240);
 const priceK = () => (gameEvents.some((e) => e.kind === "sale") ? .7 : 1);
 function startEvent() {
-  const spots = planets.filter((p) => p.alive && !p.data.far && p !== home), p = spots[(Math.random() * spots.length) | 0]; if (!p) return;
+  const spots = planets.filter((p) => p.alive && !p.data.far && !p.data.wild && p !== home), p = spots[(Math.random() * spots.length) | 0]; if (!p) return;
   const kind = ["meteor", "festival", "sale"][(Math.random() * 3) | 0], e = { kind, p, until: clock() + (kind === "sale" ? 180 : 150), objs: [], joined: false };
   if (kind === "meteor") {
     const c = p.group.position.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(p.R * 6 + 8));
@@ -4816,7 +4820,7 @@ class Npc {
     if (this.trail) this.trail.reset();
   }
   plan() { // pick the next place to go, like a real pilot would: a trip, a stop, then the next trip
-    const live = planets.filter((p) => p.alive && !p.data.far), any = (a) => a[(Math.random() * a.length) | 0], pos = this.group.position, r = this.role, h = this.home;
+    const live = planets.filter((p) => p.alive && !p.data.far && !p.data.wild), any = (a) => a[(Math.random() * a.length) | 0], pos = this.group.position, r = this.role, h = this.home;
     const near = (p, k) => p.group.position.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(p.R * k + this.info.radius * 2));
     const players = live.filter((p) => !p.data.npc), centre = new THREE.Vector3().sub(WORLD_OFFSET);
     let goal = null, wait = 0, p = null;
@@ -5453,6 +5457,28 @@ const FAR_PLANETS = [ // bizarre planets: odd shapes, wild colors, glowing seas
   { name: "Void Potato",   R: 5,   off: [-560, -40, -80], base: "toxic", shape: "potato", sea: "#b84dff", shore: "#1a0a2a", low: "#0a0612", high: "#05030a", peak: "#3a1a5a", atmo: "#b84dff", clouds: "", glow: 1.3, around: { ring: true, sats: 2 } },
   { name: "Rainbow Disc",  R: 4.2, off: [60, -150, 460],  base: "candy", shape: "flat",   pattern: "stripes", p1: "#ff3f8e", p2: "#4fd8ff", atmo: "#fff36a", around: { ring: true, alien: true, alienText: "HELLO EXPLORER" } },
 ];
+// wild planets: the real planets you downloaded (photos from Solar System Scope and Sketchfab, textures/CREDITS.md), nobody lives there, but you can crack them open and blow them up
+const WILD_PLANETS = [
+  { name: "Jupiter",  photo: "jupiter.jpg",            at: [1500, -250, 1100],  R: 60, tone: "#a6a095", atmo: "#e8d2a8", fluid: "#ffcf80", flat: true },
+  { name: "Saturn",   photo: "saturn.jpg",             at: [-1700, -150, 700],  R: 48, tone: "#d0c0a3", atmo: "#f0dfb8", fluid: "#ffe2a0", flat: true, around: { ring: true } },
+  { name: "Uranus",   photo: "uranus.jpg",             at: [-300, 750, -1950],  R: 40, tone: "#1194b8", atmo: "#8fe6ff", fluid: "#7fe8ff", flat: true, around: { ring: true } },
+  { name: "Earth",    photo: "earth_day.jpg",          at: [-1100, 500, 1300],  R: 32, tone: "#546581", atmo: "#6fb6ff", fluid: "#3fa0ff", around: { moon: true } },
+  { name: "Venus",    photo: "venus_atmosphere.jpg",   at: [900, 450, -1500],   R: 26, tone: "#e5bd80", atmo: "#ffd890", fluid: "#ffe070", flat: true },
+  { name: "Mars",     photo: "mars.jpg",               at: [-700, 380, -1300],  R: 26, tone: "#b76247", atmo: "#ffb08a", fluid: "#ff6a2a" },
+  { name: "TOI-561b", photo: "toi561b.jpg",            at: [-1900, -450, -300], R: 20, tone: "#f18828", atmo: "#ffb050", fluid: "#ffd23f", glow: .5 },
+  { name: "Mercury",  photo: "mercury.jpg",            at: [1300, 300, -850],   R: 16, tone: "#848383", atmo: "#2a2a2a", fluid: "#ff8a3a" },
+  { name: "Ceres",    photo: "ceres_fictional.jpg",    at: [-1450, 260, -420],  R: 14, tone: "#978b80", atmo: "#4a4038", fluid: "#9fe8ff" },
+  { name: "Eris",     photo: "eris_fictional.jpg",     at: [300, -420, 1700],   R: 14, tone: "#9ca1a9", atmo: "#b8c8e8", fluid: "#cfe8ff" },
+  { name: "Makemake", photo: "makemake_fictional.jpg", at: [1750, 150, -200],   R: 14, tone: "#ba8676", atmo: "#e0a090", fluid: "#ff9a6a" },
+  { name: "Haumea",   photo: "haumea_fictional.jpg",   at: [-520, -360, 1560],  R: 13, tone: "#929292", atmo: "#c8c8d8", fluid: "#d8f0ff", shape: "egg" },
+  { name: "The Moon", photo: "moon.jpg",               at: [-540, 440, -1240],  R: 10, tone: "#979392", atmo: "#2a2a2a", fluid: "#c8d0e0" },
+];
+function wildPlanetData(w, i) {
+  const t = new THREE.Color(w.tone), dk = "#" + t.clone().multiplyScalar(.8).getHexString(), lt = "#" + t.clone().lerp(new THREE.Color(1, 1, 1), .25).getHexString();
+  const d = { ...designFrom("cheese", 301 + i * 17), pattern: "none", low: w.tone, high: dk, peak: lt, shore: w.tone, atmo: w.atmo, glow: w.glow || 0, mountains: w.flat ? .04 : .25, bumps: w.flat ? .6 : 2,
+    photo: w.photo, fluid: w.fluid, flat: !!w.flat, shape: w.shape || "round", shapeAmt: 1, around: structuredClone(w.around || {}) };
+  return { name: w.name, owner: "Wild planet (nobody lives here)", npc: true, wild: true, R: w.R, pos: w.at, hp: 100, pop: 0, maxPop: 0, dead: false, troops: 0, design: d, decor: [], mail: [], dmg: null };
+}
 function farPlanetData(f, i) {
   const t = TEMPLATES[f.base], d = { ...designFrom(f.base, 101 + i * 13) };
   for (const k of ["sea", "shore", "low", "high", "peak", "p1", "p2", "atmo", "clouds", "glow", "pattern"]) if (f[k] !== undefined) d[k] = f[k];
@@ -5523,42 +5549,10 @@ function buildFarGiants() {
     farGiants.push({ group, info, cfg, model, name: ["Mothership Lumora", "The Golden Hive", "Leviathan of Prism", "The Dream Squid"][i], orbit: 1000 + i * 320, a: i * 1.6, speed: .012 + i * .003, tilt: (i - 1.5) * .25, bob: i * 2 });
   });
 }
-// Mars (Sketchfab, models/CREDITS.md): a huge planet floating above the main galaxy, too big to land on
-const MARS = { at: new THREE.Vector3(-700, 380, -1300), R: 90, group: new THREE.Group() };
-scene.add(MARS.group);
-new GLTFLoader().load("models/mars.glb", (gl) => {
-  const m = gl.scene, box = new THREE.Box3().setFromObject(m); m.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1);
-  const holder = new THREE.Group(); holder.add(m); holder.scale.setScalar(MARS.R * 2 / box.getSize(new THREE.Vector3()).x); MARS.group.add(holder); MARS.spin = holder;
-}, undefined, (e) => console.warn("mars did not load", e));
-// real planet photos (Solar System Scope, textures/CREDITS.md): giant planets floating around the main galaxy, too big to land on
-const GIANT_PLANETS = [
-  { tex: "jupiter.jpg", at: [1500, -250, 1100], R: 160, spin: .02 },
-  { tex: "saturn.jpg", at: [-1700, -150, 700], R: 120, spin: .018, ring: true, tilt: .45 },
-  { tex: "venus_atmosphere.jpg", at: [900, 450, -1500], R: 75, spin: .004 },
-  { tex: "mercury.jpg", at: [1300, 300, -850], R: 45, spin: .006 },
-  { tex: "moon.jpg", at: [-540, 440, -1240], R: 28, spin: .008 },
-  { tex: "ceres_fictional.jpg", at: [-1450, 260, -420], R: 36, spin: .01 },
-  { tex: "eris_fictional.jpg", at: [300, -420, 1700], R: 40, spin: .009 },
-  { tex: "haumea_fictional.jpg", at: [-520, -360, 1560], R: 30, spin: .05, stretch: 1.7 }, // Haumea spins so fast it is shaped like an egg
-  { tex: "makemake_fictional.jpg", at: [1750, 150, -200], R: 36, spin: .012 },
-].map((p) => {
-  const group = new THREE.Group(), body = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map: photoTex(p.tex), roughness: 1, metalness: 0 }));
-  body.scale.set(p.R * (p.stretch || 1), p.R, p.R); group.add(body); scene.add(group);
-  if (p.ring) { // Saturn's rings: the strip picture runs from the inner edge to the outer edge
-    const inner = p.R * 1.24, outer = p.R * 2.3, geo = new THREE.RingGeometry(inner, outer, 160, 1), pos = geo.attributes.position, uv = geo.attributes.uv;
-    for (let i = 0; i < pos.count; i++) uv.setXY(i, (Math.hypot(pos.getX(i), pos.getY(i)) - inner) / (outer - inner), .5);
-    const ring = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: photoTex("saturn_ring_alpha.png"), transparent: true, side: THREE.DoubleSide, roughness: 1, depthWrite: false }));
-    ring.rotation.x = -Math.PI / 2 + p.tilt; group.add(ring); group.rotation.z = p.tilt * .3;
-  }
-  return { ...p, at: V(p.at), group, body };
-});
 // downloaded planet models (Sketchfab, models/CREDITS.md): sized by their main ball, so rings and clouds keep their real proportions
 const MODEL_PLANETS = [
-  { file: "planet_earth.glb", at: [-1100, 500, 1300], R: 100, body: "Object_6", spin: .012 },
   { file: "planet_lava.glb", at: [1100, -500, -1300], R: 70, body: "planet_planet_0", spin: .01 },
-  { file: "planet_uranus.glb", at: [-300, 750, -1950], R: 110, body: "0", hide: ["miranda_miranda_0"], spin: .006, tilt: 1.2 },
   { file: "solar_system.glb", at: [200, -900, -2100], R: 50, body: "Object_8", spin: .004 }, // a whole little solar system: its sun sits in the middle
-  { file: "planet_toi561b.glb", at: [-1900, -450, -300], R: 45, body: "Object_4", hide: ["Object_6", "Object_8", "Object_10", "Object_12"], spin: .015 },
 ].map((p) => {
   const g = { ...p, at: V(p.at), group: new THREE.Group() }; scene.add(g.group);
   new GLTFLoader().load("models/" + p.file, (gl) => {
@@ -5571,13 +5565,11 @@ const MODEL_PLANETS = [
   return g;
 });
 function farStep(dt, t) {
-  MARS.group.position.copy(MARS.at).sub(WORLD_OFFSET); if (MARS.spin) MARS.spin.rotation.y += dt * .01;
-  for (const g of [...GIANT_PLANETS, ...MODEL_PLANETS]) {
-    g.group.position.copy(g.at).sub(WORLD_OFFSET); if (g.body?.isMesh) g.body.rotation.y += dt * g.spin;
+  for (const g of MODEL_PLANETS) {
+    g.group.position.copy(g.at).sub(WORLD_OFFSET);
     if (g.spinner) { g.spinner.rotateY(dt * g.spin); g.mixer?.update(dt); }
     if (mode === "fly") { const to = ship.position.clone().sub(g.group.position), min = g.R * (g.stretch || 1) + ship.userData.radius; if (to.length() < min) { ship.position.copy(g.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
   }
-  if (mode === "fly") { const to = ship.position.clone().sub(MARS.group.position), min = MARS.R + ship.userData.radius; if (to.length() < min) { ship.position.copy(MARS.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
   const c = prismAt(), d = camera.position.distanceTo(c), k = ss(5800, 2600, d);
   prismDisc.position.copy(c); prismDisc.rotation.y += dt * .004; prismDisc.visible = k > 0;
   prismDisc.userData.mat.uniforms.op.value = k; prismDisc.userData.heart.material.opacity = k;
