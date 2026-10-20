@@ -857,8 +857,20 @@ const sfx = (() => {
     playVoice(mp3) { // play one of Bolt's spoken lines; resolves when he's done (false if it couldn't play)
       if (!ok()) return Promise.resolve(true);
       return ac.decodeAudioData(mp3.slice(0)).then((b) => new Promise((done) => {
-        const s = ac.createBufferSource(), g = gain(); s.buffer = b; g.gain.value = 1.6; s.connect(g); out(g, 1, .08);
-        voiceSrc = s; s.onended = () => { if (voiceSrc === s) voiceSrc = null; sfx.radioTalk(); done(true); }; s.start();
+        // Bolt is a robot flying up to you: a whoosh as he arrives, his voice sweeps in from the side and opens up,
+        // with a metallic ring (short comb echo + a touch of ring modulation) so he sounds like a machine, not a GPS.
+        const t = ac.currentTime, t0 = t + .32, s = ac.createBufferSource(); s.buffer = b;
+        const w = noise(t, .45, 1.1), wb = filt("bandpass", 400, 2600, t, .4, 1.2), wg = env(gain(), t, .25, .2); w.connect(wb).connect(wg); out(wg, .07, .2);
+        const hp = filt("highpass", 110, 110, t0, 1, .7), pres = ac.createBiquadFilter(); pres.type = "peaking"; pres.frequency.value = 2800; pres.gain.value = 4;
+        const sweep = filt("lowpass", 1400, 14000, t0, .5, .7), pan = ac.createStereoPanner(); pan.pan.setValueAtTime(-.6, t0); pan.pan.linearRampToValueAtTime(0, t0 + .6);
+        const g = gain(); g.gain.setValueAtTime(.5, t0); g.gain.linearRampToValueAtTime(1.6, t0 + .45);
+        s.connect(hp).connect(pres).connect(sweep); const mix = gain(); mix.gain.value = .75; sweep.connect(mix).connect(pan);
+        const comb = ac.createDelay(.05), fb = gain(), cg = gain(); comb.delayTime.value = .0045; fb.gain.value = .5; cg.gain.value = .35;
+        sweep.connect(comb).connect(fb).connect(comb); comb.connect(cg).connect(pan);
+        const rm = gain(), lfo = ac.createOscillator(), rg = gain(); rm.gain.value = 0; lfo.frequency.value = 62; lfo.connect(rm.gain); rg.gain.value = .18;
+        lfo.start(t0); lfo.stop(t0 + b.duration + .3); sweep.connect(rm).connect(rg).connect(pan);
+        pan.connect(g); out(g, 1, .1);
+        voiceSrc = s; s.onended = () => { if (voiceSrc === s) voiceSrc = null; sfx.radioTalk(); done(true); }; s.start(t0);
       }), () => false);
     },
     stopVoice() { try { voiceSrc?.stop(); } catch {} voiceSrc = null; },
