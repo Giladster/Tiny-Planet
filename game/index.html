@@ -2860,6 +2860,48 @@ const OLD_HULLS = { fighter: "hawk", toy: "sparrow", raven: "sunfire", viper: "h
   falcon: "hawk", shark: "wasp", beetle: "dart", needle: "hawk", hauler: "lancer", cruiser: "hawk", van: "sparrow", duck: "sparrow", toaster: "sparrow", burger: "sparrow" }; // old saves and old players' ships
 const modelKey = (h) => (MODEL_SHIPS[h] ? h : CREATURES.has(h) ? null : OLD_HULLS[h] || "hawk");
 const shipCredit = (h) => { const m = MODEL_SHIPS[modelKey(h)]; return m && (m.credit === "pack" ? PACK_CREDIT : m.credit); };
+// hull detail: every ship gets real metal plating up close: panel seams, rivets, raised plates and worn grime,
+// drawn once into a tiling texture and wrapped around the ship from three sides (so ships without textures get it too)
+const HULL_TEX = (() => {
+  const S = 512, cv = document.createElement("canvas"); cv.width = cv.height = S; const x = cv.getContext("2d"); let seed = 7;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const hgt = (v) => `rgb(${Math.round(v * 255)},0,0)`; // red = height
+  x.fillStyle = hgt(.6); x.fillRect(0, 0, S, S);
+  const panels = []; const split = (px, py, w, h, d) => { if (d > 4 || (d > 1 && r() < .25) || w < 40 || h < 40) return panels.push([px, py, w, h]); if (w > h ? r() < .8 : r() < .2) { const c = Math.round(w * (.3 + r() * .4) / 8) * 8; split(px, py, c, h, d + 1); split(px + c, py, w - c, h, d + 1); } else { const c = Math.round(h * (.3 + r() * .4) / 8) * 8; split(px, py, w, c, d + 1); split(px, py + c, w, h - c, d + 1); } };
+  split(0, 0, S, S, 0);
+  for (const [px, py, w, h] of panels) {
+    x.fillStyle = hgt(.5 + r() * .2); x.fillRect(px, py, w, h); // plates sit a little higher or lower
+    x.strokeStyle = hgt(.12); x.lineWidth = 2.5; x.strokeRect(px + .5, py + .5, w, h); // the seam between plates
+    if (r() < .45) { x.fillStyle = hgt(.25); const n = Math.max(2, Math.floor(w / 18)); for (let i = 1; i < n; i++) { x.beginPath(); x.arc(px + (i * w) / n, py + 6, 1.6, 0, 7); x.arc(px + (i * w) / n, py + h - 6, 1.6, 0, 7); x.fill(); } } // rivets
+    if (r() < .2) { x.fillStyle = hgt(.35); x.fillRect(px + w * .2, py + h * .35, w * .6, 3); x.fillRect(px + w * .2, py + h * .55, w * .6, 3); } // vents
+  }
+  const img = x.getImageData(0, 0, S, S), d = img.data;
+  const G = new Float32Array(S * S); // green = clean (1) or grimy (0), soft blotches that wrap around the edges
+  for (let k = 0; k < 140; k++) { const cx = r() * S, cy = r() * S, rad = 8 + r() * 60, a = r() * .5; for (let yy = -rad; yy < rad; yy++) for (let xx = -rad; xx < rad; xx++) { const q = 1 - Math.hypot(xx, yy) / rad; if (q <= 0) continue; const i = (((Math.floor(cy + yy) % S) + S) % S) * S + (((Math.floor(cx + xx) % S) + S) % S); G[i] += q * q * a; } }
+  for (let i = 0; i < S * S; i++) { d[i * 4 + 1] = Math.round(255 * Math.max(0, 1 - G[i] - Math.random() * .08)); d[i * 4 + 3] = 255; }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.colorSpace = THREE.NoColorSpace; return t;
+})();
+function addHullDetail(m, tiles, textured) {
+  if (m.userData.hull || !m.isMeshStandardMaterial) return; m.userData.hull = true;
+  const U = { uHullTex: { value: HULL_TEX }, uDS: { value: tiles }, uBump: { value: textured ? .002 : .0045 }, uGrime: { value: textured ? .18 : .55 }, uPlate: { value: textured ? 0 : .5 } };
+  m.customProgramCacheKey = () => "hull";
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, U);
+    sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uDS; varying vec3 vHP, vHN;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\nvHP = position * uDS; vHN = normal;");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", `#include <common>
+uniform sampler2D uHullTex; uniform float uBump, uGrime, uPlate; varying vec3 vHP, vHN;
+vec2 hullTri(){ vec3 w = pow(abs(normalize(vHN)), vec3(4.)); w /= w.x + w.y + w.z;
+  return texture2D(uHullTex, vHP.yz).rg * w.x + texture2D(uHullTex, vHP.xz + .37).rg * w.y + texture2D(uHullTex, vHP.xy + .71).rg * w.z; }
+vec3 hullPerturb(vec3 sp, vec3 sn, vec2 dH, float fd){ vec3 sx = dFdx(sp), sy = dFdy(sp), r1 = cross(sy, sn), r2 = cross(sn, sx); float det = dot(sx, r1) * fd;
+  return normalize(abs(det) * sn - sign(det) * (dH.x * r1 + dH.y * r2)); }`)
+      .replace("#include <color_fragment>", "#include <color_fragment>\nvec2 hullHG = hullTri(); diffuseColor.rgb *= mix(1. - uGrime, 1., hullHG.y) * mix(1. - uGrime * 1.2, 1., smoothstep(.15, .45, hullHG.x)) * (1. + uPlate * clamp((hullHG.x - .6) * 5., -1., 1.)); // plain parts get plates of slightly different shades")
+      .replace("#include <roughnessmap_fragment>", "#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor * mix(1.5, .8, hullHG.y) + (1. - smoothstep(.15, .45, hullHG.x)) * .25, .04, 1.);")
+      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\nnormal = hullPerturb(-vViewPosition, normal, vec2(dFdx(hullHG.x), dFdy(hullHG.x)) * uBump * (1. - smoothstep(.003, .009, length(fwidth(vHP)))), faceDirection); // fades out far away so it never sparkles");
+  };
+  m.needsUpdate = true;
+}
 function loadShipModel(hull) { // models load the first time a ship needs them, so the game starts fast
   const bm = MODEL_SHIPS[hull]; if (bm.loading) return; bm.loading = true;
   new GLTFLoader().load("models/" + bm.file, (g) => {
@@ -2871,6 +2913,7 @@ function loadShipModel(hull) { // models load the first time a ship needs them, 
       if (!o.isMesh) return; const m = o.material; o.frustumCulled = false; if (m.envMapIntensity !== undefined) m.envMapIntensity = .8;
       if (m.transparent && !/glass|window|canopy|cockpit/i.test(m.name + o.name)) { m.transparent = false; m.depthWrite = true; } // some files mark the whole hull see-through
       if (bm.lift && !m.map && m.color && m.color.getHSL({}).l < .05) { m.color.setRGB(.05, .05, .06); m.metalness = Math.min(m.metalness, .5); m.roughness = Math.max(m.roughness, .35); } // pure black parts would vanish in space
+      if (!m.transparent && !/glass|window|canopy|cockpit/i.test(m.name + o.name)) addHullDetail(m, o.getWorldScale(new THREE.Vector3()).x * 22, !!m.map); // about 14 plate tiles along the .62-long ship
     });
     bm.scene = holder; shipModelLoaded(hull);
   }, undefined, (e) => console.warn(`${bm.file} did not load`, e));
