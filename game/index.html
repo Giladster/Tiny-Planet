@@ -88,6 +88,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 #mapSvg .mp:hover circle.body { stroke: var(--accent); }
 #mapCard { display: grid; gap: 8px; padding: 10px; border-radius: 9px; background: rgba(255,255,255,.04); }
 #mapCard h2 { margin: 0; font: 700 18px var(--display); }
+.mcPics { display: grid; grid-template-columns: 1.6fr 1fr; gap: 8px; }
+.mcPics img, .mcPics .ph { width: 100%; border-radius: 8px; border: 1px solid var(--line); background: #0a0f22; display: block; }
+.mcPics .shot { aspect-ratio: 16 / 10; object-fit: cover; }
+.mcPics .fig { aspect-ratio: 1; object-fit: cover; }
+.mcPics .ph { aspect-ratio: 1; display: grid; place-items: center; font-size: 42px; color: var(--muted, #8a93b8); }
+img.blurred { filter: blur(7px) brightness(.55) saturate(.6); }
+#mapCodex { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+#mapCodex .sp { border: 1px solid var(--line); border-radius: 9px; padding: 6px; text-align: center; font-size: 12px; background: rgba(255,255,255,.04); }
+#mapCodex .sp img, #mapCodex .sp .q { width: 100%; aspect-ratio: 1; border-radius: 6px; background: #0a0f22; display: grid; place-items: center; font-size: 34px; object-fit: cover; }
+#mapCodex .sp.no { opacity: .55; }
+#mapCodex img:not([src]), .mcPics img:not([src]) { visibility: hidden; }
 
 #dock { left: 16px; right: 16px; margin-inline: auto; width: max-content; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); padding: 8px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: calc(100% - 32px); }
 .dd { position: relative; display: flex; }
@@ -399,8 +410,9 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 
 <section id="p-map" class="hud panel" data-panel="map" hidden>
   <div class="ph"><span class="label">Star map · click a planet</span><button class="x" data-close="map" aria-label="Close star map">×</button></div>
-  <div class="row" id="mapGals"><button data-gal="all">🔭 All galaxies</button><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
+  <div class="row" id="mapGals"><button data-gal="all">🔭 All galaxies</button><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button data-gal="codex">🧬 Aliens</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
   <svg id="mapSvg" role="img" aria-label="Star map of all planets"></svg>
+  <div id="mapCodex" hidden></div>
   <div id="mapCard"><span class="small">Click a planet on the map to see who owns it.</span></div>
 </section>
 
@@ -4127,13 +4139,13 @@ function renderGameInfo() { // planet panel: what your planet makes, your fame a
 }
 // ---- saving your progress on the server (it lives in the database when the server has one)
 let walletSent = "";
-function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY) }; }
+function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY), found: wallet.found, species: wallet.species }; }
 function syncWallet() { if (!net.me || !gameStarted) return; const s = JSON.stringify(walletSnapshot()); if (s === walletSent) return; walletSent = s; net.send({ t: "wallet", wallet: JSON.parse(s) }); }
 setInterval(syncWallet, 4000);
 function restoreWallet(w) { // you joined from another browser, or this one was cleared: the server remembers you
   if (!w || typeof w !== "object") return;
   if ((w.xp | 0) < (wallet.xp | 0) && load(WALLETKEY)) return; // this browser is ahead
-  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now() });
+  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now(), found: w.found && typeof w.found === "object" ? w.found : {}, species: Array.isArray(w.species) ? w.species : [] });
   saveWallet();
   if (typeof w.tut === "number") { tut = { step: Math.min(TUT.length, w.tut), n: 0 }; store(TUTKEY, tut); }
   if (w.missions && w.missions.day) { store(MISSIONKEY, w.missions); missions = null; }
@@ -4494,11 +4506,11 @@ function conquerFlag(pl, by) { // a big flag with the conqueror's name on top of
 
 // ================= god mode (only for the game's owner) =================
 ui.godMode ||= {};
-const GOD_TOGGLES = { inv: "Ship can't be hurt", shield: "Planet can't be hurt", oneshot: "One-hit kills", free: "Everything free" };
+const GOD_TOGGLES = { inv: "Ship can't be hurt", shield: "Planet can't be hurt", oneshot: "One-hit kills", free: "Everything free", map: "See the whole map" };
 function godAllowed() { return !net.online || !!net.god; }
 function godOn(k) { if (k === "free" && ui.freePlay) return true; return godAllowed() && !!(ui.godMode && ui.godMode[k]); }
 function renderGod() {
-  choiceRow($("godToggles"), GOD_TOGGLES, (k) => !!ui.godMode[k], (k) => { ui.godMode[k] = !ui.godMode[k]; saveUi(); if (k === "shield" && net.me) net.send({ t: "godShield", on: !!ui.godMode.shield }); renderGod(); renderHangar(); renderPrankTool(); });
+  choiceRow($("godToggles"), GOD_TOGGLES, (k) => !!ui.godMode[k], (k) => { ui.godMode[k] = !ui.godMode[k]; saveUi(); if (k === "shield" && net.me) net.send({ t: "godShield", on: !!ui.godMode.shield }); if (k === "map" && ui.map) { renderMap(); renderMapCard(); } renderGod(); renderHangar(); renderPrankTool(); });
 }
 $("godBtn").addEventListener("click", () => {
   if (godAllowed()) return setPanel("god", !ui.god);
@@ -4527,6 +4539,76 @@ $("godPrank").addEventListener("click", () => {
   else { (home.data.pranks ||= []).push({ ...k, id: "k" + Math.random().toString(36).slice(2, 9), by: "Test Bot", at: Date.now(), until: Date.now() + 48 * 3600e3 }); home.rebuildPranks(); save(); renderPranks(); }
   toast(`🧪 Test prank: ${PRANKS[type].label} on your planet`);
 });
+
+// ================= discovery: you only know the planets you have found =================
+// 0 = unknown (not on the map), 1 = spotted from far away (a "?" on the map), 2 = visited (name, owner, creatures, picture)
+wallet.found ||= {}; wallet.species ||= [];
+const SPOT_DIST = 150; // you can spot a planet from this far, plus more for big planets
+const foundLv = (p) => (p === home || godOn("map") ? 2 : wallet.found[p.data.name] || (p === nav ? 1 : 0));
+const kindOf = (p) => (p.crowd ? p.crowd.kind : peopleStyle(p.data).kind);
+const SPECIES_HINT = { greys: "big-eyed green folks who love to wave", frog: "frogs walking around in space suits", bee: "buzzing bugs in space suits", flamingo: "pink long-necked astronauts", panda: "fluffy red explorers in space suits",
+  dino: "little purple lizards with fangs", imp: "red horned troublemakers", mushroom: "walking mushrooms", spikecap: "mushrooms with spikes that bite", pinkblob: "giant pink jelly blobs", wizard: "blobs in wizard hats", yeti: "big furry snow monsters",
+  sprout: "one-horned green floaters", stack: "aliens stacked on top of each other", ghost: "shadowy ghosts with pointy ears", wisp: "purple floaty things with spikes", squidle: "flying squids with wings", glub: "chubby birds with tiny wings",
+  buzzer: "giant flying bees", alpaking: "hooded flyers with one big eye", dragon: "baby dragons" };
+function spotPlanet(p) {
+  wallet.found[p.data.name] = 1; saveWallet(); addXp(10);
+  toast(`🔭 You spotted a new planet! It's on your map now.`, "", 2600);
+  if (ui.map) { renderMap(); renderMapCard(); }
+}
+function visitPlanet(p) {
+  wallet.found[p.data.name] = 2; p.shot = null;
+  addXp(60); earn(80, `you discovered ${p.data.name}`);
+  const k = kindOf(p);
+  if (!wallet.species.includes(k)) {
+    wallet.species.push(k); addXp(100); saveWallet();
+    toast(`🧬 New species: ${PEOPLE_KINDS[k]}! (${wallet.species.length} of ${Object.keys(PEOPLE_KINDS).length})`, "boom", 4200); sfx.cheer();
+    if (tut.step >= TUT.length) radio(pickLine([`${PEOPLE_KINDS[k]}! I've never seen those before. I put them in our Alien Encyclopedia. 🧬`, `Look at them! ${PEOPLE_KINDS[k]}! That's ${wallet.species.length} species we've met.`, `New species found: ${PEOPLE_KINDS[k]}. The galaxy is so weird. I love it.`]));
+  }
+  if (ui.map) { renderMap(); renderMapCard(); }
+}
+let discAt = 0;
+function checkDiscover() { // every half second: spot planets you can see, visit the ones you fly close to
+  if (clock() - discAt < .5 || !gameStarted) return; discAt = clock();
+  for (const p of planets) {
+    if (p === home) continue;
+    const d = ship.position.distanceTo(p.group.position), lv = wallet.found[p.data.name] || 0;
+    if (lv < 2 && mode === "fly" && d < p.R * 9 + 8) visitPlanet(p);
+    else if (lv < 1 && mode === "fly" && d < SPOT_DIST + p.R * 20) spotPlanet(p);
+  }
+}
+function rumors() { // Bolt's tips: the 3 closest planets you haven't found, shown as a "?" somewhere near them
+  return planets.filter((p) => p !== home && foundLv(p) === 0 && onMap(p)).sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position)).slice(0, 3)
+    .map((p) => { const r = seeded("rumor" + p.data.name), a = r() * 6.28, off = 40 + r() * 50; return { p, x: p.group.position.x + Math.cos(a) * off, z: p.group.position.z + Math.sin(a) * off, r: off + 20 }; });
+}
+// pictures for the map card: the real planet from the sunny side, and its creature
+const shotCam = new THREE.PerspectiveCamera(32, 1.6, .05, 6000);
+function grabShot(sc, cam, w, h) { // draw with the game's renderer and copy the middle of the picture
+  const el = renderer.domElement, W = el.width, H = el.height;
+  cam.aspect = W / H; cam.updateProjectionMatrix(); renderer.setRenderTarget(null); renderer.render(sc, cam);
+  const k = Math.min(W / w, H / h), cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  cv.getContext("2d").drawImage(el, (W - w * k) / 2, (H - h * k) / 2, w * k, h * k, 0, 0, w, h);
+  return cv.toDataURL("image/jpeg", .86);
+}
+function planetShot(p) {
+  if (p.shot && clock() - p.shotAt < 20) return p.shot;
+  const c = p.group.position, dir = SUN_DIR.clone().normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), .5).add(new THREE.Vector3(0, .15, 0)).normalize();
+  shotCam.position.copy(c).addScaledVector(dir, p.R * 5.6); shotCam.lookAt(c);
+  p.shot = grabShot(scene, shotCam, 320, 200); p.shotAt = clock();
+  return p.shot;
+}
+const figScene = new THREE.Scene(), figCam = new THREE.PerspectiveCamera(28, 1, .01, 10), figShots = {};
+figScene.background = new THREE.Color(0x0e1530);
+figScene.add(new THREE.HemisphereLight(0xdfe8ff, 0x302840, 1.5));
+{ const l = new THREE.DirectionalLight(0xffffff, 2.6); l.position.set(1, 2, 3); figScene.add(l); }
+function creatureShot(kind, done, tries = 0) { // a portrait of a species, made once
+  if (figShots[kind]) return done(figShots[kind]);
+  const kit = crowdKit(kind); if (!kit) { if (tries < 30) setTimeout(() => creatureShot(kind, done, tries + 1), 300); return; }
+  const frames = kit.clips.cheer || kit.clips.idle, m = new THREE.Mesh(frames[Math.floor(frames.length * .35)], kit.mat); m.rotation.y = -.4; figScene.add(m);
+  figCam.position.set(0, .13, .78); figCam.lookAt(0, .105, 0);
+  figShots[kind] = grabShot(figScene, figCam, 200, 200); figScene.remove(m);
+  done(figShots[kind]);
+}
+const fillFig = (img, kind) => creatureShot(kind, (url) => { if (img.isConnected) img.src = url; });
 
 // ================= star map + navigation =================
 let mapSel = null, nav = null, navArrow = null;
@@ -4557,7 +4639,7 @@ function renderGalaxyMap(svg) { // every galaxy seen from high above
     if (g === mapSelGal) s += `<circle cx="${c.x}" cy="${c.z}" r="${g.r * 1.08}" fill="none" stroke="#ffb547" stroke-width="${fs * .2}"/>`;
     s += `<circle class="body" cx="${c.x}" cy="${c.z}" r="${g.r}" fill="transparent" stroke="none"/></g>`;
   });
-  for (const p of planets) s += `<circle cx="${p.group.position.x}" cy="${p.group.position.z}" r="${fs * .12}" fill="${esc(p.data.design.sea)}" opacity=".9"/>`;
+  for (const p of planets) if (foundLv(p)) s += `<circle cx="${p.group.position.x}" cy="${p.group.position.z}" r="${fs * .12}" fill="${foundLv(p) > 1 ? esc(p.data.design.sea) : "#8a93b8"}" opacity=".9"/>`;
   const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
   s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * 1.2} ${fs * .75},${-fs * .8} 0,${-fs * .4} ${-fs * .75},${-fs * .8}" fill="#6fe3ff"/></g>`;
   svg.innerHTML = s;
@@ -4566,10 +4648,12 @@ $("mapGalNav").addEventListener("click", () => { setNav(mapGal === "prism" ? PRI
 function renderMap() {
   const svg = $("mapSvg");
   document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.classList.toggle("on", b.dataset.gal === mapGal));
+  svg.style.display = mapGal === "codex" ? "none" : ""; $("mapCodex").hidden = mapGal !== "codex"; $("mapGalNav").hidden = mapGal === "codex";
+  if (mapGal === "codex") return renderCodex();
   if (mapGal === "all") { $("mapGalNav").hidden = true; return renderGalaxyMap(svg); }
   const here = (mapGal === "prism") === shipInPrism(), gname = mapGal === "prism" ? "Prism Galaxy" : "Main Galaxy";
   $("mapGalNav").hidden = here; $("mapGalNav").textContent = `Navigate to ${gname}${mapGal === "prism" ? " · hold boost 10s for MEGA BOOST" : ""}`;
-  const pts = [...planets.filter(onMap).map((p) => p.group.position), ...(here ? [ship.position] : [])], gal = mapGal === "prism" ? PRISM : GALAXIES[0], gc = V(gal.c).sub(WORLD_OFFSET);
+  const pts = [...planets.filter((p) => onMap(p) && foundLv(p)).map((p) => p.group.position), ...(here ? [ship.position] : [])], gal = mapGal === "prism" ? PRISM : GALAXIES[0], gc = V(gal.c).sub(WORLD_OFFSET);
   let x0 = gc.x - gal.r, x1 = gc.x + gal.r, z0 = gc.z - gal.r, z1 = gc.z + gal.r; // the whole galaxy, edge to edge
   for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
@@ -4580,10 +4664,19 @@ function renderMap() {
   for (let r = 100; r < w; r += 100) s += `<circle cx="${gc.x}" cy="${gc.z}" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
   for (const g of GALAXIES) s += galEdge(g, fs, g === gal ? " · edge" : true);
   if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
+  for (const [j, ru] of rumors().entries()) // Bolt's rumors: somewhere around here…
+    s += `<g class="mp" data-r="${j}"><circle class="body" cx="${ru.x}" cy="${ru.z}" r="${ru.r}" fill="rgba(255,181,71,.06)" stroke="#ffb547" stroke-width="${fs * .1}" stroke-dasharray="${fs * .4} ${fs * .4}"/><text x="${ru.x}" y="${ru.z + fs * .4}" font-size="${fs * 1.4}" text-anchor="middle">?</text><text x="${ru.x}" y="${ru.z + ru.r + fs * 1.1}" font-size="${fs * .8}" text-anchor="middle">Bolt's rumor</text></g>`;
   planets.forEach((p, i) => {
-    if (!onMap(p)) return;
+    const lv = foundLv(p);
+    if (!onMap(p) || !lv) return;
     const { x, z } = p.group.position, r = Math.max(fs * .7, p.R * 4), d = p.data;
     s += `<g class="mp" data-i="${i}">`;
+    if (lv === 1) { // spotted from far away: you don't know what it is yet
+      if (p === mapSel) s += `<circle cx="${x}" cy="${z}" r="${r * 1.7}" fill="none" stroke="#ffb547" stroke-width="${fs * .15}"/>`;
+      s += `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="#2a3150" stroke="#8a93b8" stroke-width="${fs * .15}"/><text x="${x}" y="${z + fs * .35}" font-size="${fs}" text-anchor="middle">?</text>`;
+      s += `<rect x="${x - r * 2}" y="${z - r * 2}" width="${r * 4}" height="${r * 4}" fill="transparent"/></g>`;
+      return;
+    }
     if (p === mapSel) s += `<circle cx="${x}" cy="${z}" r="${r * 1.7}" fill="none" stroke="#ffb547" stroke-width="${fs * .15}"/>`;
     s += d.dead
       ? `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="rgba(255,90,110,.12)" stroke="#ff5a6e" stroke-width="${fs * .12}" stroke-dasharray="${fs * .3}"/>`
@@ -4596,7 +4689,15 @@ function renderMap() {
   s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * .9} ${fs * .55},${-fs * .6} 0,${-fs * .3} ${-fs * .55},${-fs * .6}" fill="#6fe3ff"/></g>`;
   svg.innerHTML = s;
 }
-$("mapSvg").addEventListener("click", (e) => { const g = e.target.closest(".mp"); if (!g) return; if (g.dataset.g) { mapSelGal = GALAXIES[+g.dataset.g]; mapSel = null; } else mapSel = planets[+g.dataset.i]; renderMap(); renderMapCard(); });
+let mapRumor = null;
+$("mapSvg").addEventListener("click", (e) => { const g = e.target.closest(".mp"); if (!g) return; mapRumor = null; if (g.dataset.g) { mapSelGal = GALAXIES[+g.dataset.g]; mapSel = null; } else if (g.dataset.r) { mapRumor = rumors()[+g.dataset.r]; mapSel = null; } else mapSel = planets[+g.dataset.i]; renderMap(); renderMapCard(); });
+function renderCodex() { // the Alien Encyclopedia: every species you have met
+  const kinds = Object.keys(PEOPLE_KINDS), known = new Set(godOn("map") ? kinds : wallet.species), visited = planets.filter((p) => foundLv(p) > 1);
+  $("mapCodex").innerHTML = kinds.map((k) => known.has(k)
+    ? `<div class="sp"><img data-k="${k}" alt="${esc(PEOPLE_KINDS[k])}"><b>${esc(PEOPLE_KINDS[k])}</b><div class="small">${esc(visited.filter((p) => kindOf(p) === k).map((p) => p.data.name).join(", ") || "seen somewhere")}</div></div>`
+    : `<div class="sp no"><div class="q">?</div><b>???</b><div class="small">Rumor: ${esc(SPECIES_HINT[k] || "something strange")}</div></div>`).join("");
+  $("mapCodex").querySelectorAll("img[data-k]").forEach((img) => fillFig(img, img.dataset.k));
+}
 function renderMapCard() {
   const el = $("mapCard"), p = mapSel;
   if (mapGal === "all") {
@@ -4608,10 +4709,35 @@ function renderMapCard() {
     $("mcGalOpen").addEventListener("click", () => { mapGal = far ? "prism" : "main"; mapSel = mapSelGal = null; renderMap(); renderMapCard(); });
     return;
   }
-  if (!p) { el.innerHTML = `<span class="small">Click a planet on the map to see who owns it. The dashed rings are galaxy edges.</span>`; return; }
-  const d = p.data, dist = ship.position.distanceTo(p.group.position);
+  if (mapGal === "codex") {
+    const n = Object.keys(PEOPLE_KINDS).length, pv = planets.filter((q) => foundLv(q) > 1).length;
+    el.innerHTML = `<h2>🧬 Alien Encyclopedia</h2><div class="small">${godOn("map") ? n : wallet.species.length} of ${n} species found · ${pv} of ${planets.length} planets visited. Fly close to a planet to meet who lives there: every new species gives ⭐ 100 XP.</div>`;
+    return;
+  }
+  if (mapRumor) {
+    const ru = mapRumor;
+    el.innerHTML = `<h2>❓ Bolt's rumor</h2><div class="small">“I heard there's a planet somewhere around here with ${esc(SPECIES_HINT[kindOf(ru.p)] || "something strange")}. Go take a look!”</div>
+      <div class="small">${fmt(Math.max(0, ship.position.distanceTo(ru.p.group.position) - ru.r) * 1000)} km away</div><div class="row"><button class="go" id="mcNav">${nav === ru.p ? "Navigating…" : "Fly there"}</button></div>`;
+    $("mcNav").addEventListener("click", () => { setNav(ru.p); if (mode === "home") startFlying(); });
+    return;
+  }
+  if (!p) { el.innerHTML = `<span class="small">Click a planet on the map to see it. Planets you haven't found aren't on the map: fly around to spot them, and fly close to meet who lives there. The orange "?" are Bolt's rumors.</span>`; return; }
+  const d = p.data, dist = ship.position.distanceTo(p.group.position), lv = foundLv(p);
+  if (lv < 2) {
+    el.innerHTML = `<h2>❓ Unknown planet</h2><div class="mcPics"><img class="shot blurred" alt="A far away planet"><div class="ph">?</div></div>
+      <div class="small">You spotted it from far away. Fly close to learn its name, who owns it and who lives there.</div><div class="small">${fmt(dist * 1000)} km away</div>
+      <div class="row"><button class="go" id="mcNav">${nav === p ? "Navigating…" : "Navigate"}</button>${nav ? `<button id="mcStop">Remove arrow</button>` : ""}</div>`;
+    el.querySelector("img.shot").src = planetShot(p);
+    $("mcNav").addEventListener("click", () => { setNav(p); if (mode === "home") startFlying(); });
+    $("mcStop")?.addEventListener("click", () => setNav(null));
+    return;
+  }
+  const kind = kindOf(p), buildings = (d.decor || []).length;
   el.innerHTML = `<h2>${esc(d.name)}</h2>
+    <div class="mcPics"><img class="shot" alt="${esc(d.name)}"><img class="fig" alt="${esc(PEOPLE_KINDS[kind])}"></div>
     <div class="owner">owner: ${esc(d.owner)}${p === home ? " (you)" : ""}</div>
+    <div class="stat"><span class="k">LIVING HERE</span><span>${esc(PEOPLE_KINDS[kind])}</span></div>
+    <div class="stat"><span class="k">BUILDINGS</span><span>${buildings}</span></div>
     <div class="stat"><span class="k">HEALTH</span><div class="bar"><div class="fill" style="width:${d.hp}%"></div></div><span>${Math.ceil(d.hp)}%</span></div>
     <div class="stat"><span class="k">PEOPLE</span><span>${d.dead ? "destroyed · nobody left" : fmt(d.pop)}</span>${d.troops ? `<span class="small">· ${d.troops} of your troops</span>` : ""}</div>
     <div class="small">${fmt(dist * 1000)} km away</div>
@@ -4619,6 +4745,7 @@ function renderMapCard() {
   $("mcNav")?.addEventListener("click", () => { setNav(p); if (mode === "home") startFlying(); });
   $("mcStop")?.addEventListener("click", () => setNav(null));
   $("mcMail").addEventListener("click", () => openMail(p));
+  el.querySelector("img.shot").src = planetShot(p); fillFig(el.querySelector("img.fig"), kind);
 }
 function setNav(p) {
   nav = p;
@@ -4742,8 +4869,8 @@ function hover(e) {
   if (e.pointerType === "touch") return;
   const hit = ray.intersectObjects(planets.filter((p) => p.alive).map((p) => p.mesh), false)[0];
   if (!hit) { tip.hidden = true; return; }
-  const d = hit.object.userData.planet.data;
-  tip.innerHTML = `${esc(d.name)} · owner <b>${esc(d.owner)}</b> · ${fmt(d.pop)} people · ${Math.ceil(d.hp)}% health`;
+  const hp = hit.object.userData.planet, d = hp.data;
+  tip.innerHTML = foundLv(hp) < 2 ? "❓ Unknown planet · fly close to learn more" : `${esc(d.name)} · owner <b>${esc(d.owner)}</b> · ${fmt(d.pop)} people · ${Math.ceil(d.hp)}% health`;
   tip.style.left = e.clientX + "px"; tip.style.top = e.clientY + "px"; tip.hidden = false;
 }
 canvas.addEventListener("pointerleave", () => (tip.hidden = true));
@@ -5686,8 +5813,8 @@ function drawMinimap() {
     if (d > g.r - range) { const a = Math.atan2(Rr - y, Rr - x), lx = x + Math.cos(a) * g.r * k, ly = y + Math.sin(a) * g.r * k; mmg.fillStyle = g.color; mmg.fillText(g.name, Math.max(40, Math.min(W - 40, lx)), Math.max(24, Math.min(W - 10, ly))); }
   }
   for (const p of planets) {
-    const [x, y] = toMap(p.group.position); if (Math.hypot(x - Rr, y - Rr) > Rr + 20) continue;
-    mmg.fillStyle = p.alive ? p.data.design.sea : "#552230"; mmg.beginPath(); mmg.arc(x, y, Math.max(4, p.R * k * 2.2), 0, 7); mmg.fill();
+    const [x, y] = toMap(p.group.position), lv = foundLv(p); if (!lv || Math.hypot(x - Rr, y - Rr) > Rr + 20) continue;
+    mmg.fillStyle = lv < 2 ? "#8a93b8" : p.alive ? p.data.design.sea : "#552230"; mmg.beginPath(); mmg.arc(x, y, Math.max(4, p.R * k * 2.2), 0, 7); mmg.fill();
     if (p === home || p === nav || p.data.conqueredBy) { mmg.strokeStyle = p === home ? "#7dff9b" : p === nav ? "#6fe3ff" : "#ffb547"; mmg.lineWidth = 3; mmg.stroke(); }
   }
   const pulse = .6 + .4 * Math.sin(clock() * 10);
@@ -6530,8 +6657,8 @@ function flyStep(dt) {
     $("tHp").style.width = Math.max(0, tgt.hp / tgt.maxHp * 100) + "%"; $("tHpText").textContent = Math.ceil(Math.max(0, tgt.hp / tgt.maxHp * 100)) + "%";
     $("tPop").textContent = tgt.T.big ? "giant ship" : "ship"; $("tTroops").textContent = "· press I to talk";
   } else if (tgt) {
-    const d = tgt.data;
-    $("tName").textContent = d.name; $("tOwner").textContent = d.owner;
+    const d = tgt.data, known = foundLv(tgt) > 1;
+    $("tName").textContent = known ? d.name : "❓ Unknown planet"; $("tOwner").textContent = known ? d.owner : "fly closer";
     $("tHp").style.width = d.hp + "%"; $("tHpText").textContent = Math.ceil(d.hp) + "%";
     $("tPop").textContent = fmt(d.pop); $("tTroops").textContent = d.troops ? `· ${d.troops} troops` : "";
     const lp = livePranks(d); $("tPrankRow").hidden = !lp.length;
@@ -6573,6 +6700,9 @@ function updateTags() {
     if (edge) { v.x = Math.max(-.82, Math.min(.82, v.x)); v.y = Math.max(-.75, Math.min(.8, v.y)); }
     p.tag.hidden = false; p.tag.classList.toggle("edge", false); p.tag.classList.toggle("nav", p === nav); p.tag.classList.toggle("dead", !p.alive);
     p.tag.style.left = (v.x + 1) / 2 * innerWidth + "px"; p.tag.style.top = (1 - v.y) / 2 * innerHeight + "px";
+    const lv = foundLv(p);
+    if (!lv) { p.tag.hidden = true; continue; }
+    if (lv < 2) { p.tag.innerHTML = `${p === nav ? "➤ " : ""}❓ Unknown planet<br>${fmt(dist * 1000)} km`; continue; }
     p.tag.innerHTML = `${p === nav ? "➤ " : ""}${esc(p.data.name)}<br><b>${esc(p.data.owner)}</b> · ${p.alive ? fmt(p.data.pop) + " people" : "destroyed"} · ${fmt(dist * 1000)} km${p.data.conqueredBy ? `<br>🏴 conquered by ${esc(p.data.conqueredBy.name)}` : ""}`;
   }
   for (const n of fighters()) { // names over alien ships and other players that are close
@@ -6645,7 +6775,7 @@ const timer = new THREE.Clock();
 let mapTick = 0;
 function frame() {
   const realDt = Math.min(timer.getDelta(), .05), dt = realDt * slow, t = timer.elapsedTime;
-  drawMinimap(); updateThreats();
+  drawMinimap(); updateThreats(); checkDiscover();
   sky.position.copy(camera.position); sky.userData.starMat.uniforms.time.value = t; FIRE_T.value = t;
   WAVES.offset.set(t * .004, t * .0025); CLOUD_TIME.value = t;
   const still = reduce || brushing || (mode === "home" && (!!tool || view === "design" || view === "build"));
