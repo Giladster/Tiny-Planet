@@ -1549,6 +1549,35 @@ function makeAlien(text, R) { // a huge friendly alien sitting on the planet, wa
 const photoTex = (file) => { const t = new THREE.TextureLoader().load("textures/" + file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
 const moonPhoto = photoTex("moon.jpg");
 const ROCK = photoTex("mercury.jpg"); ROCK.wrapS = ROCK.wrapT = THREE.MirroredRepeatWrapping; // real rock detail for mountains and cliffs, close up
+// real Poly Haven photos (CC0, textures/materials/CREDITS.md) on buildings, bases and space stations:
+// wrapped from 3 sides in the object's own space so any box, cone or tower gets them; "tint" keeps the game's color and only adds the photo's detail
+const surfTex = new Map();
+function realSurface(mat, file, scale, bump, tint, keep) {
+  let t = surfTex.get(file); if (!t) { t = photoTex("materials/" + file); t.wrapS = t.wrapT = THREE.RepeatWrapping; surfTex.set(file, t); }
+  if (!tint) mat.color.set(keep || 0xffffff);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.sTex = { value: t }; sh.uniforms.sScale = { value: scale }; sh.uniforms.sBump = { value: bump }; sh.uniforms.sTint = { value: tint ? 1 : 0 };
+    sh.vertexShader = "varying vec3 vSP;\nvarying vec3 vSN;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvSP = position; vSN = objectNormal;");
+    sh.fragmentShader = "uniform sampler2D sTex;\nuniform float sScale, sBump, sTint;\nvarying vec3 vSP;\nvarying vec3 vSN;\n" + GLSL_PHOTO + sh.fragmentShader
+      .replace("#include <map_fragment>", `#include <map_fragment>
+vec3 sCol = rockAt(sTex, vSP * sScale, normalize(vSN)); float sL = dot(sCol, vec3(.3, .59, .11));
+float sM = dot(photoMean(sTex), vec3(.3, .59, .11));
+diffuseColor.rgb *= mix(sCol * (.55 / sM), vec3(clamp(sL / sM, .35, 1.7)), sTint);`)
+      .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
+{ float sh = sL * sBump; vec2 dH = vec2(dFdx(sh), dFdy(sh)); vec3 sx = dFdx(-vViewPosition), sy = dFdy(-vViewPosition); // bright = raised, so seams, bricks and tiles stand out in the sun
+  vec3 r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1); normal = normalize(abs(det) * normal - sign(det) * (dH.x * r1 + dH.y * r2)); }`);
+  };
+  mat.customProgramCacheKey = () => "real-surface";
+}
+realSurface(mats.metal, "metal_panels.jpg", 9, .004, true);
+realSurface(mats.pad, "concrete.jpg", 7, .003, true);
+realSurface(mats.wall, "plaster.jpg", 8, .002, true);
+realSurface(mats.roof, "roof_tiles.jpg", 11, .004, false, 0xffc8b0);
+realSurface(mats.wood, "wood.jpg", 9, .003, false);
+realSurface(mats.door, "wood.jpg", 14, .002, false);
+realSurface(mats.stone, "castle_stone.jpg", 7, .005, false);
+realSurface(mats.slate, "slate.jpg", 10, .004, true);
+realSurface(mats.marble, "marble.jpg", 9, .002, true);
 // real surface photos under every planet's own colors: craters, canyons and lava flows from Solar System Scope (textures/CREDITS.md)
 const PHOTO_CACHE = {}, photoOnce = (f) => PHOTO_CACHE[f] || (PHOTO_CACHE[f] = f === "moon.jpg" ? moonPhoto : photoTex(f));
 const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg"], .9], lava: [["venus_surface.jpg"], 1], ice: [["eris_fictional.jpg"], .9], candy: [["haumea_fictional.jpg"], .75],
@@ -1556,10 +1585,17 @@ const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg
 const SEA_PHOTOS = { lava: ["venus_surface.jpg", 1], toxic: ["jupiter.jpg", .9], candy: ["saturn.jpg", .8], ice: ["venus_atmosphere.jpg", .5], earth: ["jupiter.jpg", .25] };
 function planetPhoto(d) { const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
+const SOLAR_MAT = (() => { // solar cells: dark blue squares with thin silver lines between them
+  const c = document.createElement("canvas"); c.width = 256; c.height = 128; const g = c.getContext("2d");
+  g.fillStyle = "#c8ccd4"; g.fillRect(0, 0, 256, 128);
+  for (let x = 0; x < 16; x++) for (let y = 0; y < 8; y++) { const k = 30 + Math.random() * 14; g.fillStyle = `hsl(222, 70%, ${k}%)`; g.fillRect(x * 16 + 1.5, y * 16 + 1.5, 13, 13); g.fillStyle = "rgba(255,255,255,.08)"; g.fillRect(x * 16 + 1.5, y * 16 + 1.5, 13, 3); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({ map: t, metalness: .6, roughness: .22, emissive: 0x081840, envMapIntensity: 1.2 });
+})();
 function makeSatellite() {
   const g = new THREE.Group();
   g.add(new THREE.Mesh(new RoundedBoxGeometry(.06, .05, .08, 2, .01), mats.metal));
-  const panel = new THREE.MeshStandardMaterial({ color: 0x2a4aa8, metalness: .8, roughness: .25, emissive: 0x081840 });
+  const panel = SOLAR_MAT;
   for (const s of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(.16, .004, .06), panel); p.position.x = s * .12; g.add(p); }
   const dish = new THREE.Mesh(new THREE.SphereGeometry(.03, 12, 8, 0, Math.PI * 2, 0, 1), mats.metal); dish.position.y = .04; g.add(dish);
   const l = new THREE.Mesh(new THREE.SphereGeometry(.008, 8, 6), mats.lamp); l.position.set(0, .03, .045); l.userData.blink = Math.random() * 6; g.add(l);
