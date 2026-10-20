@@ -1161,6 +1161,8 @@ sky.add(NEB_MESH);
 // the sky's nebulas are drawn by code: warped noise makes glowing gas clouds, thin filaments, dark dust lanes, the Milky Way and thousands of stars.
 // It is painted once into a big picture, a strip per frame so the game never stutters, and every galaxy gets its own seed and colors.
 const NEBULA_GLSL = `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+
 vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
 vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
 float snoise(vec3 v){
@@ -1185,7 +1187,7 @@ float fbm(vec3 p, int oct){ float s = 0., a = .5; for (int i = 0; i < 8; i++){ i
 float hash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float ridge(vec3 p, int oct){ float s = 0., a = .5; for (int i = 0; i < 8; i++){ if (i >= oct) break; float k = 1. - abs(snoise(p)); s += a * k * k; p = p * 2.07 + 31.7; a *= .5; } return s; }
 float stars(vec3 d, float cells, float keep){ vec3 g = d * cells, c = floor(g), f = fract(g) - .5; float h = hash3(c); if (h < keep) return 0.;
-  vec3 o = vec3(hash3(c + 1.7), hash3(c + 9.2), hash3(c + 4.4)) - .5; float r = length(f - o * .6); return smoothstep(.22, 0., r) * (h - keep) / (1. - keep); }
+  vec3 o = vec3(hash3(c + 1.7), hash3(c + 9.2), hash3(c + 4.4)) - .5; float r = length(f - o * .6); return rsmooth(.22, 0., r) * (h - keep) / (1. - keep); }
 uniform float seed, bandAmt, cloudAmt, glow, starAmt, y0, y1; uniform vec3 band, c1, c2, c3, c4; varying vec2 vUv;
 void main(){
   vec2 uv = vec2(vUv.x, mix(y0, y1, vUv.y));
@@ -1254,7 +1256,9 @@ bakeNebula(NEB_CLOUDS, { seed: 3.7, band: 0, stars: 0, c1: [.55, .08, .22], c2: 
     uniforms: { time: { value: 0 }, pr: { value: renderer.getPixelRatio() } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `attribute vec3 scol; attribute float size; attribute float tw; uniform float time; uniform float pr; varying vec3 vC; varying float vA;
       void main(){ vC=scol; vA=.75+.25*sin(time*(1.+tw*3.)+tw*50.); vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; gl_PointSize=size*pr; }`,
-    fragmentShader: `varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,r); gl_FragColor=vec4(vC*a*a*vA*1.5,1.); }`,
+    fragmentShader: `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, 0.,r); gl_FragColor=vec4(vC*a*a*vA*1.5,1.); }`,
   });
   sky.userData.starMat = starMat;
   sky.add(new THREE.Points(g, starMat));
@@ -1320,8 +1324,12 @@ class Particles {
       vertexShader: `attribute vec3 pcol; attribute float psize; attribute float palpha; uniform float scale; varying vec3 vC; varying float vA;
         void main(){ vC=pcol; vec4 mv=modelViewMatrix*vec4(position,1.); vA=palpha*smoothstep(.2,2.5,-mv.z); gl_Position=projectionMatrix*mv; gl_PointSize=min(512., psize*scale/max(.05,-mv.z)); }`,
       fragmentShader: additive
-        ? `varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,.0,r); gl_FragColor=vec4(vC*a*vA,1.); }`
-        : `varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,.1,r); gl_FragColor=vec4(vC,a*vA*.75); }`,
+        ? `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, .0,r); gl_FragColor=vec4(vC*a*vA,1.); }`
+        : `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, .1,r); gl_FragColor=vec4(vC,a*vA*.75); }`,
     });
     this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; scene.add(this.points);
   }
@@ -1876,7 +1884,7 @@ if (cOn > .5) { // cloud shadows drifting over the ground
 }`)
         .replace("#include <emissivemap_fragment>", `#include <emissivemap_fragment>
 totalEmissiveRadiance += vec3(1.0, .32, .06) * vGlow * 1.6;
-float night = smoothstep(.08, -.22, dot(normalize(vWN), sunDir));
+float night = 1. - smoothstep(-.22, .08, dot(normalize(vWN), sunDir));
 float town = step(.85, h3(floor(vDir * 170.))) * (.4 + .6 * h3(floor(vDir * 47.))) + .04;
 totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     };
@@ -2985,6 +2993,7 @@ function makeModelShip(bm, c, root) {
   if (bm.scene) for (const [x, y, z, s] of bm.flames) {
     const f = new THREE.Mesh(flameGeo(c.flameShape), fireMat); f.position.set(x, y, z); f.rotation.x = -Math.PI / 2; f.name = "flame"; f.userData.fs = (c.flameSize || 1) * s; f.scale.setScalar(f.userData.fs); root.add(f);
     const core = new THREE.Mesh(f.geometry, fireMat.userData.core); core.scale.set(.42, .55, .42); core.renderOrder = 3; f.add(core); f.renderOrder = 2;
+    const plume = new THREE.Mesh(FLAME_SHEET, fireMat.userData.plume); plume.frustumCulled = false; plume.renderOrder = 4; f.add(plume);
   }
   root.scale.setScalar(c.size);
   const info = { muzzles: bm.muzzles.map((p) => V(p)), len: .62 * c.size * 1.05, radius: bm.radius * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
@@ -2992,6 +3001,7 @@ function makeModelShip(bm, c, root) {
   return info;
 }
 const FIRE_T = { value: 0 }; // shared clock for every engine flame
+const FLAME_SHEET = new THREE.PlaneGeometry(1, 1, 1, 8);
 function makeFireMat(c) { // engine fire: a white-hot core fading through the engine color into soft flickering edges, with shock diamonds when boosting
   const U = { color: { value: new THREE.Color(c.flame).multiplyScalar(1.6) }, boost: { value: 0 }, time: FIRE_T };
   const opts = (core) => ({ uniforms: U, defines: core ? { CORE: 1 } : {}, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -3015,7 +3025,34 @@ function makeFireMat(c) { // engine fire: a white-hot core fading through the en
         gl_FragColor = vec4(col * a, a);
       #endif
       }` });
-  const m = new THREE.ShaderMaterial(opts(false)); m.userData.core = new THREE.ShaderMaterial(opts(true)); return m;
+  const m = new THREE.ShaderMaterial(opts(false)); m.userData.core = new THREE.ShaderMaterial(opts(true));
+  m.userData.plume = new THREE.ShaderMaterial({ uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, // the fire itself: a flat sheet of flame that always turns to face you
+    vertexShader: `varying vec2 vUv; varying float vSide;
+      void main(){ vUv = uv; vec4 b = modelViewMatrix * vec4(0., 0., 0., 1.), t = modelViewMatrix * vec4(0., .26, 0., 1.);
+        vec3 ax = t.xyz - b.xyz, side = cross(normalize(ax), normalize(-b.xyz)); float sl = length(side); vSide = sl;
+        side = (sl > .001 ? side / sl : vec3(1., 0., 0.)) * length(modelViewMatrix[0].xyz) * .065;
+        gl_Position = projectionMatrix * vec4(b.xyz + ax * uv.y + side * (uv.x - .5) * 2., 1.); }`,
+    fragmentShader: `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+uniform vec3 color; uniform float time, boost; varying vec2 vUv; varying float vSide;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + 1.), f.x), f.y); }
+      float fbm(vec2 p){ return n2(p) * .5 + n2(p * 2.1 + 7.) * .3 + n2(p * 4.3 + 3.) * .2; }
+      void main(){
+        float y = vUv.y, x = vUv.x * 2. - 1.;
+        float sp = time * (14. + boost * 10.);
+        float wob = (fbm(vec2(x * 1.5, y * 4. - sp * .5)) - .5) * .5 * y;   // the fire licks and wobbles more toward the tip
+        float w = .55 * pow(max(1. - y, 0.), .7) * (1. + .5 * sin(y * 3.14)) + .02;
+        float d = abs(x + wob) / w;
+        float tongues = fbm(vec2(x * 3. + 2., y * 9. - sp)) * .8 + fbm(vec2(x * 7., y * 18. - sp * 1.7)) * .4;
+        float body = rsmooth(1., .25, d + (1. - tongues) * .55 * y) * rsmooth(1., .55, y + (tongues - .5) * .35);
+        float core = rsmooth(.4, 0., d) * rsmooth(.45, .0, y) * .7;
+        float dia = boost * pow(.5 + .5 * cos(y * 34.), 10.) * rsmooth(.5, 0., d) * (1. - y) * .5;
+        vec3 col = mix(color * .5, color, smoothstep(.0, .6, body)) * body * .8 + mix(color, vec3(1., .96, .9), .6) * (core + dia);
+        float a = (body * .7 + core + dia) * smoothstep(0., .05, y) * clamp(vSide * 1.6, .2, 1.) * .8;  // softer when you look straight down the jet (the nozzle glow covers that)
+        gl_FragColor = vec4(col * a, a);
+      }` });
+  return m;
 }
 const flameGeos = {};
 function flameGeo(kind = "cone") { // engine fire shapes; the base sits at the nozzle and the fire grows backward
@@ -5280,7 +5317,7 @@ function flyBys(spd) { // a whoosh when a ship zooms past you
 }
 // specks of space dust drifting past make speed easy to feel
 const dust = (() => { // space dust: soft glowing specks that stretch into light streaks as you speed up, so you feel yourself moving
-  const N = 900, at = new Float32Array(N * 3), head = new Float32Array(N * 3), tail = new Float32Array(N * 3), tint = new Float32Array(N * 3);
+  const N = 1100, at = new Float32Array(N * 3), head = new Float32Array(N * 3), tail = new Float32Array(N * 3), tint = new Float32Array(N * 3);
   const g = new THREE.InstancedBufferGeometry();
   g.setAttribute("position", new THREE.BufferAttribute(new Float32Array([-1, 0, 0, 1, 0, 0, -1, 1, 0, 1, 1, 0]), 3)); g.setIndex([0, 1, 2, 1, 3, 2]);
   const hA = new THREE.InstancedBufferAttribute(head, 3), tA = new THREE.InstancedBufferAttribute(tail, 3), cA = new THREE.InstancedBufferAttribute(tint, 3);
@@ -5288,11 +5325,11 @@ const dust = (() => { // space dust: soft glowing specks that stretch into light
   const PAL = [[.75, .85, 1], [1, .85, .65], [.7, 1, .95], [1, .7, .95], [.9, .9, 1]]; // mostly blue-white, a few warm and colorful specks
   for (let i = 0; i < N; i++) { const c = PAL[i % 7 < 3 ? 0 : i % 7 < 4 ? 4 : 1 + (i % 4)]; tint.set(c, i * 3); }
   const mat = new THREE.ShaderMaterial({
-    uniforms: { px: { value: .002 }, bright: { value: .5 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { px: { value: .002 }, bright: { value: .5 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, // the streak can face either way
     vertexShader: `attribute vec3 aHead, aTail, aTint; uniform float px; varying vec2 vP; varying vec3 vC; varying float vL;
       void main(){ vec3 h=(modelViewMatrix*vec4(aHead,1.)).xyz, t=(modelViewMatrix*vec4(aTail,1.)).xyz; vec3 d=t-h; float L=length(d);
         float w=max(.004,-h.z)*px; vec3 dir=L>1e-5?d/L:vec3(0.,1.,0.); vec3 s=normalize(cross(dir,normalize(h)+vec3(1e-4)));
-        vec3 p=h+dir*(position.y*(L+w*2.)-w)+s*position.x*w; vP=position.xy; vL=L/(L+w*2.); float fade=smoothstep(26.,14.,length(h));
+        vec3 p=h+dir*(position.y*(L+w*2.)-w)+s*position.x*w; vP=position.xy; vL=L/(L+w*2.); float fade=1.-smoothstep(14.,26.,length(h));
         vC=aTint*fade; gl_Position=projectionMatrix*vec4(p,1.); }`,
     fragmentShader: `uniform float bright; varying vec2 vP; varying vec3 vC; varying float vL;
       void main(){ float core=exp(-vP.x*vP.x*4.); float along=pow(1.-vP.y,1.4+vL*1.5); gl_FragColor=vec4(vC*core*along*bright,1.); }`,
@@ -5304,8 +5341,8 @@ function spaceDust(dt, spd) {
   const R = 26, c = ship.position, v = new THREE.Vector3(), ahead = vel.clone().normalize();
   dust.pts.visible = mode === "fly";
   const len = Math.min(4 + megaK * 18, spd * .03), sv = Math.max(1, spd);
-  dust.mat.uniforms.bright.value = Math.min(1, .75 + spd / 60) * (ui.low ? .8 : 1);
-  dust.mat.uniforms.px.value = 2.6 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / innerHeight; // about 2.6 pixels wide
+  dust.mat.uniforms.bright.value = Math.min(1, .7 + spd / 80) * (ui.low ? .8 : 1);
+  dust.mat.uniforms.px.value = 3 * 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / innerHeight; // about 3 pixels wide
   for (let i = 0; i < dust.N; i++) {
     const j = i * 3, dx = dust.at[j] - c.x, dy = dust.at[j + 1] - c.y, dz = dust.at[j + 2] - c.z;
     if (!dust.ready || dx * dx + dy * dy + dz * dz > R * R) { // new specks appear mostly in front of you
@@ -5328,8 +5365,10 @@ const boostFx = (() => {
   const mat = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 }, power: { value: 0 }, color: { value: new THREE.Color() } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
     vertexShader: `varying vec2 vUv; varying float vF; void main(){ vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.); vec3 n=normalize(normalMatrix*normal); vF=1.-abs(dot(n,normalize(-mv.xyz))); gl_Position=projectionMatrix*mv; }`,
-    fragmentShader: `uniform float time, power; uniform vec3 color; varying vec2 vUv; varying float vF;
-      void main(){ float along=vUv.y; float flow=.55+.45*sin(along*26.+time*38.+vUv.x*6.283*3.); float fade=smoothstep(.05,.55,along)*smoothstep(1.,.85,along);
+    fragmentShader: `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+uniform float time, power; uniform vec3 color; varying vec2 vUv; varying float vF;
+      void main(){ float along=vUv.y; float flow=.55+.45*sin(along*26.+time*38.+vUv.x*6.283*3.); float fade=smoothstep(.05,.55,along)*rsmooth(1., .85,along);
         float a=pow(vF,1.6)*fade*flow*power; gl_FragColor=vec4(color*a*1.6,1.); }`,
   });
   const g = new THREE.Group(); g.visible = false; ship.add(g);
@@ -5342,44 +5381,6 @@ const boostFx = (() => {
   const tips = [-1, 1].map((sgn) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), tipMat); m.userData.sgn = sgn; g.add(m); return m; });
   return { g, mat, tips, k: 0 };
 })();
-// engine trail: a soft glowing ribbon left behind the engines that fades out, so you can see the smooth path you flew
-const engineTrail = (() => {
-  const N = 90, pos = new Float32Array(N * 2 * 3), col = new Float32Array(N * 2 * 3), idx = [];
-  for (let i = 0; i < N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  const g = new THREE.BufferGeometry(); g.setIndex(idx);
-  const edge = new Float32Array(N * 2); for (let i = 0; i < N; i++) { edge[i * 2] = 1; edge[i * 2 + 1] = -1; }
-  g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.BufferAttribute(col, 3)); g.setAttribute("edge", new THREE.BufferAttribute(edge, 1));
-  const mesh = new THREE.Mesh(g, new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: `attribute vec3 color; attribute float edge; varying vec3 vC; varying float vE; void main(){ vC=color; vE=edge; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: `varying vec3 vC; varying float vE; void main(){ float a=1.-vE*vE; gl_FragColor=vec4(vC*a*a,1.); }`, // soft edges, bright middle
-  }));
-  mesh.frustumCulled = false; mesh.visible = false; scene.add(mesh);
-  return { mesh, pos, col, N, pts: [], at: new THREE.Vector3() };
-})();
-function updateEngineTrail(dt, spd, boostK) {
-  const T = engineTrail, LIFE = .45 + Math.min(.35, spd / 100), now = clock(), flames = ship.userData.flames;
-  if (mode !== "fly" || playerDead) { T.mesh.visible = false; T.pts.length = 0; return; }
-  // where the fire comes out: the middle of all the engines
-  T.at.set(0, 0, 0); const w = new THREE.Vector3();
-  if (flames.length) { for (const f of flames) T.at.add(f.getWorldPosition(w)); T.at.divideScalar(flames.length); }
-  else T.at.copy(ship.position).addScaledVector(FWD.clone().applyQuaternion(head), -ship.userData.len * .45);
-  if (spd > 1.5) T.pts.unshift({ p: T.at.clone(), t: now }); else if (T.pts.length) T.pts[0] = { p: T.at.clone(), t: T.pts[0].t };
-  const maxLen = ship.userData.len * 30; // short enough that it never turns into a long beam at high speed
-  while (T.pts.length > T.N || (T.pts.length && (now - T.pts[T.pts.length - 1].t > LIFE || T.pts[T.pts.length - 1].p.distanceTo(T.at) > maxLen))) T.pts.pop();
-  const n = T.pts.length, power = Math.max(0, 1 - boostK * 2) * Math.min(1, spd / 8) / (1 + Math.max(0, spd - 30) / 40); // boosting hands over to the wing streaks
-  T.mesh.visible = n > 1 && power > .02; if (!T.mesh.visible) return;
-  const width = ship.userData.radius * .2, c = ship.userData.flameCol, side = new THREE.Vector3(), dir = new THREE.Vector3(), toCam = new THREE.Vector3();
-  for (let i = 0; i < T.N; i++) {
-    const k = Math.min(i, n - 1), p = T.pts[k].p, a = i < n ? Math.min(1 - (now - T.pts[k].t) / LIFE, 1 - p.distanceTo(T.at) / maxLen) : 0; // a: 1 at the ship, 0 at the tail end
-    dir.subVectors(T.pts[Math.max(0, k - 1)].p, T.pts[Math.min(n - 1, k + 1)].p); if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
-    toCam.subVectors(camera.position, p); side.crossVectors(dir, toCam).normalize().multiplyScalar(width * (.15 + .85 * a)); // the ribbon always faces you
-    const f = Math.max(0, a) ** 2 * power * .55, j = i * 6;
-    T.pos[j] = p.x + side.x; T.pos[j + 1] = p.y + side.y; T.pos[j + 2] = p.z + side.z;
-    T.pos[j + 3] = p.x - side.x; T.pos[j + 4] = p.y - side.y; T.pos[j + 5] = p.z - side.z;
-    for (const o of [0, 3]) { T.col[j + o] = c.r * f; T.col[j + o + 1] = c.g * f; T.col[j + o + 2] = c.b * f; }
-  }
-  const at = T.mesh.geometry.attributes; at.position.needsUpdate = at.color.needsUpdate = true;
-}
 function updateBoostFx(dt, on) {
   const b = boostFx; b.k += ((on ? 1 : 0) - b.k) * Math.min(1, dt * (on ? 5 : 3));
   b.g.visible = mode === "fly" && b.k > .01; if (!b.g.visible) return;
@@ -5419,11 +5420,13 @@ const warpTunnel = (() => {
   const mat = new THREE.ShaderMaterial({
     uniforms: { time: { value: 0 }, power: { value: 0 }, color: { value: new THREE.Color(.6, .85, 1) } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.BackSide,
     vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-    fragmentShader: `uniform float time, power; uniform vec3 color; varying vec2 vUv;
+    fragmentShader: `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+uniform float time, power; uniform vec3 color; varying vec2 vUv;
       float h(float n){ return fract(sin(n*127.1)*43758.5); }
       void main(){ float lane=floor(vUv.x*140.), r=h(lane); if(r>.55) discard;
-        float sp=.6+r*1.4, y=fract(vUv.y*(1.5+r*2.)+time*sp+r*7.); float streak=smoothstep(0.,.08,y)*smoothstep(.6,.1,y);
-        float edge=1.-abs(fract(vUv.x*140.)-.5)*2.; float ends=smoothstep(0.,.25,vUv.y)*smoothstep(1.,.6,vUv.y);
+        float sp=.6+r*1.4, y=fract(vUv.y*(1.5+r*2.)+time*sp+r*7.); float streak=smoothstep(0.,.08,y)*rsmooth(.6, .1,y);
+        float edge=1.-abs(fract(vUv.x*140.)-.5)*2.; float ends=smoothstep(0.,.25,vUv.y)*rsmooth(1., .6,vUv.y);
         vec3 c=mix(color,vec3(1.),.4+.4*h(lane+3.)); gl_FragColor=vec4(c*streak*edge*edge*ends*power*.9,1.); }`,
   });
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false; mesh.visible = false; mesh.renderOrder = 3; scene.add(mesh);
@@ -5503,7 +5506,9 @@ const prismDisc = (() => {
   const mat = new THREE.ShaderMaterial({
     uniforms: { op: { value: 0 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     vertexShader: `attribute vec3 scol; attribute float size; varying vec3 vC; varying float vN; void main(){ vC=scol; vec4 mv=modelViewMatrix*vec4(position,1.); gl_Position=projectionMatrix*mv; vN=smoothstep(8.,90.,-mv.z); gl_PointSize=clamp(size*260./-mv.z, 1., 14.); }`,
-    fragmentShader: `uniform float op; varying vec3 vC; varying float vN; void main(){ float r=length(gl_PointCoord-.5); float a=smoothstep(.5,0.,r); gl_FragColor=vec4(vC*a*a*op*vN*1.4,1.); }`,
+    fragmentShader: `
+float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
+uniform float op; varying vec3 vC; varying float vN; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, 0.,r); gl_FragColor=vec4(vC*a*a*op*vN*1.4,1.); }`,
   });
   const grp = new THREE.Group(); grp.add(new THREE.Points(g, mat)); grp.children[0].frustumCulled = false;
   const heart = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(3, 1.6, 2.6), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
@@ -6319,7 +6324,7 @@ function thrusterFx(dt, m) {
   if (m.lift) for (const x of [.22, -.22]) jet("l" + x, x, -m.lift * .12, 0, 0, -m.lift, 0, 1);
   // pressing go or boost: a punch of fire out of the main engines
   const fresh = m.thrust && !rcs.prev["t" + m.thrust]; rcs.prev.t1 = m.thrust === 1 || (m.thrust === 2 && rcs.prev.t1); rcs.prev.t2 = m.thrust === 2;
-  if (fresh) for (const f of ship.userData.flames || []) { f.getWorldPosition(_rp); for (let i = 0; i < (m.thrust > 1 ? 14 : 7); i++) fire.spawn(_rp, vel.clone().addScaledVector(FWD.clone().applyQuaternion(head), -rnd(4, 9) * (m.thrust > 1 ? 1.6 : 1)).add(_rv.randomDirection().multiplyScalar(1.2)), rnd(.15, .3), L * rnd(.08, .14), RCS_HOT, C(state.ship.flame, 1.4), 1.5, 2.5); }
+  if (fresh) for (const f of ship.userData.flames || []) { f.getWorldPosition(_rp); for (let i = 0; i < (m.thrust > 1 ? 9 : 5); i++) fire.spawn(_rp, vel.clone().addScaledVector(FWD.clone().applyQuaternion(head), -rnd(4, 9) * (m.thrust > 1 ? 1.6 : 1)).add(_rv.randomDirection().multiplyScalar(.8)), rnd(.12, .25), L * rnd(.035, .06), C(state.ship.flame, 2.2), C(state.ship.flame, .8), 1.5, 2.5); } // small colored sparks, not white clouds
   // turning and rolling: jets at the nose, tail and wingtips fire while the spin builds up or slows down
   _rw.set(angVel.x + turn.x, angVel.y + turn.y, turn.z);
   const a = _rp.copy(_rw).sub(rcs.spin).divideScalar(Math.max(dt, .001)); rcs.spin.copy(_rw);
@@ -6449,7 +6454,7 @@ function flyStep(dt) {
   const moving = throttle > .05 || spd > 2;
   for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, .5 + throttle * (boost ? 2.8 : 1.6) + Math.random() * .3, boost && thrust);
   const boosting = boost && thrust;
-  updateBoostFx(dt, boosting && throttle > .6); updateEngineTrail(dt, spd, boostFx.k); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
+  updateBoostFx(dt, boosting && throttle > .6); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
   if (boosting && !wasBoost) { sfx.boostKick(); camFx.kick = 9; shake = Math.max(shake, .05 * L); }
   wasBoost = boosting; sfx.engine(Math.max(thrust ? 1 : 0, Math.abs(rcs.sx), Math.abs(rcs.sy), k("KeyS") ? .8 : 0, Math.min(1, (angVel.length() + Math.abs(turn.x) + Math.abs(turn.y) + Math.abs(turn.z) * .4) / 1.4)), boosting); // every move fires the engines sfx.music(inFight() ? "battle" : "calm"); sfx.rush(spd, megaK); flyBys(spd);
   // HUD
@@ -6608,7 +6613,7 @@ function frame() {
     p.decor.traverse((o) => { if (o.userData.blink !== undefined) o.visible = Math.sin(t * 3 + o.userData.blink) > -.3; });
     p.animateAround(dt, t);
   }
-  if (mode !== "fly") { jets.hide(); boostFx.g.visible = false; engineTrail.mesh.visible = false; engineTrail.pts.length = 0; warpTunnel.mesh.visible = false; updateEngineGlow(0, false); }
+  if (mode !== "fly") { jets.hide(); boostFx.g.visible = false; warpTunnel.mesh.visible = false; updateEngineGlow(0, false); }
   if (mode === "fly") flyStep(dt);
   else if (mode === "warp") warpStep(realDt);
   else {
