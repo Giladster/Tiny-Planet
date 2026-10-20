@@ -1459,7 +1459,8 @@ function makeAlien(text, R) { // a huge friendly alien sitting on the planet, wa
   g.userData.wave = wave; g.scale.setScalar(R / 1.6);
   return g;
 }
-const moonTex = sphereTexture(256, 128, (x, y, z) => { const n = fbm(x, y, z, 3, 70), c = noise(x * 9 + 2, y * 9, z * 9) > .7 ? .55 : 1; const v = Math.round((110 + n * 120) * c); return [v, v, v + 6, 255]; });
+const photoTex = (file) => { const t = new THREE.TextureLoader().load("textures/" + file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+const moonPhoto = photoTex("moon.jpg"); // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
 function makeSatellite() {
   const g = new THREE.Group();
@@ -1962,7 +1963,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     const a = this.data.design.around || {}, R = this.R, g = this.aroundGroup = new THREE.Group(); this.group.add(g);
     this.sats = []; this.moon = null;
     if (a.ring) { const m = new THREE.Mesh(new THREE.RingGeometry(R * 1.45, R * 2.4, 128, 1), new THREE.MeshStandardMaterial({ map: ringTex, color: this.data.design.atmo, transparent: true, side: THREE.DoubleSide, depthWrite: false, roughness: .8 })); m.rotation.set(-1.25, 0, .35); g.add(m); }
-    if (a.moon) { this.moon = new THREE.Mesh(new THREE.SphereGeometry(R * .22, 32, 24), new THREE.MeshStandardMaterial({ map: moonTex, roughness: 1 })); g.add(this.moon); }
+    if (a.moon) { this.moon = new THREE.Mesh(new THREE.SphereGeometry(R * .22, 32, 24), new THREE.MeshStandardMaterial({ map: moonPhoto, roughness: 1 })); g.add(this.moon); }
     for (let i = 0; i < (a.sats || 0); i++) {
       const sat = makeSatellite(); sat.scale.setScalar(R / 1.6);
       sat.userData.orbit = { r: R * rnd(1.5, 1.95), a: Math.random() * 6, sp: rnd(.2, .45), tilt: new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd(-1, 1), rnd(0, 6), rnd(-1, 1))) };
@@ -5295,6 +5296,7 @@ const prismSky = new THREE.Mesh(new THREE.SphereGeometry(2900, 48, 32), new THRE
 }) }));
 sky.add(prismSky);
 skyPicture("sky_alien_nebula.jpg", prismSky);
+skyPicture("stars_milky_way.jpg", NEB_MESH, null, 1.5); // the real Milky Way photo behind the main galaxy
 // gigantic motherships that float slowly around the Prism Galaxy
 const farGiants = [];
 const GIANT_CFGS = [
@@ -5318,8 +5320,34 @@ new GLTFLoader().load("models/mars.glb", (gl) => {
   const m = gl.scene, box = new THREE.Box3().setFromObject(m); m.position.copy(box.getCenter(new THREE.Vector3())).multiplyScalar(-1);
   const holder = new THREE.Group(); holder.add(m); holder.scale.setScalar(MARS.R * 2 / box.getSize(new THREE.Vector3()).x); MARS.group.add(holder); MARS.spin = holder;
 }, undefined, (e) => console.warn("mars did not load", e));
+// real planet photos (Solar System Scope, textures/CREDITS.md): giant planets floating around the main galaxy, too big to land on
+const GIANT_PLANETS = [
+  { tex: "jupiter.jpg", at: [1500, -250, 1100], R: 160, spin: .02 },
+  { tex: "saturn.jpg", at: [-1700, -150, 700], R: 120, spin: .018, ring: true, tilt: .45 },
+  { tex: "venus_atmosphere.jpg", at: [900, 450, -1500], R: 75, spin: .004 },
+  { tex: "mercury.jpg", at: [1300, 300, -850], R: 45, spin: .006 },
+  { tex: "moon.jpg", at: [-540, 440, -1240], R: 28, spin: .008 },
+  { tex: "ceres_fictional.jpg", at: [-1450, 260, -420], R: 36, spin: .01 },
+  { tex: "eris_fictional.jpg", at: [300, -420, 1700], R: 40, spin: .009 },
+  { tex: "haumea_fictional.jpg", at: [-520, -360, 1560], R: 30, spin: .05, stretch: 1.7 }, // Haumea spins so fast it is shaped like an egg
+  { tex: "makemake_fictional.jpg", at: [1750, 150, -200], R: 36, spin: .012 },
+].map((p) => {
+  const group = new THREE.Group(), body = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), new THREE.MeshStandardMaterial({ map: photoTex(p.tex), roughness: 1, metalness: 0 }));
+  body.scale.set(p.R * (p.stretch || 1), p.R, p.R); group.add(body); scene.add(group);
+  if (p.ring) { // Saturn's rings: the strip picture runs from the inner edge to the outer edge
+    const inner = p.R * 1.24, outer = p.R * 2.3, geo = new THREE.RingGeometry(inner, outer, 160, 1), pos = geo.attributes.position, uv = geo.attributes.uv;
+    for (let i = 0; i < pos.count; i++) uv.setXY(i, (Math.hypot(pos.getX(i), pos.getY(i)) - inner) / (outer - inner), .5);
+    const ring = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: photoTex("saturn_ring_alpha.png"), transparent: true, side: THREE.DoubleSide, roughness: 1, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2 + p.tilt; group.add(ring); group.rotation.z = p.tilt * .3;
+  }
+  return { ...p, at: V(p.at), group, body };
+});
 function farStep(dt, t) {
   MARS.group.position.copy(MARS.at).sub(WORLD_OFFSET); if (MARS.spin) MARS.spin.rotation.y += dt * .01;
+  for (const g of GIANT_PLANETS) {
+    g.group.position.copy(g.at).sub(WORLD_OFFSET); g.body.rotation.y += dt * g.spin;
+    if (mode === "fly") { const to = ship.position.clone().sub(g.group.position), min = g.R * (g.stretch || 1) + ship.userData.radius; if (to.length() < min) { ship.position.copy(g.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
+  }
   if (mode === "fly") { const to = ship.position.clone().sub(MARS.group.position), min = MARS.R + ship.userData.radius; if (to.length() < min) { ship.position.copy(MARS.group.position).add(to.setLength(min)); const nrm = to.normalize(); vel.addScaledVector(nrm, -vel.dot(nrm) * 1.6); } } // bump off
   const c = prismAt(), d = camera.position.distanceTo(c), k = ss(5800, 2600, d);
   prismDisc.position.copy(c); prismDisc.rotation.y += dt * .004; prismDisc.visible = k > 0;
