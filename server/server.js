@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createStore } from "./store.js";
 import { askBolt, boltReady } from "./bolt.js";
-import { speak, voiceReady } from "./voice.js";
+import { speak, voiceReady, voiceStatus } from "./voice.js";
 
 const PORT = process.env.PORT || 3000;
 const GAME_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "game");
@@ -86,6 +86,7 @@ const server = http.createServer((req, res) => {
     return res.end(JSON.stringify({ online: clients.size, planets: Object.keys(world.planets).length, players: Object.keys(world.players).length, storage: store.kind }));
   }
   if (url.pathname === "/voice") { // Bolt's spoken lines (POST {text}); 204 means "no voice here, use the browser's"
+    if (req.method === "GET") { res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify(voiceStatus(), null, 1)); } // a quick health check, no secrets
     if (!voiceReady || req.method !== "POST") { res.writeHead(204, { "x-voice": "off" }); return res.end(); }
     let body = ""; req.on("data", (c) => { body += c; if (body.length > 4000) req.destroy(); });
     req.on("end", async () => {

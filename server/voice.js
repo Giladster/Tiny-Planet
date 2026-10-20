@@ -14,16 +14,17 @@ const LIMIT = 40, WINDOW = 10 * 60 * 1000; // 40 new lines per player every 10 m
 
 // Never go over the free monthly letters: ask ElevenLabs how many are used before new lines,
 // and stop at 90% of the plan (the browser's voice takes over until the month resets).
-let quota = { used: 0, limit: 0, at: 0 };
+let quota = { used: 0, limit: 0, at: 0 }, lastError = "", made = 0;
+export const voiceStatus = () => ({ key: voiceReady, voice: VOICE, made, cached: cache.size, letters: quota.at ? `${quota.used} of ${quota.limit}` : "not checked yet", lastError: lastError || "none" });
 async function roomFor(n) {
   if (Date.now() - quota.at > 60000) {
     try {
       const r = await fetch(`${API}/v1/user/subscription`, { headers: { "xi-api-key": KEY } });
-      if (!r.ok) return false;
+      if (!r.ok) { lastError = `plan check ${r.status}: ${(await r.text()).slice(0, 200)}`; return false; }
       const j = await r.json(); quota = { used: j.character_count || 0, limit: j.character_limit || 0, at: Date.now() };
-    } catch { return false; }
+    } catch (e) { lastError = "plan check: " + e.message; return false; }
   }
-  if (quota.used + n > quota.limit * .9) return false;
+  if (quota.used + n > quota.limit * .9) { lastError = "free letters for this month are almost used up"; return false; }
   quota.used += n; return true;
 }
 function allowed(ip) {
@@ -42,9 +43,9 @@ export function speak(text, ip) {
     headers: { "xi-api-key": KEY, "content-type": "application/json", accept: "audio/mpeg" },
     body: JSON.stringify({ text, model_id: MODEL, voice_settings: { stability: .55, similarity_boost: .75, style: .2, use_speaker_boost: true } }),
   }).then(async (r) => {
-    if (!r.ok) { console.warn("ElevenLabs", r.status, (await r.text()).slice(0, 200)); return null; }
-    return Buffer.from(await r.arrayBuffer());
-  })).catch((e) => { console.warn("ElevenLabs", e.message); return null; });
+    if (!r.ok) { lastError = `speech ${r.status}: ${(await r.text()).slice(0, 200)}`; console.warn("ElevenLabs", lastError); return null; }
+    made++; return Buffer.from(await r.arrayBuffer());
+  })).catch((e) => { lastError = "speech: " + e.message; console.warn("ElevenLabs", e.message); return null; });
   cache.set(text, p);
   p.then((b) => { if (!b) cache.delete(text); });
   if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
