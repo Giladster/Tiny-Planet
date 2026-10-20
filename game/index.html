@@ -1037,6 +1037,21 @@ const sfx = (() => {
       const h = noise(t, .6, 2), hp = filt("highpass", 3000, 800, t, .5), hg = env(gain(), t, .001, .5); h.connect(hp).connect(hg); out(hg, .5 * v, .6);
     },
     lock() { if (!ok()) return; const t = ac.currentTime; [1200, 1600, 2100].forEach((f, i) => { const o = osc("square", f, f, t + i * .07, .09), g = env(gain(), t + i * .07, .002, .09); o.connect(filt("bandpass", 1800, 1800, t, 1, 1.5)).connect(g); out(g, .07, .1); }); },
+    creature(kind, mood = "hello", at) { // each species has its own voice: hello when you visit, panic under fire, a yelp when thrown
+      if (!ok()) return; const V = SPECIES_VOICE[kind] || SPECIES_VOICE.greys, v = Math.min(1, near(at) * 3) * (V.vol || 1); if (v < .02) return;
+      const t = ac.currentTime, up = mood === "panic" ? 1.35 : mood === "fling" ? 1.6 : 1;
+      const n = mood === "fling" ? 1 : mood === "panic" ? V.syl[1] + 2 : V.syl[0] + ((Math.random() * (V.syl[1] - V.syl[0] + 1)) | 0);
+      let ti = t + Math.random() * .05;
+      for (let i = 0; i < n; i++) {
+        const len = mood === "fling" ? .55 : V.len * (mood === "panic" ? .7 : 1) * rnd(.8, 1.2), f0 = V.f * up * (1 + Math.random() * V.r);
+        const f1 = mood === "fling" ? f0 * .45 : mood === "panic" ? f0 * rnd(1.1, 1.4) : i === n - 1 ? f0 * (V.end || 1.25) : f0 * rnd(.85, 1.15);
+        const o = osc(V.w, f0, f1, ti, len), bp = filt("bandpass", V.fm, V.fm * (f1 / f0), ti, len, V.q), g = env(gain(), ti, Math.min(.03, len * .2), len);
+        if (V.vib) { const l = osc("sine", V.vib, V.vib, ti, len), lg = gain(); lg.gain.value = f0 * V.vd; l.connect(lg).connect(o.frequency); }
+        o.connect(bp).connect(g);
+        if (V.buzz) { const z = noise(ti, len, 1), zb = filt("bandpass", V.fm, V.fm, ti, len, 1.5), zg = env(gain(), ti, .01, len); z.connect(zb).connect(zg); out(zg, V.buzz * v * .25, V.rev ?? .4); }
+        out(g, .22 * v, V.rev ?? .4); ti += len * (V.gap || 1.1);
+      }
+    },
     cheer() { if (!ok()) return; const t = ac.currentTime; [523, 659, 784, 1046].forEach((f, i) => { const o = osc("triangle", f, f, t + i * .1, .4), g = env(gain(), t + i * .1, .01, .35); o.connect(g); out(g, .08, .7); }); },
     zap() { if (!ok()) return; const t = ac.currentTime, o = osc("sawtooth", 2400, 700, t, .06), g = env(gain(), t, .002, .05); o.connect(g); out(g, .02, .2); },
     place() { if (!ok()) return; const t = ac.currentTime, o = osc("sine", 520, 980, t, .1), g = env(gain(), t, .005, .18); o.connect(g); out(g, .14, .4); },
@@ -1661,6 +1676,31 @@ const LIMB = { armL: new THREE.Vector3(.031, .112, 0), armR: new THREE.Vector3(-
 const SHIRTS = [0xff5a6e, 0x6fe3ff, 0xffb547, 0x7dff9b, 0xc8a2ff, 0xffffff, 0xff8ad8].map((c) => new THREE.Color(c));
 const MAXPEOPLE = 70;
 const WHITE = new THREE.Color(1, 1, 1), SOLDIER_TINT = new THREE.Color(.55, .8, .45);
+// every species sounds different (sfx.creature): w wave, f pitch Hz, r pitch spread, fm/q voice filter, syl syllables, len seconds each,
+// vib/vd wobble speed/depth, buzz noise, rev echo, end how the last syllable bends. Add a line here for each new species.
+const SPECIES_VOICE = {
+  greys:    { w: "sine",     f: 820, r: .3, fm: 1400, q: 1.2, syl: [2, 4], len: .12, vib: 18, vd: .08, end: 1.5 },
+  frog:     { w: "square",   f: 140, r: .1, fm: 650,  q: 3,   syl: [2, 2], len: .09, gap: 1.6, end: .8 },
+  bee:      { w: "sawtooth", f: 230, r: .2, fm: 1800, q: 2,   syl: [2, 3], len: .16, vib: 42, vd: .06, buzz: .5 },
+  flamingo: { w: "sawtooth", f: 420, r: .15, fm: 1100, q: 4,  syl: [1, 3], len: .2,  end: .9, vol: 1.5 },
+  panda:    { w: "sine",     f: 950, r: .25, fm: 1500, q: 1,  syl: [2, 3], len: .08, end: 1.4 },
+  dino:     { w: "sawtooth", f: 110, r: .2, fm: 500,  q: 2,   syl: [1, 2], len: .3,  buzz: .6, end: .7, vol: 1.3 },
+  imp:      { w: "square",   f: 700, r: .4, fm: 1600, q: 2,   syl: [4, 6], len: .06, vib: 9, vd: .1, end: 1.6 },
+  mushroom: { w: "triangle", f: 300, r: .5, fm: 700,  q: 1.5, syl: [3, 5], len: .05, gap: 1.8 },
+  spikecap: { w: "square",   f: 1250, r: .3, fm: 2200, q: 3,  syl: [3, 6], len: .035, gap: 1.6 },
+  pinkblob: { w: "sine",     f: 400, r: .3, fm: 800,  q: 1,   syl: [2, 4], len: .14, vib: 14, vd: .15 },
+  wizard:   { w: "triangle", f: 220, r: .15, fm: 900, q: 2,   syl: [1, 2], len: .45, vib: 5, vd: .04, rev: .8, vol: 1.8 },
+  yeti:     { w: "sawtooth", f: 85,  r: .15, fm: 420, q: 1.5, syl: [1, 2], len: .5,  buzz: 1, end: .8, vol: 1.4 },
+  sprout:   { w: "sine",     f: 1400, r: .3, fm: 2200, q: 1,  syl: [2, 3], len: .1,  end: 1.3 },
+  stack:    { w: "square",   f: 300, r: 0,  fm: 900,  q: 4,   syl: [3, 5], len: .08, end: 1, vol: 1.5 },
+  ghost:    { w: "sine",     f: 330, r: .1, fm: 600,  q: 1,   syl: [1, 2], len: .7,  vib: 4, vd: .05, rev: 1, end: .75 },
+  wisp:     { w: "sine",     f: 1800, r: .2, fm: 2600, q: 1.5, syl: [3, 5], len: .09, vib: 7, vd: .05, rev: .9 },
+  squidle:  { w: "sine",     f: 500, r: .2, fm: 900,  q: 2,   syl: [2, 3], len: .18, vib: 11, vd: .12, end: .7 },
+  glub:     { w: "sine",     f: 260, r: .4, fm: 500,  q: 2.5, syl: [3, 5], len: .07, end: .5, gap: 1.5 },
+  buzzer:   { w: "sawtooth", f: 160, r: .1, fm: 1200, q: 3,   syl: [1, 2], len: .3,  vib: 55, vd: .08, buzz: .8 },
+  alpaking: { w: "triangle", f: 520, r: .1, fm: 1200, q: 2,   syl: [1, 2], len: .35, vib: 7, vd: .06, end: .85, vol: 1.5 },
+  dragon:   { w: "sawtooth", f: 300, r: .3, fm: 1300, q: 2,   syl: [1, 3], len: .22, buzz: .5, end: 1.4, vol: 1.2 },
+};
 // the people of each planet are real animated creatures (Quaternius, CC0): models/creatures/<kind>.glb with clips walk, idle, cheer (and run)
 const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Little imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons" };
 const FLOATERS = new Set(["sprout", "stack", "ghost", "wisp", "squidle", "glub", "buzzer", "alpaking", "dragon"]); // they hover instead of walking
@@ -2067,6 +2107,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     for (const m of [75, 50, 25]) if (hpBefore > m && this.data.hp <= m && this.data.hp > 0) this.collapse(m);
     if (!remote && !this.isHome) { wallet.credits += { laser: .2, missile: 2, bomb: 6 }[kind] || 0; if (hpBefore > 0 && this.data.hp <= 0) earn(300, `${this.data.name} destroyed`); else earn(0); }
     this.lastHit = clock(); this.cheerUntil = 0; if (!remote) this.playerHitAt = clock();
+    if (this.style && clock() - (this.voxAt || 0) > 1.2) { this.voxAt = clock(); sfx.creature(this.style.kind, flung ? "fling" : "panic", this.group.position); }
     afterDamage(this);
   }
   get perPerson() { return this.data.maxPop / MAXPEOPLE; }
@@ -2196,6 +2237,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     const panic = clock() - this.lastHit < 8, cheer = clock() < this.cheerUntil;
     const worship = this.isHome && !panic && ship.visible && ship.position.distanceTo(this.group.position) < this.R * 9; // your people love you
     const shipLocal = worship ? this.mesh.worldToLocal(ship.position.clone()) : null;
+    if ((worship || panic) && this.style && mode === "fly" && clock() - (this.voxAt || 0) > rnd(2.5, 4.5)) { this.voxAt = clock(); sfx.creature(this.style.kind, panic ? "panic" : "hello", this.group.position); } // the crowd chatters in its own voice
     const civ = this.civilians();
     for (let i = this.people.length - 1; i >= 0; i--) {
       const p = this.people[i];
@@ -6505,11 +6547,11 @@ function flyStep(dt) {
     const alien = p.data.decor.find((x) => x.type === "alien");
     if (alien) {
       if (d > p.R * 16) p.alienGreeted = false;
-      else if (d < p.R * 9 && !p.alienGreeted && clock() - (p.playerHitAt || -99) > 20) { p.alienGreeted = true; p.alienWaveUntil = clock() + 6; toast(`👽 The alien on ${esc(p.data.name)} waves at you${alien.holds !== false ? `: “${esc(alien.text || "HELLO!")}”` : "!"}`, "", 3500); sfx.cheer(); }
+      else if (d < p.R * 9 && !p.alienGreeted && clock() - (p.playerHitAt || -99) > 20) { p.alienGreeted = true; p.alienWaveUntil = clock() + 6; if (p.style) sfx.creature(p.style.kind, "hello", p.group.position); toast(`👽 The alien on ${esc(p.data.name)} waves at you${alien.holds !== false ? `: “${esc(alien.text || "HELLO!")}”` : "!"}`, "", 3500); sfx.cheer(); }
     }
     if (d > p.R * 14) p.welcomed = false;
     else if (d < p.R * 7 && !p.welcomed && clock() - p.lastHit > 20) {
-      p.welcomed = true; p.cheerUntil = clock() + 7; sfx.cheer();
+      p.welcomed = true; p.cheerUntil = clock() + 7; sfx.cheer(); if (p.style) sfx.creature(p.style.kind, "hello", p.group.position);
       toast(`👋 ${esc(p.data.name)} welcomes you! ${fmt(p.data.pop)} people are waving`);
       for (let j = 0; j < 5; j++) setTimeout(() => {
         const at = p.group.position.clone().addScaledVector(new THREE.Vector3().randomDirection(), p.R * 1.5), col = C(SHIRTS[j % SHIRTS.length].getHex(), 2.5);
