@@ -71,4 +71,4 @@ Bolt reads his radio lines out loud. With an ElevenLabs key he uses a real AI vo
 1. Make a free account at elevenlabs.io → Profile → API Keys → Create key.
 2. Render → your service → Environment → add `ELEVENLABS_API_KEY` with that key.
 3. Optional: `ELEVENLABS_VOICE` = another voice ID from the ElevenLabs voice library (default "Brian").
-Lines are cached on the server, and each player can make up to 40 new lines every 10 minutes, so credits last.
+Free plan only: before new lines the server checks the letters used this month and stops at 90% of the plan, then the browser voice takes over until the month resets. The key needs "Text to Speech" and "User: Read" access. Lines are cached, and each player can make up to 40 new lines every 10 minutes.
