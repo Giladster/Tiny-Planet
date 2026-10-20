@@ -17,8 +17,6 @@ Gilad downloaded them; they were shrunk for the browser (planets 2048x1024, skie
 | ceres_fictional.jpg, eris_fictional.jpg, haumea_fictional.jpg, makemake_fictional.jpg | Dwarf planets (made-up looks) |
 | stars.jpg, stars_milky_way.jpg | Star sky and Milky Way sky (wrap on a big sphere) |
 
-sky_alien_nebula.jpg is credited in ../models/CREDITS.md.
-
 ## Nebula skies and extra maps (Sketchfab, CC BY 4.0)
 | File | Model | Maker | License |
 |---|---|---|---|

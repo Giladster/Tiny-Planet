@@ -1146,11 +1146,83 @@ const NEB = sphereTexture(1024, 512, (x, y, z) => {
 });
 const NEB_MESH = new THREE.Mesh(new THREE.SphereGeometry(3000, 64, 40), new THREE.MeshBasicMaterial({ map: NEB, side: THREE.BackSide, depthWrite: false, transparent: true }));
 sky.add(NEB_MESH);
-// sky pictures from Sketchfab (models/CREDITS.md) replace the drawn sky when they load: a nebula in the Prism Galaxy (the Main Galaxy keeps its drawn Milky Way)
+// the sky's nebulas are drawn by code: warped noise makes glowing gas clouds, thin filaments, dark dust lanes, the Milky Way and thousands of stars.
+// It is painted once into a big picture, a strip per frame so the game never stutters, and every galaxy gets its own seed and colors.
+const NEBULA_GLSL = `
+vec4 permute(vec4 x){ return mod(((x*34.0)+1.0)*x, 289.0); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0); const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy)); vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz); vec3 l = 1.0 - g; vec3 i1 = min(g.xyz, l.zxy); vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx; vec3 x2 = x0 - i2 + C.yyy; vec3 x3 = x0 - D.yyy;
+  i = mod(i, 289.0);
+  vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 1.0/7.0; vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z); vec4 x_ = floor(j * ns.z); vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy; vec4 y = y_ * ns.x + ns.yyyy; vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy); vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0; vec4 s1 = floor(b1)*2.0 + 1.0; vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy; vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x); vec3 p1 = vec3(a0.zw, h.y); vec3 p2 = vec3(a1.xy, h.z); vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3))); p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0); m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+float fbm(vec3 p, int oct){ float s = 0., a = .5; for (int i = 0; i < 8; i++){ if (i >= oct) break; s += a * snoise(p); p = p * 2.03 + 17.1; a *= .5; } return .5 + .5 * s; }
+float hash3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float ridge(vec3 p, int oct){ float s = 0., a = .5; for (int i = 0; i < 8; i++){ if (i >= oct) break; float k = 1. - abs(snoise(p)); s += a * k * k; p = p * 2.07 + 31.7; a *= .5; } return s; }
+float stars(vec3 d, float cells, float keep){ vec3 g = d * cells, c = floor(g), f = fract(g) - .5; float h = hash3(c); if (h < keep) return 0.;
+  vec3 o = vec3(hash3(c + 1.7), hash3(c + 9.2), hash3(c + 4.4)) - .5; float r = length(f - o * .6); return smoothstep(.22, 0., r) * (h - keep) / (1. - keep); }
+uniform float seed, bandAmt, cloudAmt, glow, y0, y1; uniform vec3 band, c1, c2, c3, c4; varying vec2 vUv;
+void main(){
+  vec2 uv = vec2(vUv.x, mix(y0, y1, vUv.y));
+  float ph = uv.x * 6.2831853, th = (1. - uv.y) * 3.1415926;
+  vec3 d = vec3(-cos(ph) * sin(th), cos(th), sin(ph) * sin(th));
+  vec3 p = d * 1.4 + seed;
+  vec3 q = vec3(fbm(p, 5), fbm(p + 5.2, 5), fbm(p + 9.1, 5)) - .5;
+  vec3 r = p + 2.2 * q;
+  float n = fbm(r * 1.3, 7);
+  float fil = ridge(r * 2.2 + 7., 6);                 // thin glowing filaments
+  float hue = fbm(p * .9 + q * 1.5 + 50., 4);
+  float dust = smoothstep(.5, .75, fbm(p * 3. + q * 3. + 11., 7));
+  float bd = dot(d, band), bandM = exp(-bd * bd / .007) * bandAmt, bandC = exp(-bd * bd / .0012) * bandAmt;
+  float region = smoothstep(.55, .8, fbm(p * .55 + 21., 3)) * cloudAmt;
+  float cloud = pow(n, 3.) * 2.2 + pow(fil, 3.) * .5 * n;
+  vec3 tint = mix(c1, c2, smoothstep(.35, .65, hue)); tint = mix(tint, c3 * .6, smoothstep(.65, .85, hue) * .7);
+  vec3 col = tint * cloud * (region * 1.5 + bandM * .45);
+  col += mix(c3, vec3(1.), .4) * pow(max(n - .55, 0.) * 2.4, 3.) * region * 2.;           // hot bright hearts
+  col += c4 * (bandM * (.03 + .36 * pow(fbm(p * 7. + 40., 5), 3.)) + bandC * .18);          // the Milky Way's glow
+  col *= 1. - dust * .92 * clamp(bandM * 1.4 + region * .8, 0., 1.);                        // dark dust lanes
+  float st = stars(d, 900., .93 - .06 * bandM) * (.4 + bandM * 1.2) + stars(d, 2400., .8 - .15 * bandM) * (.15 + bandM * .8);
+  col += mix(vec3(.75, .85, 1.), vec3(1., .85, .7), hash3(floor(d * 900.) + 3.)) * st * 1.6 * (1. - dust * .7 * bandM);
+  col += c2 * .003 + (hash3(d * 999.) - .5) / 255.;
+  gl_FragColor = vec4(max(col * glow, 0.), 1.);
+}`;
+function bakeNebula(mesh, o) {
+  const W = Math.min(renderer.capabilities.maxTextureSize, ui.low ? 2048 : 4096), H = W / 2, STRIPS = 16;
+  const rt = new THREE.WebGLRenderTarget(W, H, { colorSpace: THREE.SRGBColorSpace, generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  const U = { seed: { value: o.seed }, bandAmt: { value: o.band ?? 1 }, cloudAmt: { value: o.cloud ?? 1 }, glow: { value: o.glow ?? 1 }, band: { value: (o.axis || BAND).clone().normalize() }, y0: { value: 0 }, y1: { value: 1 } };
+  for (const k of ["c1", "c2", "c3", "c4"]) U[k] = { value: new THREE.Color(...o[k]) };
+  const mat = new THREE.ShaderMaterial({ uniforms: U, depthTest: false, depthWrite: false, vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }", fragmentShader: NEBULA_GLSL });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat), sc = new THREE.Scene(), cam = new THREE.Camera(); sc.add(quad);
+  let i = 0;
+  const step = () => {
+    const y0 = i / STRIPS, y1 = (i + 1) / STRIPS; U.y0.value = y0; U.y1.value = y1;
+    const prev = renderer.getRenderTarget(); rt.viewport.set(0, Math.round(y0 * H), W, Math.round(y1 * H) - Math.round(y0 * H)); rt.scissor.copy(rt.viewport); rt.scissorTest = true; // the scissor keeps the clear from wiping earlier strips
+    renderer.setRenderTarget(rt); renderer.render(sc, cam); renderer.setRenderTarget(prev); rt.viewport.set(0, 0, W, H); rt.scissorTest = false;
+    if (++i < STRIPS) return requestAnimationFrame(step);
+    mat.dispose(); quad.geometry.dispose(); rt.texture.anisotropy = 8;
+    const old = mesh.material.map; mesh.material.map = rt.texture; mesh.material.color.setScalar(1); mesh.material.needsUpdate = true; if (old && old !== NEB) old.dispose();
+  };
+  requestAnimationFrame(step);
+}
+// a real picture can still go on a sky for special places (models/CREDITS.md, textures/CREDITS.md)
 function skyPicture(file, mesh, starAt, dim = 1) {
   new THREE.TextureLoader().load("textures/" + file, (t) => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; mesh.material.map = t; mesh.material.color.setScalar(dim); mesh.material.needsUpdate = true; });
   if (starAt) mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), starAt); // the picture's middle sits behind our sun
 }
+bakeNebula(NEB_MESH, { seed: 3.7, c1: [.55, .08, .22], c2: [.05, .25, .5], c3: [1, .7, .55], c4: [1, .85, .6], glow: 1.6 });
 {
   const N = 9000, p = new Float32Array(N * 3), c = new Float32Array(N * 3), sz = new Float32Array(N), tw = new Float32Array(N), v = new THREE.Vector3();
   for (let i = 0; i < N; i++) {
@@ -5295,8 +5367,7 @@ const prismSky = new THREE.Mesh(new THREE.SphereGeometry(2900, 48, 32), new THRE
   return [Math.min(255, 14 + 120 * pink + 90 * gold), Math.min(255, 6 + 30 * pink + 70 * gold + 90 * teal), Math.min(255, 22 + 110 * pink + 70 * teal), 255];
 }) }));
 sky.add(prismSky);
-skyPicture("sky_alien_nebula.jpg", prismSky);
-skyPicture("stars_milky_way.jpg", NEB_MESH, null, 1.5); // the real Milky Way photo behind the main galaxy
+bakeNebula(prismSky, { seed: 11.3, band: .35, cloud: 1.7, glow: 1.8, axis: new THREE.Vector3(.3, .9, .3), c1: [.75, .12, .55], c2: [.85, .5, .1], c3: [.4, 1, .9], c4: [1, .7, .9] }); // the Prism Galaxy: wild pink, gold and teal clouds
 // gigantic motherships that float slowly around the Prism Galaxy
 const farGiants = [];
 const GIANT_CFGS = [
