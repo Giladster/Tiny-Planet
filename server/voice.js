@@ -3,7 +3,10 @@
 // Lines are kept in memory, so repeated lines (tutorial, tips) cost nothing after the first time.
 // Each player can only ask for a limited number of new lines, so nobody can burn through the credits.
 const KEY = process.env.ELEVENLABS_API_KEY;
-const VOICE = process.env.ELEVENLABS_VOICE || "jwjWpCFQUCpnHneBySsF"; // picked by Gilad from the ElevenLabs voice library
+// Free plans can only use ElevenLabs' own "default" voices through the API (library voices need a paid plan).
+// If the chosen voice is refused for that reason, Bolt switches to Brian, a default voice, instead of going silent.
+const FALLBACK = "nPczCjzI2devNBz1zQrb"; // Brian
+let VOICE = process.env.ELEVENLABS_VOICE || FALLBACK;
 const MODEL = process.env.ELEVENLABS_MODEL || "eleven_turbo_v2_5"; // smooth and natural, and lets us force English (flash was choppy, multilingual misread words)
 const API = process.env.ELEVENLABS_URL || "https://api.elevenlabs.io";
 export const voiceReady = !!KEY;
@@ -38,14 +41,19 @@ export function speak(text, ip) {
   if (!KEY || !text) return Promise.resolve(null);
   if (cache.has(text)) { const p = cache.get(text); cache.delete(text); cache.set(text, p); return p; }
   if (!allowed(ip)) return Promise.resolve(null);
-  const p = roomFor(text.length).then((ok) => !ok ? null : fetch(`${API}/v1/text-to-speech/${VOICE}?output_format=mp3_44100_64`, {
+  const say = (voice) => fetch(`${API}/v1/text-to-speech/${voice}?output_format=mp3_44100_64`, {
     method: "POST",
     headers: { "xi-api-key": KEY, "content-type": "application/json", accept: "audio/mpeg" },
     body: JSON.stringify({ text, model_id: MODEL, language_code: "en", apply_text_normalization: "on", voice_settings: { stability: .3, similarity_boost: .8, style: .45, use_speaker_boost: true } }),
   }).then(async (r) => {
-    if (!r.ok) { lastError = `speech ${r.status}: ${(await r.text()).slice(0, 200)}`; console.warn("ElevenLabs", lastError); return null; }
+    if (!r.ok) {
+      const why = (await r.text()).slice(0, 200); lastError = `speech ${r.status} (${voice}): ${why}`; console.warn("ElevenLabs", lastError);
+      if (r.status === 402 && voice !== FALLBACK) { VOICE = FALLBACK; return say(FALLBACK); } // a paid-only voice: use the free default one
+      return null;
+    }
     made++; return Buffer.from(await r.arrayBuffer());
-  })).catch((e) => { lastError = "speech: " + e.message; console.warn("ElevenLabs", e.message); return null; });
+  });
+  const p = roomFor(text.length).then((ok) => !ok ? null : say(VOICE)).catch((e) => { lastError = "speech: " + e.message; console.warn("ElevenLabs", e.message); return null; });
   cache.set(text, p);
   p.then((b) => { if (!b) cache.delete(text); });
   if (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);

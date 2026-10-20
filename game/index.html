@@ -4412,12 +4412,14 @@ let voiceOff = /offline/.test(location.search), voiceChain = Promise.resolve(), 
 function boltHush() { voiceCut = voiceGen; voiceChain = Promise.resolve(); sfx.stopVoice(); window.speechSynthesis?.cancel(); }
 function browserSpeak(text) {
   if (!window.speechSynthesis) return Promise.resolve();
-  return new Promise((done) => {
+  const ready = speechSynthesis.getVoices().length ? Promise.resolve() // the computer's voices load late; wait for them so the first line isn't in a random default voice
+    : new Promise((r) => { speechSynthesis.addEventListener("voiceschanged", r, { once: true }); setTimeout(r, 1500); });
+  return ready.then(() => new Promise((done) => {
     const u = new SpeechSynthesisUtterance(text), v = boltVoiceOf(); if (v) u.voice = v;
     u.pitch = .95; u.rate = 1.04; // natural pitch and pace so he talks smoothly, like a calm ship AI
     u.onend = u.onerror = () => { sfx.radioTalk(); done(); };
     speechSynthesis.speak(u); setTimeout(done, 1500 + text.length * 90); // never get stuck
-  });
+  }));
 }
 function boltSpeak(text, queue) { // queue: radio lines wait their turn; chat answers cut in
   if (!ui.boltVoice || ui.muted) return;

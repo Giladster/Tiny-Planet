@@ -70,5 +70,5 @@ Without it, Bolt still answers common questions from built-in tips. Each player 
 Bolt reads his radio lines out loud. With an ElevenLabs key he uses a real AI voice; without one he uses the browser's voice.
 1. Make a free account at elevenlabs.io → Profile → API Keys → Create key.
 2. Render → your service → Environment → add `ELEVENLABS_API_KEY` with that key.
-3. Optional: `ELEVENLABS_VOICE` = another voice ID from the ElevenLabs voice library (default jwjWpCFQUCpnHneBySsF, picked by Gilad).
+3. Optional: `ELEVENLABS_VOICE` = another voice ID (default Brian, nPczCjzI2devNBz1zQrb). On the free plan only ElevenLabs' own default voices work through the API; library voices answer 402 "paid_plan_required" and Bolt falls back to Brian.
 Free plan only: before new lines the server checks the letters used this month and stops at 90% of the plan, then the browser voice takes over until the month resets. The key needs "Text to Speech" and "User: Read" access. Lines are cached, and each player can make up to 40 new lines every 10 minutes.
