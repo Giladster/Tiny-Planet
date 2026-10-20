@@ -1535,7 +1535,12 @@ function makeAlien(text, R) { // a huge friendly alien sitting on the planet, wa
   return g;
 }
 const photoTex = (file) => { const t = new THREE.TextureLoader().load("textures/" + file); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
-const moonPhoto = photoTex("moon.jpg"); // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
+const moonPhoto = photoTex("moon.jpg");
+// real surface photos under every planet's own colors: craters, canyons and lava flows from Solar System Scope (textures/CREDITS.md)
+const PHOTO_CACHE = {}, photoOnce = (f) => PHOTO_CACHE[f] || (PHOTO_CACHE[f] = f === "moon.jpg" ? moonPhoto : photoTex(f));
+const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg"], .7], lava: [["venus_surface.jpg"], .85], ice: [["eris_fictional.jpg"], .7], candy: [["haumea_fictional.jpg"], .35],
+  cheese: [["moon.jpg"], .9], melon: [["makemake_fictional.jpg"], .3], disco: [[], 0], toxic: [["makemake_fictional.jpg"], .7] };
+function planetPhoto(d) { const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
 function makeSatellite() {
   const g = new THREE.Group();
@@ -1760,9 +1765,17 @@ class Planet {
       sh.uniforms.pR = { value: this.data.R }; sh.uniforms.pSeed = { value: (this.data.design.seed || 1) % 97 };
       sh.uniforms.cSeed = { value: ((this.data.design.seed || 1) * 7.31) % 53 }; sh.uniforms.cTime = CLOUD_TIME; sh.uniforms.cRot = { value: 0 }; sh.uniforms.cOn = { value: 0 };
       sh.uniforms.pAtmo = { value: new THREE.Color(this.data.design.atmo || "#88ccff") }; this.groundSh = sh;
+      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k };
       sh.vertexShader = "attribute float glow;\nattribute float city;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal); vWR = normalize(mat3(modelMatrix) * position);");
-      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + sh.fragmentShader
+      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK;\nuniform sampler2D pPhoto;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + sh.fragmentShader
         .replace("#include <color_fragment>", `#include <color_fragment>
+if (pPhotoK > 0.) { // the real surface photo: its light and dark (craters, canyons) shade the planet's own colors
+  vec3 pd = normalize(vDir); vec2 puv = vec2(atan(pd.z, pd.x) * .1591549 + .5, asin(clamp(pd.y, -1., 1.)) * .3183099 + .5);
+  vec2 pgx = dFdx(puv), pgy = dFdy(puv), puv2 = vec2(fract(puv.x + .5), puv.y), pgx2 = dFdx(puv2), pgy2 = dFdy(puv2);
+  if (abs(pgx2.x) + abs(pgy2.x) < abs(pgx.x) + abs(pgy.x)) { pgx = pgx2; pgy = pgy2; } // no seam where the photo wraps around
+  float pl = dot(textureGrad(pPhoto, puv, pgx, pgy).rgb, vec3(.3, .59, .11)), pa = dot(textureLod(pPhoto, puv, 6.).rgb, vec3(.3, .59, .11));
+  diffuseColor.rgb *= mix(1., clamp(pl / max(pa, .03), .35, 1.9), pPhotoK);
+}
 // ground detail: patches of lighter and darker soil, and bare rock on steep slopes
 vec3 gp = vDir * 9. + pSeed; float gfw = length(fwidth(gp));
 float gd = pfbm(gp, 6, gfw), gd2 = pfbm(gp * 3.3 + 5., 4, gfw * 3.3);
@@ -1949,6 +1962,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.clouds.scale.setScalar(R * 1.04);
     this.atmoBack.material.uniforms.col.value.set(d.atmo); this.atmoRim.material.uniforms.col.value.set(d.atmo);
     if (this.groundSh) this.groundSh.uniforms.pAtmo.value.set(d.atmo || "#88ccff");
+    if (this.photoU) { const ph = planetPhoto(d); this.photoU.value = ph.tex; this.photoK.value = ph.k; }
     this.atmoBack.scale.setScalar(R * 1.16); this.atmoRim.scale.setScalar(R * 1.05);
     const disco = d.template === "disco";
     this.mat.metalness = disco ? .75 : 0; this.mat.roughness = disco ? .22 : .82; this.mat.envMapIntensity = disco ? .9 : .15;
