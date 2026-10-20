@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createStore } from "./store.js";
 import { askBolt, boltReady } from "./bolt.js";
+import { speak, voiceReady } from "./voice.js";
 
 const PORT = process.env.PORT || 3000;
 const GAME_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "game");
@@ -83,6 +84,18 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/status") {
     res.writeHead(200, { "content-type": "application/json", "access-control-allow-origin": "*" });
     return res.end(JSON.stringify({ online: clients.size, planets: Object.keys(world.planets).length, players: Object.keys(world.players).length, storage: store.kind }));
+  }
+  if (url.pathname === "/voice") { // Bolt's spoken lines (POST {text}); 204 means "no voice here, use the browser's"
+    if (!voiceReady || req.method !== "POST") { res.writeHead(204, { "x-voice": "off" }); return res.end(); }
+    let body = ""; req.on("data", (c) => { body += c; if (body.length > 4000) req.destroy(); });
+    req.on("end", async () => {
+      let text = ""; try { text = JSON.parse(body).text; } catch {}
+      const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
+      const mp3 = await speak(text, ip);
+      if (!mp3) { res.writeHead(204); return res.end(); }
+      res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" }); res.end(mp3);
+    });
+    return;
   }
   let file = path.normalize(path.join(GAME_DIR, url.pathname === "/" ? "index.html" : decodeURIComponent(url.pathname)));
   if (!file.startsWith(GAME_DIR)) { res.writeHead(403); return res.end(); }

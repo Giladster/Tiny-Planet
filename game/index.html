@@ -785,7 +785,7 @@ const sfx = (() => {
   }
   const bufs = {}; // recorded sounds from game/sounds, loaded once
   function loadBuf(name) { return bufs[name] ??= fetch("sounds/" + name).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).catch(() => null); }
-  let mus = null, drone = null; const playing = new Set();
+  let mus = null, drone = null, voiceSrc = null; const playing = new Set();
   function playMusic(kind) { // quiet music for normal play, loud music only in a fight; only one plays, they cross-fade
     if (!ac || mus?.kind === kind) return;
     const me = mus = { kind }, t = ac.currentTime;
@@ -854,6 +854,14 @@ const sfx = (() => {
       [[1320, 0], [1760, .07]].forEach(([f, d]) => { const o = osc("square", f, f, t + d, .06), g = env(gain(), t + d, .003, .06); o.connect(filt("bandpass", 1600, 1600, t, 1, 2)).connect(g); out(g, .05, .1); });
       const n = noise(t, .18, 1.6), b = filt("bandpass", 2400, 1200, t, .18, .8), g = env(gain(), t, .005, .17); n.connect(b).connect(g); out(g, .05, .05);
     },
+    playVoice(mp3) { // play one of Bolt's spoken lines; resolves when he's done (false if it couldn't play)
+      if (!ok()) return Promise.resolve(true);
+      return ac.decodeAudioData(mp3.slice(0)).then((b) => new Promise((done) => {
+        const s = ac.createBufferSource(), g = gain(); s.buffer = b; g.gain.value = 1.6; s.connect(g); out(g, 1, .08);
+        voiceSrc = s; s.onended = () => { if (voiceSrc === s) voiceSrc = null; sfx.radioTalk(); done(true); }; s.start();
+      }), () => false);
+    },
+    stopVoice() { try { voiceSrc?.stop(); } catch {} voiceSrc = null; },
     radioTalk() { // a soft "over" click when Bolt finishes talking
       if (!ok()) return; const t = ac.currentTime, o = osc("square", 1100, 1100, t + .05, .04), g = env(gain(), t + .05, .002, .04); o.connect(g); out(g, .03, .05);
     },
@@ -3622,7 +3630,7 @@ function renderLevel() {
 // ---- the radio box
 let radioQ = [], radioTyping = null, radioHideAt = 0;
 function radio(text) { radioQ.push(text); if (!radioTyping) nextRadio(); }
-function radioNow() { radioQ = []; radioTyping = null; window.speechSynthesis?.cancel(); } // drop old chatter: Bolt talks about what you are doing now
+function radioNow() { radioQ = []; radioTyping = null; boltHush(); } // drop old chatter: Bolt talks about what you are doing now
 function nextRadio() {
   const text = radioQ.shift(); if (text === undefined) { radioTyping = null; return; }
   const el = $("radioText"), my = radioTyping = { text, i: 0, t0: clock() }; el.textContent = "";
@@ -4189,19 +4197,36 @@ function boltVoiceOf() { // a smooth, clear "AI" voice: the most natural English
   for (const re of [/Natural/i, /\((Premium|Enhanced)\)/i, /Google UK English Male/i, /Google US English/i, /^Daniel\b/i, /^Samantha\b/i, /Aria|Jenny|Guy|Ryan|Sonia/i]) { const v = vs.find((x) => re.test(x.name)); if (v) return v; }
   return vs.find((x) => x.default) || vs[0];
 }
+// Bolt's voice: a real AI voice from the server (ElevenLabs) when it has one, else the browser's own voice.
+// Lines are fetched as soon as they are said, and play one after another, so he talks without gaps.
+let voiceOff = /offline/.test(location.search), voiceChain = Promise.resolve(), voiceGen = 0, voiceCut = 0;
+function boltHush() { voiceCut = voiceGen; voiceChain = Promise.resolve(); sfx.stopVoice(); window.speechSynthesis?.cancel(); }
+function browserSpeak(text) {
+  if (!window.speechSynthesis) return Promise.resolve();
+  return new Promise((done) => {
+    const u = new SpeechSynthesisUtterance(text), v = boltVoiceOf(); if (v) u.voice = v;
+    u.pitch = .95; u.rate = 1.04; // natural pitch and pace so he talks smoothly, like a calm ship AI
+    u.onend = u.onerror = () => { sfx.radioTalk(); done(); };
+    speechSynthesis.speak(u); setTimeout(done, 1500 + text.length * 90); // never get stuck
+  });
+}
 function boltSpeak(text, queue) { // queue: radio lines wait their turn; chat answers cut in
-  if (!ui.boltVoice || ui.muted || !window.speechSynthesis) return;
-  if (!queue) speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ","));
-  const v = boltVoiceOf(); if (v) u.voice = v;
-  u.pitch = .95; u.rate = 1.04; // natural pitch and pace so he talks smoothly, like a calm ship AI
-  u.onend = () => sfx.radioTalk();
-  speechSynthesis.speak(u);
+  if (!ui.boltVoice || ui.muted) return;
+  if (!queue) boltHush();
+  const line = text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ",").replace(/\s+/g, " ").trim();
+  if (!line) return;
+  const gen = ++voiceGen;
+  const got = voiceOff ? Promise.resolve(null) : fetch("voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: line }) })
+    .then((r) => { if (r.headers.get("x-voice") === "off") voiceOff = true; return r.status === 200 ? r.arrayBuffer() : null; }).catch(() => null);
+  voiceChain = voiceChain.then(() => got).then((mp3) => {
+    if (gen <= voiceCut || !ui.boltVoice || ui.muted) return;
+    return mp3 ? sfx.playVoice(mp3).then((ok) => ok || browserSpeak(line)) : browserSpeak(line);
+  });
 }
 function boltAnswer(text) {
   boltAsking = 0; boltLog.push({ who: "bolt", text }); if (boltLog.length > 40) boltLog.shift();
-  renderBolt(); boltSpeak(text);
-  if (!ui.bolt) { radio(text); }
+  renderBolt();
+  if (ui.bolt) boltSpeak(text); else radio(text); // the radio reads it out itself, so he only says it once
 }
 function askBolt(q) {
   q = q.trim().slice(0, 300); if (!q || boltAsking) return;
@@ -4216,7 +4241,7 @@ function boltListen() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return toast("🎙 Talking to Bolt needs Chrome, Edge or Safari. You can still type!", "", 4000);
   if (boltRec) { boltRec.stop(); return; }
-  speechSynthesis?.cancel();
+  boltHush();
   const r = new SR(); boltRec = r; r.lang = navigator.language || "en-US"; r.interimResults = true; r.maxAlternatives = 1;
   let said = "";
   r.onresult = (e) => { said = [...e.results].map((x) => x[0].transcript).join(" "); $("boltQ").value = said; };
@@ -4227,7 +4252,7 @@ function boltListen() {
 $("boltSend").addEventListener("click", () => askBolt($("boltQ").value));
 $("boltQ").addEventListener("keydown", (e) => { if (e.key === "Enter") askBolt(e.target.value); });
 $("boltMic").addEventListener("click", boltListen);
-$("boltVoice").addEventListener("click", () => { ui.boltVoice = !ui.boltVoice; saveUi(); if (!ui.boltVoice) speechSynthesis?.cancel(); renderBolt(); });
+$("boltVoice").addEventListener("click", () => { ui.boltVoice = !ui.boltVoice; saveUi(); if (!ui.boltVoice) boltHush(); renderBolt(); });
 $("radioAsk").addEventListener("click", () => setPanel("bolt", !ui.bolt));
 
 // ================= conquering =================

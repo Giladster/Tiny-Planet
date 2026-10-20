@@ -65,3 +65,10 @@ Players can type or talk to Bolt (💬 on the radio, or Talk → 🤖 Ask Bolt).
 1. Get an API key at console.anthropic.com.
 2. Render → your service → Environment → add `ANTHROPIC_API_KEY` with that key.
 Without it, Bolt still answers common questions from built-in tips. Each player can ask up to 60 questions an hour.
+
+## Bolt's voice (ElevenLabs)
+Bolt reads his radio lines out loud. With an ElevenLabs key he uses a real AI voice; without one he uses the browser's voice.
+1. Make a free account at elevenlabs.io → Profile → API Keys → Create key.
+2. Render → your service → Environment → add `ELEVENLABS_API_KEY` with that key.
+3. Optional: `ELEVENLABS_VOICE` = another voice ID from the ElevenLabs voice library (default "Brian").
+Lines are cached on the server, and each player can make up to 40 new lines every 10 minutes, so credits last.
