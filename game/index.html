@@ -806,6 +806,14 @@ const sfx = (() => {
   }
   const bufs = {}; // recorded sounds from game/sounds, loaded once
   function loadBuf(name) { return bufs[name] ??= fetch("sounds/" + name).then((r) => r.arrayBuffer()).then((b) => ac.decodeAudioData(b)).catch(() => null); }
+  const ready = {}; // decoded sounds that can play right now
+  const WEAPON_SOUNDS = ["weapons/laser.mp3", "weapons/gatling-loop.wav", "weapons/black-hole.mp3"];
+  function sample(name, vol, at, rate = 1, rev = .25) { // play a recorded sound; false if it isn't loaded yet (then the code-made one plays)
+    const b = ready[name]; if (!b) { loadBuf(name).then((d) => { if (d) ready[name] = d; }); return false; }
+    const v = vol * near(at); if (v < .01) return true;
+    const s = ac.createBufferSource(); s.buffer = b; s.playbackRate.value = rate; const g = out(s, v, rev); s.start(); s.onended = () => g.disconnect(); return s;
+  }
+  let gat = null; // the gatling's looping roar while the trigger is held
   let mus = null, drone = null, voiceSrc = null; const playing = new Set();
   function playMusic(kind) { // quiet music for normal play, loud music only in a fight; only one plays, they cross-fade
     if (!ac || mus?.kind === kind) return;
@@ -820,6 +828,7 @@ const sfx = (() => {
     });
   }
   function startLoops() { // deep space hum, slow wind, the ship engine
+    for (const n of WEAPON_SOUNDS) loadBuf(n).then((d) => { if (d) ready[n] = d; });
     if (eng || !ac) return;
     const t = ac.currentTime + .05, LONG = 1e6;
     // drone
@@ -914,8 +923,15 @@ const sfx = (() => {
       const o = osc("sawtooth", 55, 160, t, .5), og = env(gain(), t, .01, .6); o.connect(filt("lowpass", 900, 900, t, 1)).connect(shaper(4)).connect(og); out(og, .1, .2);
       const s = osc("sine", 70, 38, t, .35), sg = env(gain(), t, .005, .35); s.connect(sg); out(sg, .22, .1);
     },
-    gatling() { // a fast, chunky plasma rattle
-      if (!ok()) return; const t = ac.currentTime; if (t - lastGat < .035) return; lastGat = t;
+    gatling() { // a fast, chunky plasma rattle: a recorded plasma gun that loops while you hold the trigger
+      if (!ok()) return; const t = ac.currentTime;
+      if (gat || ready["weapons/gatling-loop.wav"]) {
+        if (!gat) { const s = ac.createBufferSource(); s.buffer = ready["weapons/gatling-loop.wav"]; s.loop = true; s.playbackRate.value = .95 + Math.random() * .1; const g = gain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .02); s.connect(g); const o = out(g, .2, .15); s.start(t, Math.random() * .8); gat = { s, g, o }; }
+        clearTimeout(gat.stop); const G = gat; G.stop = setTimeout(() => { if (gat !== G) return; gat = null; const e = ac.currentTime; G.g.gain.setTargetAtTime(.0001, e, .04); G.s.stop(e + .25); setTimeout(() => G.o.disconnect(), 400); }, 110);
+        return;
+      }
+      loadBuf("weapons/gatling-loop.wav").then((d) => { if (d) ready["weapons/gatling-loop.wav"] = d; });
+      if (t - lastGat < .035) return; lastGat = t;
       const o = osc("square", 260 + Math.random() * 40, 90, t, .06), g = env(gain(), t, .001, .06); o.connect(filt("lowpass", 2400, 500, t, .06, 3)).connect(shaper(4)).connect(g); out(g, .05, .1);
       const n = noise(t, .04, 1.6), nb = filt("bandpass", 3500, 1800, t, .04, 1.2), ng = env(gain(), t, .001, .04); n.connect(nb).connect(ng); out(ng, .07, .1);
     },
@@ -952,6 +968,8 @@ const sfx = (() => {
     gravityThrow() { if (!ok()) return; const t = ac.currentTime; const o = osc("sine", 110, 45, t, .6), g = env(gain(), t, .01, .6); o.connect(g); out(g, .3, .3); const w = osc("sine", 300, 120, t, .6), wg = env(gain(), t, .01, .6); w.connect(wg); out(wg, .05, .6); },
     blackHole(at, dur) { // a deep, growing rumble while the black hole feeds
       if (!ok()) return; const t = ac.currentTime, v = Math.max(.25, near(at));
+      const rec = sample("weapons/black-hole.mp3", .75 * v, null, 4.6 / Math.max(3.6, dur), .5); // a recorded black hole roar, stretched to its life
+      if (rec) return;
       const o = osc("sawtooth", 32, 22, t, dur), lp = filt("lowpass", 180, 420, t, dur, 4), g = gain(); g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .4); g.gain.setValueAtTime(1, t + dur - .3); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
       const l = osc("sine", 6, 11, t, dur), lg = gain(); lg.gain.value = 120; l.connect(lg).connect(lp.frequency);
       o.connect(lp).connect(shaper(3)).connect(g); out(g, .16 * v, .5);
@@ -970,6 +988,7 @@ const sfx = (() => {
     equip() { if (!ok()) return; const t = ac.currentTime; for (const [d, f] of [[0, 300], [.07, 150]]) { const n = noise(t + d, .06, 1.4), b = filt("bandpass", 2000, 2000, t + d, 1, 2), g = env(gain(), t + d, .001, .06); n.connect(b).connect(g); out(g, .12, .1); const o = osc("square", f, f * .7, t + d, .06), og = env(gain(), t + d, .001, .06); o.connect(filt("lowpass", 900, 900, t, 1)).connect(og); out(og, .06, .1); } },
     laser() { // heavy laser cannon: a deep punch, a snarling energy blast, a plasma crack and a sizzle
       if (!ok()) return; const t = ac.currentTime; if (t - lastLaser < .06) return; lastLaser = t;
+      if (sample("weapons/laser.mp3", .55, null, .94 + Math.random() * .12, .3)) return; // a recorded blaster shot
       const th = osc("sine", 170, 38, t, .2), tg = env(gain(), t, .002, .2); th.connect(tg); out(tg, .32, .08);
       const f = 380 + Math.random() * 70, o1 = osc("sawtooth", f, 62, t, .24), o2 = osc("sawtooth", f * 1.012, 60, t, .24, -18), o3 = osc("square", f * .5, 40, t, .2);
       const lp = filt("lowpass", 5200, 260, t, .22, 5), g = env(gain(), t, .001, .22);
