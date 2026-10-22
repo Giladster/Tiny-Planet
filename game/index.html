@@ -187,8 +187,8 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #megaBar .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #6fe3ff, #ff5ad8, #ffd23f); }
 #megaBar.on { color: #ffd2f6; animation: megaPulse .4s ease-in-out infinite alternate; }
 @keyframes megaPulse { to { transform: translateX(-50%) scale(1.06); } }
-#navTag { position: fixed; z-index: 3; pointer-events: none; font: 12px var(--mono); color: #6fe3ff; background: rgba(8,10,26,.6); border: 1px solid rgba(111,227,255,.35); border-radius: 7px; padding: 3px 8px; white-space: nowrap; }
-#navTag b { color: #fff; margin-left: 4px; }
+#navTag { position: fixed; z-index: 3; pointer-events: none; font: 500 12px var(--mono); color: #c9fff4; background: linear-gradient(90deg, rgba(60,170,170,.35), rgba(140,110,220,.35)); border: 1px solid rgba(190,240,255,.35); border-radius: 999px; padding: 4px 11px; white-space: nowrap; transform: translateX(-50%); box-shadow: 0 0 14px rgba(140,230,255,.25); backdrop-filter: blur(4px); }
+#navTag b { color: #fff; margin-left: 4px; font-weight: 600; }
 #megaFx { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .6s; background: radial-gradient(ellipse at center, transparent 35%, rgba(90,40,160,.35) 70%, rgba(255,90,220,.45) 100%); }
 body.mega #megaFx { opacity: 1; }
 #mapGals { margin-bottom: 6px; }
@@ -1333,7 +1333,7 @@ varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5)
     m.position.copy(V(d).normalize()).multiplyScalar(2550); m.scale.setScalar(s); sky.add(m);
   }
   // the sun: a white-hot core, a soft warm glow around it, and a lens flare when you look at it
-  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(9, 8.4, 7.4), blending: THREE.AdditiveBlending, depthWrite: false }));
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(9, 8.4, 7.4), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
   core.position.copy(SUN_DIR).multiplyScalar(2400); core.scale.setScalar(70); sky.add(core);
   const SOFT = (() => { // light that fades fast and then lingers, like a real bright star
     const cv = document.createElement("canvas"); cv.width = cv.height = 256; const gx = cv.getContext("2d"), gr = gx.createRadialGradient(128, 128, 0, 128, 128, 128);
@@ -2388,7 +2388,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
       rocks.setColorAt(i, cc);
     }
     const core = new THREE.Mesh(new THREE.SphereGeometry(R * .22, 32, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 1.2, .4) }));
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(2, .7, .3), blending: THREE.AdditiveBlending, depthWrite: false }));
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(2, .7, .3), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
     glow.scale.setScalar(R * 2.2);
     grp.add(rocks, core, glow); grp.rotation.set(rnd(-.4, .4), 0, rnd(-.4, .4));
     this.group.add(grp);
@@ -2896,7 +2896,7 @@ function makeShipParts(c, root) {
   if (A.heavy === "torpedo") for (const s of hmk >= 2 ? [-1, 1] : [0]) { const x = s * (side + .045), y = s ? -.02 : -top * .6 - .04; add(new THREE.CylinderGeometry(.02, .022, .17, 14), trim, [x, y, -.01], [H, 0, 0]); add(new THREE.SphereGeometry(.017, 14, 10), coil, [x, y, .075]); Hm.push([x, y, .09]); }
   if (A.heavy === "drones") for (const s of [-1, 1]) { const d = add(new THREE.ConeGeometry(.035, .08, 3), dark, [s * (side + .06), .01, -.03], [H, 0, 0]); d.add(new THREE.Mesh(new THREE.SphereGeometry(.009, 8, 6), redGlow)); d.children[0].position.set(0, .03, .012); Hm.push([s * (side + .06), .01, 0]); }
   if (A.heavy === "gravity") { add(new THREE.TorusGeometry(.045, .006, 8, 24), dark, [0, -top - .02, -.02], [H, 0, 0]); add(new THREE.SphereGeometry(.033, 18, 12), new THREE.MeshBasicMaterial({ color: 0x050008 }), [0, -top - .02, -.02]); add(new THREE.TorusGeometry(.037, .004, 6, 24), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, .6, 3.5) }), [0, -top - .02, -.02], [H, 0, 0]); Hm.push([0, -top - .05, -.02]); }
-  if (ex.has("shield")) add(new THREE.SphereGeometry(.36 * W, 48, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(.25, .7, 1), transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthWrite: false }));
+  if (ex.has("shield")) add(new THREE.SphereGeometry(.36 * W, 48, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(.25, .7, 1), transparent: true, opacity: .05, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
   // ---- engines: nozzle, glowing ring, flame
   const n = c.engines || 1;
   for (let i = 0; i < n; i++) {
@@ -2905,7 +2905,7 @@ function makeShipParts(c, root) {
     add(new THREE.TorusGeometry(.027, .006, 8, 24), glowMat, [x, 0, back - .03]);
     const f = add(flameGeo(c.flameShape), fireMat, [x, 0, back - .03], [-H, 0, 0]); f.name = "flame"; f.userData.fs = c.flameSize || 1; f.scale.setScalar(f.userData.fs);
   }
-  root.traverse((o) => { if (o.name === "navlight" && !o.children.length) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: o.material.color.clone().multiplyScalar(.5), blending: THREE.AdditiveBlending, depthWrite: false })); h.scale.setScalar(.09); o.add(h); } }); // blinking lights glow into the dark
+  root.traverse((o) => { if (o.name === "navlight" && !o.children.length) { const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: o.material.color.clone().multiplyScalar(.5), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false })); h.scale.setScalar(.09); o.add(h); } }); // blinking lights glow into the dark
   root.scale.setScalar(c.size);
   const info = { muzzles: muzzles.map((m) => V(m)), gunMuzzle: gunMuzzle && V(gunMuzzle), heavyMuzzles: Hm.map((m) => V(m)), len: (nose - back) * c.size * 1.05, radius: (side + .1) * c.size, mi: 0, fireMat, flameCol: new THREE.Color(c.flame).multiplyScalar(1.6), boostCol: new THREE.Color(c.boost || c.flame).multiplyScalar(2) };
   collectParts(root, info);
@@ -3117,7 +3117,7 @@ function makeBlackHole(size) {
   const disk = new THREE.Mesh(new THREE.RingGeometry(1.1, 3.3, 160, 1), diskMat); disk.rotation.x = -1.1;
   const core = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
   const halo = new THREE.Mesh(new THREE.TorusGeometry(1.05, .03, 12, 96), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.4, 1.6) }));
-  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(.5, .2, .9), blending: THREE.AdditiveBlending, depthWrite: false })); glow.scale.setScalar(8);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(.5, .2, .9), blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false })); glow.scale.setScalar(8);
   g.add(glow, disk, core, halo); g.userData = { diskMat }; g.scale.setScalar(size);
   const putModel = () => { const m = BLACK_HOLE.scene.clone(true); m.rotation.x = .9; g.add(m); disk.visible = halo.visible = false; };
   if (BLACK_HOLE.scene) putModel(); else { BLACK_HOLE.waiting.push(putModel); loadBlackHole(); }
@@ -4814,15 +4814,36 @@ function renderMapCard() {
   $("mcMail").addEventListener("click", () => openMail(p));
   el.querySelector("img.shot").src = planetShot(p); fillFig(el.querySelector("img.fig"), kind);
 }
+// soft, rounded "paper plane" chevron with two fading echoes and a gentle glow
+function makeNavArrow() {
+  const g = new THREE.Group(), r = .035;
+  const sh = new THREE.Shape(); // tip at +y, rounded corners, soft notch at the back
+  sh.moveTo(0, .2 - r); sh.quadraticCurveTo(0, .2, r * .8, .2 - r * 1.3);
+  sh.lineTo(.15 - r * .5, -.09 + r * .6); sh.quadraticCurveTo(.15, -.11, .15 - r * 1.2, -.11);
+  sh.quadraticCurveTo(0, .03, -.15 + r * 1.2, -.11); sh.quadraticCurveTo(-.15, -.11, -.15 + r * .5, -.09 + r * .6);
+  sh.lineTo(-r * .8, .2 - r * 1.3); sh.quadraticCurveTo(0, .2, 0, .2 - r);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: .012, bevelEnabled: true, bevelThickness: .018, bevelSize: .016, bevelSegments: 5, curveSegments: 12 });
+  geo.center(); geo.rotateX(Math.PI / 2); // lie flat, tip points to +z (lookAt direction)
+  const cols = [0x5ff0cf, 0x72bcff, 0xb894ff]; // mint, sky, lavender
+  g.userData.parts = cols.map((c, i) => {
+    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: .35, roughness: .3, metalness: 0, transparent: true, opacity: 1 - i * .3, depthTest: false, depthWrite: false }));
+    m.scale.setScalar(1 - i * .22); m.position.z = -i * .2; m.renderOrder = 53 - i; g.add(m); return m; // drawn on top, front arrow last
+  });
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x9ff0ff, transparent: true, opacity: .35, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
+  glow.scale.setScalar(.8); glow.position.z = -.12; glow.renderOrder = 50; g.add(glow); g.userData.glow = glow;
+  scene.add(g); return g;
+}
+function animNavArrow(t) {
+  const { parts, glow } = navArrow.userData;
+  parts.forEach((m, i) => { // a soft wave runs from the back echo to the front
+    const w = .5 + .5 * Math.sin(t * 3.2 - i * 1.1);
+    m.position.z = -i * .2 + w * .03; m.material.opacity = i ? (.55 - i * .15) + w * .3 : 1; m.material.emissiveIntensity = .3 + w * .25;
+  });
+  glow.material.opacity = .25 + .12 * Math.sin(t * 2.4);
+}
 function setNav(p) {
   nav = p;
-  if (!navArrow) {
-    navArrow = new THREE.Group();
-    const mat = new THREE.MeshStandardMaterial({ color: 0x6fe3ff, emissive: 0x2fb8e0, emissiveIntensity: .9, roughness: .4 });
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.035, .035, .3, 16), mat); shaft.rotation.x = Math.PI / 2; shaft.position.z = .05;
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(.09, .2, 24), mat); tip.rotation.x = Math.PI / 2; tip.position.z = .29;
-    navArrow.add(shaft, tip); scene.add(navArrow);
-  }
+  if (!navArrow) navArrow = makeNavArrow();
   navArrow.visible = !!p && mode === "fly";
   $("navHud").hidden = !p; if (p) $("navName").textContent = p.data.name;
   if (p) toast(`🧭 Follow the arrow to ${esc(p.data.name)}`);
@@ -6372,7 +6393,7 @@ const ARM_FIRE = {
       if (enemyish(n)) n.damage(10 * dmgBoost());
     }
     for (let i = npcBolts.length - 1; i >= 0; i--) if (npcBolts[i].obj.position.distanceTo(at) < R) { spark(npcBolts[i].obj.position, .3, BLUE); scene.remove(npcBolts[i].obj); npcBolts[i].obj.geometry.dispose(); npcBolts.splice(i, 1); }
-    const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 1.4, 3.5), wireframe: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 3), new THREE.MeshBasicMaterial({ color: new THREE.Color(.4, 1.4, 3.5), wireframe: true, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }));
     const sh2 = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(.15, .5, 1.4), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide }));
     sh.position.copy(at); sh2.position.copy(at); scene.add(sh, sh2);
     addFx(.7, (k) => { const r = R * (1 - (1 - k) ** 3); sh.scale.setScalar(r); sh2.scale.setScalar(r); sh.rotation.y = k * 2; sh.material.opacity = (1 - k) ** 1.5; sh2.material.opacity = (1 - k) ** 2 * .6; }, () => { scene.remove(sh, sh2); sh.geometry.dispose(); sh.material.dispose(); sh2.geometry.dispose(); sh2.material.dispose(); });
@@ -6714,8 +6735,9 @@ function flyStep(dt) {
     $("navDist").textContent = fmt(dd * 1000) + " km";
     navArrow.visible = true;
     navArrow.position.copy(ship.position).addScaledVector(headUp, ship.userData.len * .7 + .08);
-    navArrow.lookAt(nav.group.position); navArrow.scale.setScalar(.45 + size * .3);
-    { const tp = navArrow.position.clone().project(camera), el = $("navTag"); el.hidden = tp.z > 1; el.style.left = (tp.x + 1) / 2 * innerWidth + 30 + "px"; el.style.top = (1 - tp.y) / 2 * innerHeight - 14 + "px"; el.innerHTML = `🧭 ${esc(nav.data.name)} <b>${fmt(dd * 1000)} km</b>`; }
+    navArrow.up.subVectors(camera.position, navArrow.position).normalize(); // roll its flat face toward the camera
+    navArrow.lookAt(nav.group.position); navArrow.scale.setScalar(.55 + size * .35); animNavArrow(clock());
+    { const tp = navArrow.position.clone().project(camera), el = $("navTag"); el.hidden = tp.z > 1; el.style.left = (tp.x + 1) / 2 * innerWidth + "px"; el.style.top = (1 - tp.y) / 2 * innerHeight + 46 + "px"; el.innerHTML = `🧭 ${esc(nav.data.name)} <b>${fmt(dd * 1000)} km</b>`; }
     if (dd < nav.R * 5 && !nav.quiet) { toast(`🎯 You reached ${esc(nav.data.name)}!`); setNav(null); }
   }
   const tgt = currentTarget(); $("target").hidden = !tgt;
