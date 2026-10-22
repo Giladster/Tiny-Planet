@@ -3207,7 +3207,7 @@ function setView(v) {
 }
 function goMain() { // Esc and the Home button: straight back to the normal view
   if (mode === "fly") return land();
-  if (mode === "walk") return takeOff();
+  if (mode === "walk") return walk.p === home ? walkHome() : takeOff();
   if (mode !== "home") return;
   ui.map = ui.mail = ui.chat = ui.pranks = ui.god = false;
   setView("main");
@@ -3965,8 +3965,8 @@ function makeMoon(at) {
 }
 // ---- the steps
 const TUT = [
-  { goal: () => "Press 🚀 Fly to take off",
-    enter() { radio("We made it, explorer! 🎉 Welcome to the busiest galaxy there is. Look at all those planets!"); radio("This tiny planet is ours now. I'll stay here and build, you go fly. Hit 🚀 Fly when you're ready!"); },
+  { goal: () => "Press 🚀 Take off to fly",
+    enter() { radio("We made it, explorer! 🎉 Welcome to the busiest galaxy there is. Look at all those planets!"); radio("This tiny planet is ours now. I'll stay here and build, you go fly. Hit 🚀 Take off (or Enter) when you're ready!"); },
     on: (ev) => ev === "fly" },
   { goal: (s) => `Fly through the scan rings · ${s.n} / 3`, fly: true,
     enter(s) {
@@ -5386,7 +5386,7 @@ class RemoteShip {
   }
   setCfg(cfg) { if (!cfg) return; const k = JSON.stringify(cfg); if (k === this.cfgKey) return; this.cfgKey = k; this.info = makeShipModel(cfg, this.model); }
   setState(s) {
-    this.name = s.name; this.hp = s.hp ?? 100; this.lv = s.lv || 1; this.seen = clock();
+    this.name = s.away ? s.name + " 💤" : s.name; this.away = !!s.away; this.hp = s.hp ?? 100; this.lv = s.lv || 1; this.seen = clock();
     this.tp.fromArray(s.p).sub(WORLD_OFFSET); this.tq.fromArray(s.q);
     if (!this.placed) { this.group.position.copy(this.tp); this.group.quaternion.copy(this.tq); this.placed = true; }
   }
@@ -5444,8 +5444,9 @@ function setupNet() {
   });
   net.on("chat", (m) => { state.chat.push(m.msg); if (state.chat.length > 120) state.chat.shift(); renderChat(); if (!ui.chat && m.msg.who !== net.me?.name) toast(`💬 ${esc(m.msg.who)}: ${esc(m.msg.text)}`, "", 3500); });
   net.on("ships", (m) => {
-    friendsSeen(m.ships.map((s) => s.pid));
-    net.count = m.ships.length + (m.ships.some((s) => s.pid === net.me?.id) ? 0 : 1); setPill();
+    const live = m.ships.filter((s) => !s.away); // ships with nobody on board are flying home by themselves
+    friendsSeen(live.map((s) => s.pid));
+    net.count = live.length + (live.some((s) => s.pid === net.me?.id) ? 0 : 1); setPill();
     for (const s of m.ships) {
       if (!net.me || s.pid === net.me.id) continue;
       let r = remotes.get(s.pid); if (!r) { r = new RemoteShip(s.pid); remotes.set(s.pid, r); }
@@ -5454,6 +5455,7 @@ function setupNet() {
   });
   net.on("shipCfg", (m) => { (net.players[m.pid] ||= { id: m.pid }).ship = m.ship; remotes.get(m.pid)?.setCfg(m.ship); });
   net.on("left", (m) => remotes.get(m.pid)?.remove());
+  net.on("shipBoom", (m) => { const r = remotes.get(m.pid); if (!r) return; boom(r.group.position, 2.5); sfx.boom(3, r.group.position); r.remove(); }); // a ship flying home alone was shot down
   net.on("hurt", (m) => { if (mode !== "fly") return; const by = [...remotes.values()].find((r) => r.name === m.by); if (by && !pvpOk(by)) return; hurtPlayer(m.dmg, by); if (shipHp <= 0) toast(`💥 ${esc(m.by)} destroyed your ship!`, "boom", 3000); });
   net.on("shot", (m) => remoteShot(m));
   net.on("godNo", (m) => toast(m.why === "nokey" ? "⚡ God mode is off on this server. In Render → Environment, add ADMIN_KEY with a secret word, then try again." : "⚡ Wrong god key.", "boom", 6000));
@@ -5529,6 +5531,7 @@ function enterWorld(you, world) {
   $("resetAsk").textContent = "Reset my planet";
   restoreWallet(you.wallet);
   startGame();
+  if (you.lost) setTimeout(() => toast(`💥 While you were away, ${esc(you.lost.by)} shot down your ship on its way home. Bolt fixed it!`, "boom", 7000), 1500);
   toast(`🌍 Welcome, ${esc(you.name)}! This galaxy is live: other players can visit you.`, "", 5000);
 }
 
@@ -6905,7 +6908,7 @@ function loadAvatar() {
     avatar.root = new THREE.Group(); avatar.root.add(inner); avatar.root.visible = false; scene.add(avatar.root);
     avatar.mixer = new THREE.AnimationMixer(inner);
     for (const a of gl.animations) avatar.acts[a.name] = avatar.mixer.clipAction(a);
-    if (walk && (walk.phase === "exit" || walk.phase === "walk")) { avatar.root.visible = true; avatarPlay("cheer"); } // it finished loading after you landed
+    if (walk && (walk.phase === "exit" || walk.phase === "walk")) { walk.as = avatar.k * walk.u / .21 * 1.05; avatar.root.visible = true; avatarPlay("cheer"); } // it finished loading after you landed (or you started on the ground)
   }, undefined, () => { avatar.loading = false; });
 }
 function avatarPlay(name, rate = 1) {
@@ -7074,7 +7077,7 @@ function modelWorld(b) { // a downloaded 3D planet you can land on: it gets the 
   w.dispose = () => g.group.remove(anchor);
   return w;
 }
-function startLanding(p) {
+function startLanding(p, parked) { // parked: you start the game already on the ground (no landing show)
   if (mode !== "fly" || playerDead || !p) return;
   if (p.isBody) { p.g.group.updateMatrixWorld(true); p = modelWorld(p); }
   loadAvatar();
@@ -7102,6 +7105,7 @@ function startLanding(p) {
     dust: [dustK.r, dustK.g, dustK.b], ringT: 0, obs: obstacles(p), bubbles: [], chatT: 3, stepT: 0 };
   walk.obs.push({ n: n.clone(), r: L * s * .42, ship: true });
   if (p.model) p.populate(n, u, L * s * 1.3);
+  if (parked) { walk.parked = true; return; }
   clearLines(); radio(`🛬 Landing on ${p.data.name}. Hold on, I'll fire the landing thrusters!`);
   sfx.airRush(2.6); setTimeout(() => mode === "landing" && sfx.padRoar(3.8), 2300);
   missionEvent("visit", p.data.id || p.data.name);
@@ -7238,7 +7242,7 @@ function landingStep(dt) {
       w.as = avatar.k * w.u / .21 * 1.05;
       if (avatar.root) { avatar.root.visible = true; avatarPlay("cheer"); }
       boltBot.visible = true; boltBot.scale.setScalar(.001); boltBot.position.copy(ship.position);
-      sfx.beam(false);
+      if (!w.parked) sfx.beam(false);
     }
   } else if (w.phase === "exit") {
     const k = Math.min(1, w.t / X), e = ss(0, .7, k);
@@ -7284,8 +7288,34 @@ function boltFollow(dt, grow = 1) {
 function startWalking() {
   const w = walk; w.phase = "walk"; w.t = 0; mode = "walk"; document.body.classList.remove("flying"); document.body.classList.add("walking");
   walkLook.set(0, 0); w.camNow = null;
+  if (w.parked) { w.parked = false; radio(`Welcome home to ${w.p.data.name}! Walk with W A S D, say hi with E. Press 🚀 Take off (Enter) to fly, or ⌂ Home to build.`); w.boltTalkUntil = clock() + 4; renderPanels(); return; }
   radio(`We're on ${w.p.data.name}! Walk with W A S D, run with Shift, jump with Space. Go say hi with E. Press Enter to take off.`); w.boltTalkUntil = clock() + 4;
   renderPanels(); tutEvent("land");
+}
+function startLanded(p) { // every time you log in you start on your own planet, standing next to your parked ship
+  if (!p || walk || mode !== "home") return;
+  placeOrbit(orbitT); vel.set(0, 0, 0); controls.enabled = false; mode = "fly";
+  startLanding(p, true);
+  if (!walk) { mode = "home"; controls.enabled = true; return; }
+  const w = walk; setWalkLook(true); walkSky.material.uniforms.k.value = 1;
+  w.phase = "settle"; w.t = 99; landingStep(0); // the ship is parked on the ground and you pick a spot beside it
+  w.phase = "exit"; w.t = 99; w.landedPuff = true; landingStep(0); // you stand there, then start walking
+  const toShip = w.n.clone().sub(w.pn).projectOnPlane(w.pn).normalize(); // look past your ship, so you see it first
+  if (toShip.lengthSq() > .5) w.cf.copy(toShip.applyAxisAngle(w.pn, .9)); w.camNow = null;
+  boltFollow(9); loadBlackHole();
+}
+function walkHome() { // ⌂ Home while on your own planet: step back to the planet view to build and design
+  const w = walk; if (!w || mode !== "walk") return;
+  if (document.pointerLockElement) document.exitPointerLock();
+  w.p.visitor = null; setWalkLook(false); clearLines(); walk = null; keys.clear();
+  walkSky.visible = false; walkSky.material.uniforms.k.value = 0; walkLight.intensity = 0; NEAR_FADE.value = 1;
+  if (avatar.root) avatar.root.visible = false; boltBot.visible = false; jets.hide();
+  document.body.classList.remove("walking", "flying");
+  mode = "home"; view = "main"; ship.scale.setScalar(1); model.quaternion.identity(); model.position.set(0, 0, 0); placeOrbit(orbitT);
+  const dist = viewDistance(); camera.up.set(0, 1, 0); camera.position.set(0, dist * .22, dist); controls.target.set(0, 0, 0);
+  controls.minDistance = home.R * 1.5; controls.maxDistance = 45; controls.enabled = true; controls.update();
+  camera.fov = 55; camera.updateProjectionMatrix();
+  renderPanels();
 }
 function walkStep(dt) {
   const w = walk, p = w.p, k = (c) => keys.has(c);
@@ -7435,7 +7465,7 @@ function resumeFlying(v) {
   vel.copy(v || new THREE.Vector3()); camPos.copy(camera.position).sub(ship.position); camFx.spd = null; camFx.acc = camFx.push = camFx.kick = 0; camFx.up.copy(camera.up); camFx.look.set(0, 0);
   $("flyHud").hidden = false; $("crosshair").hidden = false; $("weapons").hidden = false;
   if (navArrow) navArrow.visible = !!nav;
-  renderWeapons(); renderPanels();
+  renderWeapons(); renderPanels(); tutEvent("fly");
 }
 function leaveNow() { // the planet blew up or changed under you: Bolt beams you straight back into the ship
   const w = walk; if (w) ship.position.copy(w.p.group.position).addScaledVector(toWorldDir(w.p, w.n || UP), w.p.R * 2.5 + 2);
@@ -7515,6 +7545,7 @@ function startGame() {
   buildWorld(); buildShip(); spawnNpcs(); renderDesign(); renderHangar(); renderMail(); renderChat(); renderInfo(); renderPanels(); applyQuality();
   { const dist = viewDistance(); camera.position.set(0, dist * .22, dist); }
   buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter(); gameInit();
+  startLanded(home); // you always start on your own planet, next to your ship
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
 window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer, radio };

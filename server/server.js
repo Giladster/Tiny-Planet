@@ -123,7 +123,7 @@ wss.on("connection", (ws) => {
   });
   ws.on("close", () => {
     const c = clients.get(ws); clients.delete(ws);
-    if (c && c.player) { c.player.lastSeen = Date.now(); markPlayer(c.player); broadcast({ t: "left", pid: c.player.id }); }
+    if (c && c.player) { c.player.lastSeen = Date.now(); markPlayer(c.player); if (!socketOf(c.player.id) && !flyHomeAlone(c.player, c.ship)) broadcast({ t: "left", pid: c.player.id }); }
   });
 });
 
@@ -132,10 +132,11 @@ function handle(ws, c, m) {
   switch (m.t) {
     case "hello": { // returning players send their secret token
       const p = Object.values(world.players).find((x) => x.token && x.token === m.token);
-      if (p && world.planets[p.planetId]) { c.player = p; p.lastSeen = Date.now(); markPlayer(p); }
+      if (p && world.planets[p.planetId]) { c.player = p; p.lastSeen = Date.now(); delete p.away; markPlayer(p); } // you are back: you start on your planet again
       if (process.env.ADMIN_KEY && typeof m.god === "string" && m.god === process.env.ADMIN_KEY) { c.god = true; send(ws, { t: "god" }); } // only the game owner knows this key
       if (c.player && c.player.pending) { send(ws, { t: "paid", amount: c.player.pending, from: "Ransoms" }); c.player.pending = 0; markPlayer(c.player); }
-      send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId), boltAi: boltReady });
+      const lost = c.player && c.player.lost; if (lost) { delete c.player.lost; markPlayer(c.player); }
+      send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null, lost: lost || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId), boltAi: boltReady });
       break;
     }
     case "seed": { // the very first visitor fills the empty galaxy with the starting planets
@@ -257,7 +258,7 @@ function handle(ws, c, m) {
       break;
     }
     case "godShield": { if (!c.god || !mine) return; mine.shield = !!m.on; markPlanet(mine); break; }
-    case "pvp": { if (!me) return; const target = socketOf(m.target); if (target) send(target, { t: "hurt", dmg: Math.min(60, +m.dmg || 0), by: me.name }); break; }
+    case "pvp": { if (!me) return; const target = socketOf(m.target); if (target) send(target, { t: "hurt", dmg: Math.min(60, +m.dmg || 0), by: me.name }); else hitAway(world.players[m.target], Math.min(60, +m.dmg || 0), me); break; }
   }
 }
 function uniqueNameFor(planet, name) { const n = name.trim() || planet.name; return n.toLowerCase() === planet.name.toLowerCase() ? n : uniqueName(n); }
@@ -272,9 +273,40 @@ setInterval(() => {
     for (const k of gone) broadcast({ t: "unprank", id: p.id, pid: k.id });
   }
 }, 60000);
-// ships of everyone online, 10 times a second
+// ---------------- ships flying home on their own ----------------
+// When you log off out in space, your ship flies itself home. Others still see it and can shoot it down.
+const FLY_HOME_SPEED = 30, FLY_HOME_MAX_S = 180; // it gets home in 3 minutes at most, even from far away
+function flyHomeAlone(p, s) {
+  const home = world.planets[p.planetId]; if (!home || !s || !Array.isArray(s.p) || !(s.hp > 0)) return false;
+  const d = Math.hypot(s.p[0] - home.pos[0], s.p[1] - home.pos[1], s.p[2] - home.pos[2]);
+  if (!(d > 12)) return false; // already home
+  p.away = { p: s.p.map(Number), q: s.q, hp: s.hp, lv: s.lv || 1, speed: Math.max(FLY_HOME_SPEED, d / FLY_HOME_MAX_S) };
+  markPlayer(p); return true;
+}
+function hitAway(p, dmg, by) {
+  const a = p && p.away; if (!a || socketOf(p.id)) return;
+  a.hp -= dmg; markPlayer(p); if (a.hp > 0) return;
+  delete p.away; p.lost = { by: by.name, at: Date.now() };
+  broadcast({ t: "shipBoom", pid: p.id, by: by.name });
+  broadcast({ t: "chat", msg: { who: "💥", text: `${by.name} shot down ${p.name}'s ship while it was flying home!`, t: clockStr() } });
+}
+function awayStep(dt) {
+  const out = [];
+  for (const p of Object.values(world.players)) {
+    const a = p.away; if (!a) continue;
+    const home = world.planets[p.planetId]; if (!home) { delete p.away; continue; }
+    const dx = home.pos[0] - a.p[0], dy = home.pos[1] - a.p[1], dz = home.pos[2] - a.p[2], d = Math.hypot(dx, dy, dz);
+    if (d < 6) { delete p.away; markPlayer(p); broadcast({ t: "left", pid: p.id }); continue; } // home: it lands and waits for you
+    const k = Math.min(1, a.speed * dt / d); a.p = [a.p[0] + dx * k, a.p[1] + dy * k, a.p[2] + dz * k].map((x) => +x.toFixed(2));
+    const w = 1 + dz / d; a.q = w < 1e-4 ? [0, 1, 0, 0] : (() => { const x = -dy / d, y = dx / d, n = Math.hypot(x, y, w); return [x / n, y / n, 0, w / n].map((v) => +v.toFixed(3)); })(); // nose toward home
+    markPlayer(p);
+    out.push({ pid: p.id, name: p.name, p: a.p, q: a.q, f: true, hp: Math.max(0, Math.round(a.hp)), lv: a.lv, away: true });
+  }
+  return out;
+}
+// ships of everyone online (and the ones flying home), 10 times a second
 setInterval(() => {
-  const ships = [...clients.values()].map((c) => c.ship).filter(Boolean);
+  const ships = [...clients.values()].map((c) => c.ship).filter(Boolean).concat(awayStep(.1));
   if (ships.length) broadcast({ t: "ships", ships });
 }, 100);
 // troops slowly take over planets, even when nobody is looking
