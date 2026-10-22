@@ -371,7 +371,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="group" data-tab="people"><span class="label">Your people</span>
     <div class="choice" id="peopleKinds"></div>
     <label class="slider">People size<input type="range" id="pp-size" min="0.6" max="2.2" step="0.05"></label>
-    <span class="small">Creatures by Quaternius (CC0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
+    <span class="small">Creatures by Quaternius (CC0), Zorgons made with Meshy AI (CC BY 4.0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
   </div>
 </section>
 
@@ -1765,12 +1765,14 @@ const SPECIES_VOICE = {
   buzzer:   { w: "sawtooth", f: 160, r: .1, fm: 1200, q: 3,   syl: [1, 2], len: .3,  vib: 55, vd: .08, buzz: .8 },
   alpaking: { w: "triangle", f: 520, r: .1, fm: 1200, q: 2,   syl: [1, 2], len: .35, vib: 7, vd: .06, end: .85, vol: 1.5 },
   dragon:   { w: "sawtooth", f: 300, r: .3, fm: 1300, q: 2,   syl: [1, 3], len: .22, buzz: .5, end: 1.4, vol: 1.2 },
+  zorg:     { w: "sine",     f: 620, r: .2, fm: 1100, q: 2,   syl: [2, 3], len: .2,  vib: 6, vd: .12, rev: .7, end: 1.25 },
 };
 // the people of each planet are real animated creatures (Quaternius, CC0): models/creatures/<kind>.glb with clips walk, idle, cheer (and run)
-const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Little imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons" };
+const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Little imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons", zorg: "Zorgons" };
+const REAL_KINDS = new Set(["zorg"]); // realistic models (made with Meshy AI): full photo textures, not color palettes
 const FLOATERS = new Set(["sprout", "stack", "ghost", "wisp", "squidle", "glub", "buzzer", "alpaking", "dragon"]); // they hover instead of walking
 const OLD_KINDS = { human: "frog", green: "greys", robot: "bee", cyclops: "sprout", cat: "panda", bunny: "pinkblob", blob: "pinkblob" }; // older saves
-const PLANET_KINDS = { Bubblegum: "pinkblob", "Gouda Prime": "mushroom", Melonia: "frog", Inferno: "imp", "Disco Fever": "flamingo", Gloop: "glub", Frostbite: "yeti", "Terra Nova": "panda", "Zorg Prime": "greys", "Krell Station": "dino",
+const PLANET_KINDS = { Bubblegum: "pinkblob", "Gouda Prime": "mushroom", Melonia: "frog", Inferno: "imp", "Disco Fever": "flamingo", Gloop: "glub", Frostbite: "yeti", "Terra Nova": "panda", "Zorg Prime": "zorg", "Krell Station": "dino",
   Jellyheart: "squidle", Cubix: "stack", Spikestar: "dragon", "Eyeball Prime": "sprout", "Twin Bean": "spikecap", "Mirror Pear": "ghost", "Void Potato": "wisp", "Rainbow Disc": "buzzer" };
 const CROWD_FRAMES = { walk: 10, run: 8, idle: 8, cheer: 10 };
 const crowdKits = {};
@@ -1780,8 +1782,8 @@ function crowdKit(kind) { // load a creature once and bake its clips into still 
   new GLTFLoader().load("models/creatures/" + kind + ".glb", (gl) => {
     const root = gl.scene, mixer = new THREE.AnimationMixer(root), meshes = [];
     root.traverse((o) => { if (o.isMesh) meshes.push(o); });
-    const src = meshes[0].material, mat = new THREE.MeshStandardMaterial({ map: src.map, color: src.color, roughness: .7, metalness: 0, envMapIntensity: .4, emissiveMap: src.map, emissive: new THREE.Color(.22, .22, .22) }); // a little glow of their own so they still read in shade
-    if (src.map) { src.map.generateMipmaps = false; src.map.minFilter = src.map.magFilter = THREE.NearestFilter; } // a small color palette: no blurring the colors together far away
+    const src = meshes[0].material, real = REAL_KINDS.has(kind), mat = new THREE.MeshStandardMaterial({ map: src.map, color: src.color, normalMap: real ? src.normalMap : null, roughness: real ? .6 : .7, metalness: 0, envMapIntensity: .4, emissiveMap: src.map, emissive: new THREE.Color(.22, .22, .22) }); // a little glow of their own so they still read in shade
+    if (src.map && !real) { src.map.generateMipmaps = false; src.map.minFilter = src.map.magFilter = THREE.NearestFilter; } // a small color palette: no blurring the colors together far away
     const bake = () => { // every mesh's vertices as they are posed right now, in one geometry
       root.updateMatrixWorld(true);
       const pos = [], uv = [], idx = []; const v = new THREE.Vector3();
@@ -4635,7 +4637,7 @@ const kindOf = (p) => (p.crowd ? p.crowd.kind : peopleStyle(p.data).kind);
 const SPECIES_HINT = { greys: "big-eyed green folks who love to wave", frog: "frogs walking around in space suits", bee: "buzzing bugs in space suits", flamingo: "pink long-necked astronauts", panda: "fluffy red explorers in space suits",
   dino: "little purple lizards with fangs", imp: "red horned troublemakers", mushroom: "walking mushrooms", spikecap: "mushrooms with spikes that bite", pinkblob: "giant pink jelly blobs", wizard: "blobs in wizard hats", yeti: "big furry snow monsters",
   sprout: "one-horned green floaters", stack: "aliens stacked on top of each other", ghost: "shadowy ghosts with pointy ears", wisp: "purple floaty things with spikes", squidle: "flying squids with wings", glub: "chubby birds with tiny wings",
-  buzzer: "giant flying bees", alpaking: "hooded flyers with one big eye", dragon: "baby dragons" };
+  buzzer: "giant flying bees", alpaking: "hooded flyers with one big eye", dragon: "baby dragons", zorg: "tall grey aliens with huge black eyes" };
 function spotPlanet(p) {
   wallet.found[p.data.name] = 1; saveWallet(); addXp(10);
   toast(`🔭 You spotted a new planet! It's on your map now.`, "", 2600);
@@ -6956,6 +6958,7 @@ const SPECIES_LINES = {
   sprout: ["I grow a little every day!", "Sunshine is my snack."], stack: ["We stack together!", "Beep boop, hello!"], ghost: ["Boo! Did I scare you?", "I'm not see-through, you are!"],
   wisp: ["Whooosh, hello!", "Catch me if you can!"], squidle: ["Eight arms to wave hi!", "Blub, the sky is nice today."], glub: ["Glub glub!", "Glub! (That means hi.)"],
   buzzer: ["Bzzzt! Welcome!", "I'm the fastest buzzer here!"], alpaking: ["Long live the king! That's me.", "Bow to the Alpaking!"], dragon: ["I can almost breathe fire!", "One day I'll be huge!"],
+  zorg: ["Greetings, earthling. We have been expecting you.", "Our eyes see in the dark. And in the light."],
 };
 const fillLine = (s, p) => s.replace(/\{planet\}/g, p.data.name).replace(/\{you\}/g, state.home.owner || "captain").replace(/\{other\}/g, () => { const o = planets.filter((q) => q !== p && !q.data.wild); return o.length ? o[(Math.random() * o.length) | 0].data.name : "the moon"; });
 function walkLine(p, kind) {
