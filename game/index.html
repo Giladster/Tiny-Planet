@@ -622,7 +622,7 @@ const WINGS = { none: "None", swept: "Swept", delta: "Delta", forward: "Forward 
 const EXTRAS = { siren: "Police siren", flag: "Pirate flag", drill: "Drill", glow: "Glow strips", lights: "Wing lights", fins: "Tail fins", cannons: "Side cannons", turret: "Turret", spikes: "Spikes", antenna: "Antenna", spoiler: "Spoiler", shield: "Shield bubble", hat: "Party hat", eyes: "Googly eyes" };
 const FLAMES = { cone: "Cone", long: "Long jet", wide: "Wide", ball: "Plasma ball", twin: "Split", ring: "Ring" };
 const ARMS = { // weapons: one gun (click / L), one heavy weapon (F / right click) and one gadget (G). Levels unlock them, credits buy them, Mk 2 and Mk 3 make them stronger
-  pulse:   { slot: "gun",    label: "Pulse cannon",   icon: "🔴", lv: 1, cost: 0,    up: [120, 400],  cd: .1,  info: "fast energy bolts · Mk 2 twin barrels · Mk 3 three barrels" },
+  pulse:   { slot: "gun",    label: "Laser cannon",   icon: "🔴", lv: 1, cost: 0,    up: [120, 400],  cd: .1,  info: "fast laser shots · Mk 2 twin barrels · Mk 3 three barrels" },
   gatling: { slot: "gun",    label: "Gatling plasma", icon: "🟢", lv: 2, cost: 250,  up: [300, 700],  cd: .04, info: "spins up into a storm of plasma · don't let it overheat" },
   rail:    { slot: "gun",    label: "Rail gun",       icon: "🔵", lv: 3, cost: 500,  up: [450, 900],  cd: .5,  info: "hold to charge, let go: one huge shot that goes through ships" },
   arc:     { slot: "gun",    label: "Arc lightning",  icon: "⚡", lv: 5, cost: 900,  up: [700, 1400], cd: .11, info: "lightning that jumps from enemy to enemy" },
@@ -3791,7 +3791,7 @@ function hailOptions(t) {
   if (role === "trader" && type !== "racer") o.push(
     ["🔧 Repair my ship · 💰20", () => buy(20, () => { shipHp = 100; say("All fixed. Fly safe! 🔧"); })],
     ["📦 Buy a mystery crate · 💰40", () => buy(40, () => { const r = Math.random(), win = r < .35 ? 0 : r < .8 ? 70 : 160; if (win) earn(win, "mystery crate"); say(win ? `Lucky you! The crate had ${win} credits inside. 🎉` : "Oops… it was full of rubber ducks. 🦆"); })],
-    ...(mkOf("pulse") >= 2 ? [] : [["🔫 Fit twin barrels on my Pulse cannon (Mk 2) · 💰120", () => buy(120, () => { wallet.arms.pulse = 2; saveWallet(); syncArmsLook(); buildShip(); save(); say("Fitted! Twin barrels, double the bolts. Go get 'em! 🔫"); toast("🛒 Pulse cannon Mk 2!"); renderHail(); })]]),
+    ...(mkOf("pulse") >= 2 ? [] : [["🔫 Fit twin barrels on my Laser cannon (Mk 2) · 💰120", () => buy(120, () => { wallet.arms.pulse = 2; saveWallet(); syncArmsLook(); buildShip(); save(); say("Fitted! Twin barrels, double the lasers. Go get 'em! 🔫"); toast("🛒 Laser cannon Mk 2!"); renderHail(); })]]),
     ["🗺 Ask for a tip", () => { const c = planets.filter((p) => p !== home && p.alive && !p.data.npc); const p = c[(Math.random() * c.length) | 0]; if (!p) return say("Quiet galaxy today."); setNav(p); say(`Psst… ${p.data.name} has ${fmt(p.data.pop)} people and nobody has pranked them in ages. 😈 I put it on your nav.`); }]);
   if (type === "miner") o.push(["⛏ Hire them to mine for you · 💰50", () => buy(50, () => { say("Deal! Back in 90 seconds with crystals. ⛏"); setTimeout(() => earn(130, "your miner brought crystals"), 90000); })]);
   if (type === "tourist") o.push(["📸 Take a selfie together", () => { flashScreen("#ffffff", .5); earn(5, "the tourists tipped you"); missionEvent("selfie"); say("Cheese! 📸 They love it."); }]);
@@ -3992,7 +3992,7 @@ const TUT = [
     after() { radio("They love you already! Everyone here is so friendly. Well… almost everyone."); addXp(20); } },
   { goal: () => "Find a trader, press I to talk, and buy twin barrels", fly: true,
     enter(s) {
-      radio("Traders fly all over the galaxy. Follow the arrow to one, aim at it and press I to talk. Let's buy twin barrels for our Pulse cannon! 🔫");
+      radio("Traders fly all over the galaxy. Follow the arrow to one, aim at it and press I to talk. Let's buy twin barrels for our Laser cannon! 🔫");
       s.pick = () => { const tr = npcs.filter((n) => !n.dead && n.role === "trader" && n.type !== "racer"); return tr.sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position))[0]; };
       s.trader = s.pick(); s.nav = { get group() { return (s.trader || home).group; }, R: .3, data: { name: "Space trader" }, quiet: true }; setNav(s.nav);
     },
