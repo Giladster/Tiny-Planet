@@ -169,6 +169,7 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #boltLog .bmsg.me { justify-self: end; background: rgba(111,227,255,.14); border: 1px solid rgba(111,227,255,.3); }
 #boltLog .bmsg.bolt { justify-self: start; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.3); }
 #boltLog .thinking { opacity: .7; font-style: italic; }
+#boltVoicePick { max-width: 150px; font-size: 12px; }
 #boltQ { flex: 1; min-width: 0; }
 #boltMic.rec { background: #ff3b52; color: #fff; animation: lockpulse .5s ease-in-out infinite alternate; }
 #radioEvents .evline { display: flex; align-items: center; gap: 6px; justify-content: space-between; font-size: 12px; padding: 5px 8px; border-radius: 8px; background: rgba(255,90,110,.1); border: 1px solid rgba(255,90,110,.35); }
@@ -458,7 +459,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <span class="small" id="missionReset"></span>
 </section>
 <section id="p-bolt" class="hud panel side" data-panel="bolt" hidden>
-  <div class="ph"><span class="label">🤖 Ask Bolt</span><span class="row"><button id="boltVoice" aria-label="Bolt voice on or off">🔊</button><button class="x" data-close="bolt" aria-label="Close Ask Bolt">×</button></span></div>
+  <div class="ph"><span class="label">🤖 Ask Bolt</span><span class="row"><select id="boltVoicePick" aria-label="Bolt's voice" title="Bolt's voice" hidden></select><button id="boltVoice" aria-label="Bolt voice on or off">🔊</button><button class="x" data-close="bolt" aria-label="Close Ask Bolt">×</button></span></div>
   <div id="boltLog"></div>
   <div class="row"><input id="boltQ" type="text" maxlength="300" placeholder="Ask Bolt anything…" aria-label="Question for Bolt"><button id="boltMic" aria-label="Talk to Bolt">🎙</button><button class="go" id="boltSend">Ask</button></div>
 </section>
@@ -874,7 +875,7 @@ const sfx = (() => {
       [[1320, 0], [1760, .07]].forEach(([f, d]) => { const o = osc("square", f, f, t + d, .06), g = env(gain(), t + d, .003, .06); o.connect(filt("bandpass", 1600, 1600, t, 1, 2)).connect(g); out(g, .05, .1); });
       const n = noise(t, .18, 1.6), b = filt("bandpass", 2400, 1200, t, .18, .8), g = env(gain(), t, .005, .17); n.connect(b).connect(g); out(g, .05, .05);
     },
-    playVoice(mp3) { // play one of Bolt's spoken lines; resolves when he's done (false if it couldn't play)
+    playVoice(mp3, onStart) { // play one of Bolt's spoken lines; onStart(seconds) when he starts; resolves when he's done (false if it couldn't play)
       if (!ok()) return Promise.resolve(true);
       return ac.decodeAudioData(mp3.slice(0)).then((b) => new Promise((done) => {
         // Bolt is a robot flying up to you: a whoosh as he arrives, his voice sweeps in from the side and opens up,
@@ -890,7 +891,7 @@ const sfx = (() => {
         const rm = gain(), lfo = ac.createOscillator(), rg = gain(); rm.gain.value = 0; lfo.frequency.value = 62; lfo.connect(rm.gain); rg.gain.value = .18;
         lfo.start(t0); lfo.stop(t0 + b.duration + .3); sweep.connect(rm).connect(rg).connect(pan);
         pan.connect(g); out(g, 1, .1);
-        voiceSrc = s; s.onended = () => { if (voiceSrc === s) voiceSrc = null; sfx.radioTalk(); done(true); }; s.start(t0);
+        voiceSrc = s; s.onended = () => { if (voiceSrc === s) voiceSrc = null; sfx.radioTalk(); done(true); }; s.start(t0); setTimeout(() => onStart?.(b.duration), 320);
       }), () => false);
     },
     stopVoice() { try { voiceSrc?.stop(); } catch {} voiceSrc = null; },
@@ -3891,21 +3892,25 @@ function renderLevel() {
 }
 // ---- the radio box
 let radioQ = [], radioTyping = null, radioHideAt = 0;
-function radio(text) { radioQ.push(text); if (!radioTyping) nextRadio(); }
+function radio(text) { radioQ.push(text); if (ui.boltVoice && !ui.muted) { const l = spokenLine(text); if (l) fetchVoice(l); } if (!radioTyping) nextRadio(); }
 function radioNow() { radioQ = []; radioTyping = null; boltHush(); } // drop old chatter: Bolt talks about what you are doing now
-function nextRadio() {
+function nextRadio() { // the card types out each line in step with Bolt's voice, and waits for him to finish before the next one
   const text = radioQ.shift(); if (text === undefined) { radioTyping = null; return; }
-  const el = $("radioText"), my = radioTyping = { text, i: 0, t0: clock() }; el.textContent = "";
-  $("radio").classList.remove("min"); $("radio").classList.add("talk"); sfx.radioIn(); boltSpeak(text, true); // Bolt reads his radio lines out loud
+  const el = $("radioText"), n = [...text].length, my = radioTyping = { text, i: 0, t0: clock(), cps: 60, go: false }; el.textContent = "";
+  $("radio").classList.remove("min"); $("radio").classList.add("talk"); sfx.radioIn();
   radioHideAt = 0; showRadio();
+  const next = (wait) => setTimeout(() => { if (radioTyping !== my) return; radioTyping = null; if (radioQ.length) nextRadio(); else if (tut.step >= TUT.length) radioHideAt = clock() + 12; }, wait);
   const tick = () => {
-    if (radioTyping !== my) return; // a newer message took over
-    my.i = Math.floor((clock() - my.t0) * 60); el.textContent = [...text].slice(0, my.i).join(""); // 60 letters a second
-    if (my.i < [...text].length) return setTimeout(tick, 30);
+    if (radioTyping !== my || !my.go) return; // a newer message took over, or he hasn't started talking yet
+    my.i = Math.floor((clock() - my.t0) * my.cps); el.textContent = [...text].slice(0, my.i).join("");
+    if (my.i < n) return setTimeout(tick, 30);
     $("radio").classList.remove("talk");
-    setTimeout(() => { if (radioTyping !== my) return; radioTyping = null; if (radioQ.length) nextRadio(); else if (tut.step >= TUT.length) radioHideAt = clock() + 12; }, Math.min(4000, 900 + text.length * 25));
+    if (!spoken) next(Math.min(4000, 900 + text.length * 25));
   };
-  tick();
+  const start = (secs) => { if (my.go) return; my.go = true; my.t0 = clock(); my.cps = secs ? Math.max(8, n / Math.max(.5, secs * .9)) : 60; tick(); };
+  const spoken = boltSpeak(text, true, start); // Bolt reads his radio lines out loud
+  if (!spoken) start(0);
+  else spoken.then(() => { if (radioTyping !== my) return; my.cps = 1e6; start(0); tick(); next(700); });
 }
 function showRadio() {
   const busy = tut.step < TUT.length || radioTyping || radioQ.length || clock() < radioHideAt || !$("radioEvents").hidden;
@@ -4448,7 +4453,7 @@ function boltLocal(q) {
   return "I'm not sure about that one, partner. Try asking about credits, levels, missions, the Prism Galaxy, the arena or friends! 🤖";
 }
 function renderBolt() {
-  const el = $("boltLog"); if (!el) return;
+  const el = $("boltLog"); if (!el) return; loadVoices();
   el.innerHTML = boltLog.map((m) => `<div class="bmsg ${m.who}">${m.who === "bolt" ? "🤖 " : ""}${esc(m.text)}</div>`).join("") + (boltAsking ? `<div class="bmsg bolt thinking">🤖 Bolt is thinking…</div>` : "")
     || `<span class="small">Ask me anything about the game! Type, or press 🎙 and talk.</span>`;
   el.scrollTop = el.scrollHeight;
@@ -4463,29 +4468,48 @@ function boltVoiceOf() { // a smooth, clear "AI" voice: the most natural English
 // Lines are fetched as soon as they are said, and play one after another, so he talks without gaps.
 let voiceOff = /offline/.test(location.search), voiceChain = Promise.resolve(), voiceGen = 0, voiceCut = 0;
 function boltHush() { voiceCut = voiceGen; voiceChain = Promise.resolve(); sfx.stopVoice(); window.speechSynthesis?.cancel(); }
-function browserSpeak(text) {
+function browserSpeak(text, onStart) {
   if (!window.speechSynthesis) return Promise.resolve();
   const ready = speechSynthesis.getVoices().length ? Promise.resolve() // the computer's voices load late; wait for them so the first line isn't in a random default voice
     : new Promise((r) => { speechSynthesis.addEventListener("voiceschanged", r, { once: true }); setTimeout(r, 1500); });
   return ready.then(() => new Promise((done) => {
     const u = new SpeechSynthesisUtterance(text), v = boltVoiceOf(); if (v) u.voice = v;
     u.pitch = .95; u.rate = 1.04; // natural pitch and pace so he talks smoothly, like a calm ship AI
-    u.onend = u.onerror = () => { sfx.radioTalk(); done(); };
+    u.onstart = () => onStart?.(text.length / 15); u.onend = u.onerror = () => { sfx.radioTalk(); done(); };
     speechSynthesis.speak(u); setTimeout(done, 1500 + text.length * 90); // never get stuck
   }));
 }
-function boltSpeak(text, queue) { // queue: radio lines wait their turn; chat answers cut in
-  if (!ui.boltVoice || ui.muted) return;
-  if (!queue) boltHush();
-  const line = text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ",").replace(/\s+/g, " ").trim();
-  if (!line) return;
-  const gen = ++voiceGen;
-  const got = voiceOff ? Promise.resolve(null) : fetch("voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: line }) })
+const spokenLine = (text) => text.replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}]/gu, "").replace(/·/g, ",").replace(/\s+/g, " ").trim();
+const voicePre = new Map(); // radio lines waiting in line are fetched early, so he goes straight from one to the next
+function fetchVoice(line) {
+  if (voiceOff) return Promise.resolve(null);
+  if (voicePre.has(line)) return voicePre.get(line);
+  const p = fetch("voice", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: line, voice: ui.boltVoiceId || "" }) })
     .then((r) => { if (r.headers.get("x-voice") === "off") voiceOff = true; return r.status === 200 ? r.arrayBuffer() : null; }).catch(() => null);
-  voiceChain = voiceChain.then(() => got).then((mp3) => {
+  voicePre.set(line, p); if (voicePre.size > 12) voicePre.delete(voicePre.keys().next().value);
+  return p;
+}
+function boltSpeak(text, queue, onStart) { // queue: radio lines wait their turn; chat answers cut in. Returns a promise for when this line is done (null if he stays quiet)
+  if (!ui.boltVoice || ui.muted) return null;
+  if (!queue) boltHush();
+  const line = spokenLine(text); if (!line) return null;
+  const gen = ++voiceGen, got = fetchVoice(line); voicePre.delete(line);
+  return voiceChain = voiceChain.then(() => got).then((mp3) => {
     if (gen <= voiceCut || !ui.boltVoice || ui.muted) return;
-    return mp3 ? sfx.playVoice(mp3).then((ok) => ok || browserSpeak(line)) : browserSpeak(line);
+    return mp3 ? sfx.playVoice(mp3, onStart).then((ok) => ok || browserSpeak(line, onStart)) : browserSpeak(line, onStart);
   });
+}
+// pick Bolt's voice (free ElevenLabs voices the server offers)
+let voiceList = null;
+function loadVoices() {
+  if (voiceList || voiceOff) return;
+  voiceList = {}; fetch("voice").then((r) => r.json()).then((j) => { voiceList = j.voices || {}; renderVoicePick(); }).catch(() => {});
+}
+function renderVoicePick() {
+  const el = $("boltVoicePick"); if (!el || !voiceList || !Object.keys(voiceList).length) return;
+  el.hidden = false;
+  el.innerHTML = Object.entries(voiceList).map(([id, name]) => `<option value="${esc(id)}">${esc(name)}</option>`).join("");
+  el.value = voiceList[ui.boltVoiceId] ? ui.boltVoiceId : Object.keys(voiceList)[0];
 }
 function boltAnswer(text) {
   boltAsking = 0; boltLog.push({ who: "bolt", text }); if (boltLog.length > 40) boltLog.shift();
@@ -4516,6 +4540,7 @@ function boltListen() {
 $("boltSend").addEventListener("click", () => askBolt($("boltQ").value));
 $("boltQ").addEventListener("keydown", (e) => { if (e.key === "Enter") askBolt(e.target.value); });
 $("boltMic").addEventListener("click", boltListen);
+$("boltVoicePick").addEventListener("change", (e) => { ui.boltVoiceId = e.target.value; ui.boltVoice = true; saveUi(); renderBolt(); boltSpeak("Hi explorer! This is my new voice. How do I sound?"); });
 $("boltVoice").addEventListener("click", () => { ui.boltVoice = !ui.boltVoice; saveUi(); if (!ui.boltVoice) boltHush(); renderBolt(); });
 $("radioAsk").addEventListener("click", () => setPanel("bolt", !ui.bolt));
 
@@ -7451,7 +7476,7 @@ function startGame() {
   buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter(); gameInit();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
-window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer };
+window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer, radio };
 window.__tp.landing = { get walk() { return walk; }, get landTarget() { return landTarget; }, startLanding, takeOff, sayHi, landable, walkLook, get avatar() { return avatar; } };
 </script>
 </body>

@@ -90,9 +90,9 @@ const server = http.createServer((req, res) => {
     if (!voiceReady || req.method !== "POST") { res.writeHead(204, { "x-voice": "off" }); return res.end(); }
     let body = ""; req.on("data", (c) => { body += c; if (body.length > 4000) req.destroy(); });
     req.on("end", async () => {
-      let text = ""; try { text = JSON.parse(body).text; } catch {}
+      let text = "", voice = ""; try { ({ text, voice } = JSON.parse(body)); } catch {}
       const ip = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "").split(",")[0].trim();
-      const mp3 = await speak(text, ip);
+      const mp3 = await speak(text, ip, voice);
       if (!mp3) { res.writeHead(204); return res.end(); }
       res.writeHead(200, { "content-type": "audio/mpeg", "cache-control": "no-store" }); res.end(mp3);
     });
