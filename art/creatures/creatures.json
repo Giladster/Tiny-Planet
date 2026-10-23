@@ -10,7 +10,6 @@
   "spikecap": { "src": "Blob_Mushnub_Evolved.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
   "pinkblob": { "src": "Blob_PinkBlob.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
   "wizard":   { "src": "Blob_Wizard.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
-  "yeti":     { "src": "Blob_Yeti.glb", "clips": {"walk":"Walk","idle":"Idle","cheer":"Dance"} },
   "sprout":   { "src": "Enemy_Small.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
   "stack":    { "src": "Enemy_Flying.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },
   "ghost":    { "src": "Ghost.gltf", "clips": {"walk":"Fast_Flying","idle":"Flying_Idle","cheer":"Yes"} },

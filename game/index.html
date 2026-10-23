@@ -371,7 +371,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="group" data-tab="people"><span class="label">Your people</span>
     <div class="choice" id="peopleKinds"></div>
     <label class="slider">People size<input type="range" id="pp-size" min="0.6" max="2.2" step="0.05"></label>
-    <span class="small">Creatures by Quaternius (CC0), Zorgons made with Meshy AI (CC BY 4.0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
+    <span class="small">Creatures by Quaternius (CC0), Zorgons and yetis made with Meshy AI (CC BY 4.0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
   </div>
 </section>
 
@@ -1769,7 +1769,7 @@ const SPECIES_VOICE = {
 };
 // the people of each planet are real animated creatures (Quaternius, CC0): models/creatures/<kind>.glb with clips walk, idle, cheer (and run)
 const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Little imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons", zorg: "Zorgons" };
-const REAL_KINDS = new Set(["zorg"]); // realistic models (made with Meshy AI): full photo textures, not color palettes
+const REAL_KINDS = new Set(["zorg", "yeti"]); // realistic models (made with Meshy AI): full photo textures, not color palettes
 const FLOATERS = new Set(["sprout", "stack", "ghost", "wisp", "squidle", "glub", "buzzer", "alpaking", "dragon"]); // they hover instead of walking
 const OLD_KINDS = { human: "frog", green: "greys", robot: "bee", cyclops: "sprout", cat: "panda", bunny: "pinkblob", blob: "pinkblob" }; // older saves
 const PLANET_KINDS = { Bubblegum: "pinkblob", "Gouda Prime": "mushroom", Melonia: "frog", Inferno: "imp", "Disco Fever": "flamingo", Gloop: "glub", Frostbite: "yeti", "Terra Nova": "panda", "Zorg Prime": "zorg", "Krell Station": "dino",

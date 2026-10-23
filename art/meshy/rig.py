@@ -2,10 +2,11 @@
 # Usage: python3.13 rig.py -- <meshy.glb> <UAL1.glb> <out.glb> <landmarks.json> [faces]
 # landmarks.json: joint positions (Blender coords, Z up, feet at 0, model scaled to 1.829 tall, facing -Y)
 import bpy, sys, json, math
-from mathutils import Vector, Matrix
+from mathutils import Vector, Matrix, Quaternion
 a = sys.argv[sys.argv.index("--") + 1:]
 SRC, UAL, OUT, LM = a[:4]; FACES = int(a[4]) if len(a) > 4 else 8000
-L = {k: Vector(v) for k, v in json.load(open(LM)).items()}
+LJ = json.load(open(LM)); SPREAD = math.radians(LJ.pop("spread", 0))  # spread: degrees to hold the arms further out from the body (for wide creatures)
+L = {k: Vector(v) for k, v in LJ.items()}
 CLIPS = {"Walk_Loop": "walk", "Idle_Loop": "idle", "Celebration": "cheer", "Jog_Fwd_Loop": "run"}
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -87,6 +88,18 @@ m2 = me.modifiers.new("Armature", "ARMATURE"); m2.object = arm
 for act in list(bpy.data.actions):
     if act.name in CLIPS: act.name = CLIPS[act.name]; act.use_fake_user = True
     else: bpy.data.actions.remove(act)
+if SPREAD:  # turn the upper arms outward in every key, relative to the shoulder, so the arms clear a wide body
+    for sd, sg in (("l", -1), ("r", 1)):
+        rr = arm.data.bones["upperarm_" + sd].matrix_local.to_quaternion()
+        Q = rr.inverted() @ Quaternion((0, 1, 0), sg * SPREAD) @ rr
+        path = 'pose.bones["upperarm_%s"].rotation_quaternion' % sd
+        for act in bpy.data.actions:
+            cb = act.layers[0].strips[0].channelbags[0] if hasattr(act, "layers") and act.layers else act  # Blender 4.4+ keeps curves in channel bags
+            fc = [cb.fcurves.find(path, index=i) for i in range(4)]
+            if not all(fc): continue
+            for k in range(len(fc[0].keyframe_points)):
+                q = Q @ Quaternion([c.keyframe_points[k].co[1] for c in fc])
+                for i, c in enumerate(fc): c.keyframe_points[k].co[1] = q[i]; c.keyframe_points[k].handle_left[1] = c.keyframe_points[k].handle_right[1] = q[i]
 if not arm.animation_data: arm.animation_data_create()
 for act in bpy.data.actions:
     tr = arm.animation_data.nla_tracks.new(); tr.name = act.name; tr.strips.new(act.name, int(act.frame_range[0]), act)
