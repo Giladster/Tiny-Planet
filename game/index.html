@@ -1706,11 +1706,21 @@ realSurface(mats.slate, "slate.jpg", 10, .004, true);
 realSurface(mats.marble, "marble.jpg", 9, .002, true);
 // real surface photos under every planet's own colors: craters, canyons and lava flows from Solar System Scope (textures/CREDITS.md)
 const PHOTO_CACHE = {}, photoOnce = (f) => PHOTO_CACHE[f] || (PHOTO_CACHE[f] = f === "moon.jpg" ? moonPhoto : photoTex(f));
-const PLANET_PHOTOS = { earth: [["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg"], .9], lava: [["venus_surface.jpg"], 1], ice: [["eris_fictional.jpg"], .9], candy: [["haumea_fictional.jpg"], .75],
-  cheese: [["moon.jpg"], 1], melon: [["makemake_fictional.jpg"], .6], disco: [[], 0], toxic: [["makemake_fictional.jpg"], .9] };
+// every lived planet is built on two real photos, turned and blended its own way, then painted in its own colors: a whole different world each time
+const WORLD_ROCKS = ["mars.jpg", "mercury.jpg", "ceres_fictional.jpg", "venus_surface.jpg", "moon.jpg", "eris_fictional.jpg", "makemake_fictional.jpg", "haumea_fictional.jpg", "toi561b.jpg", "earth_day.jpg"];
+const WORLD_MIX = [...WORLD_ROCKS, "jupiter.jpg", "venus_atmosphere.jpg", "saturn.jpg"]; // the second photo can also be gas-giant storms
+const hashStr = (str) => { let h = 2166136261; for (let i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619); return h >>> 0; };
+function worldLook(d, name) {
+  let h = hashStr((name || "") + ":" + (d.seed || 1)); const r = () => ((h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0) / 4294967296);
+  const a = WORLD_ROCKS[(r() * WORLD_ROCKS.length) | 0]; let b = WORLD_MIX[(r() * WORLD_MIX.length) | 0]; if (b === a) b = WORLD_MIX[(WORLD_MIX.indexOf(a) + 3) % WORLD_MIX.length];
+  const rot = () => new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(r() * 6.28, r() * 6.28, r() * 6.28)));
+  const K = (k) => new THREE.Color(d[k] || "#808080");
+  return { tex: photoOnce(a), texB: photoOnce(b), rotA: rot(), rotB: rot(), look: new THREE.Vector4(.35 + r() * .65, .7 + r() * .8, 1.2 + r() * 3, r()),
+    dark: K("high").lerp(new THREE.Color(0, 0, 0), .55), lite: K("peak").lerp(K("low"), .35) };
+}
 const SEA_PHOTOS = { lava: ["venus_surface.jpg", 1], toxic: ["jupiter.jpg", .9], candy: ["saturn.jpg", .8], ice: ["venus_atmosphere.jpg", .5], earth: ["jupiter.jpg", .25] };
-function planetPhoto(d) { if (d.photo) return { tex: photoOnce(d.photo), k: d.flat ? .2 : 1, real: 1 }; // gas giants stay smooth
-  const [files, k] = PLANET_PHOTOS[d.template] || [["moon.jpg"], .6]; return files.length ? { tex: photoOnce(files[(d.seed || 1) % files.length]), k } : { tex: null, k: 0 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
+function planetPhoto(d, name) { if (d.photo) return { tex: photoOnce(d.photo), k: d.flat ? .2 : 1, real: 1 }; // gas giants stay smooth
+  return d.template === "disco" ? { tex: null, k: 0 } : { ...worldLook(d, name), k: d.template === "candy" || d.template === "melon" ? .8 : 1 }; } // a real Moon photo (Solar System Scope, textures/CREDITS.md) on the little moons that circle planets
 const ringTex = (() => { const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d"); for (let r = 128; r > 70; r -= 2) { const a = .25 + Math.abs(Math.sin(r * .35)) * .6 * (Math.sin(r * .09) > -.3 ? 1 : .2); g.strokeStyle = `rgba(255,255,255,${a.toFixed(2)})`; g.lineWidth = 2.2; g.beginPath(); g.arc(128, 128, r, 0, Math.PI * 2); g.stroke(); } return new THREE.CanvasTexture(c); })();
 const SOLAR_MAT = (() => { // solar cells: dark blue squares with thin silver lines between them
   const c = document.createElement("canvas"); c.width = 256; c.height = 128; const g = c.getContext("2d");
@@ -1936,14 +1946,23 @@ class Planet {
       sh.uniforms.pR = { value: this.data.R }; sh.uniforms.pSeed = { value: (this.data.design.seed || 1) % 97 };
       sh.uniforms.cSeed = { value: ((this.data.design.seed || 1) * 7.31) % 53 }; sh.uniforms.cTime = CLOUD_TIME; sh.uniforms.cRot = { value: 0 }; sh.uniforms.cOn = { value: 0 };
       sh.uniforms.pAtmo = { value: new THREE.Color(this.data.design.atmo || "#88ccff") }; this.groundSh = sh;
-      const ph = planetPhoto(this.data.design); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k }; sh.uniforms.pTrue = this.photoTrue = { value: ph.real || 0 }; sh.uniforms.pRock = { value: ROCK };
+      const ph = planetPhoto(this.data.design, this.data.name); sh.uniforms.pPhoto = this.photoU = { value: ph.tex }; sh.uniforms.pPhotoK = this.photoK = { value: ph.k }; sh.uniforms.pTrue = this.photoTrue = { value: ph.real || 0 };
+      this.lookU = { pPhotoB: { value: ph.texB || null }, pRotA: { value: ph.rotA || new THREE.Matrix3() }, pRotB: { value: ph.rotB || new THREE.Matrix3() }, pLook: { value: ph.look || new THREE.Vector4() }, pDark: { value: ph.dark || new THREE.Color() }, pLite: { value: ph.lite || new THREE.Color() } };
+      Object.assign(sh.uniforms, this.lookU); sh.uniforms.pRock = { value: ROCK };
       sh.vertexShader = "attribute float glow;\nattribute float city;\nattribute float real;\nvarying float vGlow;\nvarying float vCity;\nvarying float vReal;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\nvGlow = glow; vCity = city; vReal = real; vDir = normalize(position); vWN = normalize(mat3(modelMatrix) * objectNormal); vWR = normalize(mat3(modelMatrix) * position);");
-      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK, pTrue;\nuniform sampler2D pPhoto, pRock;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + GLSL_PHOTO + sh.fragmentShader
+      sh.fragmentShader = "uniform vec3 sunDir;\nuniform float pR, pSeed, cSeed, cTime, cRot, cOn, pPhotoK, pTrue;\nuniform sampler2D pPhoto, pRock, pPhotoB;\nuniform mat3 pRotA, pRotB;\nuniform vec4 pLook;\nuniform vec3 pDark, pLite;\nuniform vec3 pAtmo;\nvarying float vGlow;\nvarying float vReal;\nvarying float vCity;\nvarying vec3 vDir;\nvarying vec3 vWN;\nvarying vec3 vWR;\nfloat h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }\n" + GLSL_NOISE + GLSL_PHOTO + sh.fragmentShader
         .replace("#include <color_fragment>", `#include <color_fragment>
 if (pPhotoK > 0.) { // the real surface photo, recolored to this spot's own color: its craters, canyons and lava flows show in the planet's palette
   vec3 phc = photoAt(pPhoto, vDir); // wild planets show the photo as it is; lived planets get it recolored to their own palette
-  diffuseColor.rgb = pTrue > .5 ? mix(diffuseColor.rgb, phc * (.75 + .5 * dot(diffuseColor.rgb, vec3(.3, .59, .11)) / max(.05, dot(photoMean(pPhoto), vec3(.3, .59, .11)))), vReal)
-    : mix(diffuseColor.rgb, diffuseColor.rgb * clamp(phc / photoMean(pPhoto), .15, 2.6), pPhotoK * vReal);
+  if (pTrue > .5) diffuseColor.rgb = mix(diffuseColor.rgb, phc * (.75 + .5 * dot(diffuseColor.rgb, vec3(.3, .59, .11)) / max(.05, dot(photoMean(pPhoto), vec3(.3, .59, .11)))), vReal);
+  else { // a whole world: photo A turned its own way, photo B blended in over wide regions, then painted from dark to light in this planet's colors
+    vec3 LW = vec3(.3, .59, .11), dA = pRotA * vDir, dB = pRotB * vDir;
+    float la = dot(photoAt(pPhoto, dA), LW) / dot(photoMean(pPhoto), LW), lb = dot(photoAt(pPhotoB, dB), LW) / dot(photoMean(pPhotoB), LW);
+    vec3 mp = vDir * pLook.z + pSeed * .37; float m = smoothstep(.38, .62, pfbm(mp, 4, length(fwidth(mp))));
+    float lum = clamp(pow(clamp(mix(la, lb, m * pLook.x) * .5, 0., 1.2), pLook.y) * 2., 0., 2.4);
+    vec3 own = diffuseColor.rgb, world = lum < 1. ? mix(pDark, own, smoothstep(0., 1., lum)) : mix(own, pLite, smoothstep(1., 2.2, lum));
+    diffuseColor.rgb = mix(own, world, pPhotoK * vReal);
+  }
 }
 { // real rock up close: cliffs and mountains get a sharp rock photo, flat ground a light touch of it
   float rs = 1. - clamp(dot(normalize(vWN), normalize(vWR)), 0., 1.), rk = (.25 + .75 * smoothstep(.05, .2, rs)) * vReal;
@@ -1978,7 +1997,7 @@ if (cOn > .5) { // cloud shadows drifting over the ground
   vec3 r1 = cross(sy, normal), r2 = cross(normal, sx); float det = dot(sx, r1);
   normal = normalize(abs(det) * normal - sign(det) * (dH.x * r1 + dH.y * r2));
   if (pPhotoK > 0.) { // the photo's craters and ridges stand out in 3D: bright = high, dark = low
-    float ph = dot(photoAt(pPhoto, vDir), vec3(.3, .59, .11)) * pR * .035 * pPhotoK * vReal + dot(rockAt(pRock, vDir * 7., vDir), vec3(.3, .59, .11)) * pR * .006 * vReal;
+    float ph = dot(photoAt(pPhoto, pTrue > .5 ? vDir : pRotA * vDir), vec3(.3, .59, .11)) * pR * .035 * pPhotoK * vReal + dot(rockAt(pRock, vDir * 7., vDir), vec3(.3, .59, .11)) * pR * .006 * vReal;
     vec2 dP = vec2(dFdx(ph), dFdy(ph)); r1 = cross(sy, normal); r2 = cross(normal, sx); det = dot(sx, r1);
     normal = normalize(abs(det) * normal - sign(det) * (dP.x * r1 + dP.y * r2));
   }
@@ -2133,7 +2152,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
       real[u] = (d.pattern === "stripes" || d.pattern === "checker" ? .35 : 1) * (this.paint[u * 4 + 3] ? 0 : 1) * (1 - Math.min(1, this.dmg[u] / 200));
       if (this.paint[u * 4 + 3]) col.setRGB(this.paint[u * 4] / 255, this.paint[u * 4 + 1] / 255, this.paint[u * 4 + 2] / 255, THREE.SRGBColorSpace);
       const dm = this.dmg[u] / 255;
-      if (dm) { elev -= dm * .1; col.lerp(SCORCH, Math.min(1, dm * 1.3)); }
+      if (dm) { elev -= dm * .22; col.lerp(SCORCH, Math.min(1, dm * 1.3)); }
       let gl = dm > .3 ? ss(.3, 1, dm) * (.35 + .65 * ss(.6, .95, this.ridge[u])) : 0;
       if (stress) gl = Math.max(gl, stress * ss(.93 - stress * .1, .985, this.ridge[u]));
       if (gl > .05) { elev -= gl * .025; col.lerp(SCORCH, gl * .6); if (gl > .3) this.hot.push(u); }
@@ -2151,7 +2170,8 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.clouds.scale.setScalar(R * 1.04);
     this.atmoBack.material.uniforms.col.value.set(d.atmo); this.atmoRim.material.uniforms.col.value.set(d.atmo);
     if (this.groundSh) this.groundSh.uniforms.pAtmo.value.set(d.atmo || "#88ccff");
-    if (this.photoU) { const ph = planetPhoto(d); this.photoU.value = ph.tex; this.photoK.value = ph.k; this.photoTrue.value = ph.real || 0; }
+    if (this.photoU) { const ph = planetPhoto(d, this.data.name); this.photoU.value = ph.tex; this.photoK.value = ph.k; this.photoTrue.value = ph.real || 0;
+      if (ph.texB) { const u = this.lookU; u.pPhotoB.value = ph.texB; u.pRotA.value = ph.rotA; u.pRotB.value = ph.rotB; u.pLook.value = ph.look; u.pDark.value = ph.dark; u.pLite.value = ph.lite; } }
     this.atmoBack.scale.setScalar(R * 1.16); this.atmoRim.scale.setScalar(R * 1.05);
     const disco = d.template === "disco";
     this.mat.metalness = disco ? .75 : 0; this.mat.roughness = disco ? .22 : .82; this.mat.envMapIntensity = disco ? .9 : .15;
@@ -2567,6 +2587,11 @@ function breakOff(planet, n, count, size) {
     const u = (Math.random() * planet.U) | 0, c = new THREE.Color(cols.getX(u), cols.getY(u), cols.getZ(u)).lerp(SCORCH, .4);
     const v = out.clone().multiplyScalar(planet.R * rnd(.6, 2.2)).add(new THREE.Vector3().randomDirection().multiplyScalar(planet.R * rnd(.2, .8)));
     chunks.spawn(base.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(planet.R * size * .5)), v, planet.R * rnd(.015, .05) * (1 + size * 2), c);
+  }
+  for (let i = 0; i < Math.ceil(count / 6); i++) { // big slabs of ground tear off and drift away slowly, tumbling
+    const u = (Math.random() * planet.U) | 0, c = new THREE.Color(cols.getX(u), cols.getY(u), cols.getZ(u)).lerp(SCORCH, .25);
+    const v = out.clone().multiplyScalar(planet.R * rnd(.15, .5)).add(new THREE.Vector3().randomDirection().multiplyScalar(planet.R * rnd(.05, .2)));
+    chunks.spawn(base.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(planet.R * size * .3)), v, planet.R * rnd(.06, .14) * (1 + size), c, rnd(7, 11));
   }
 }
 function orientOnPlanet(obj, planet, n, face) {
