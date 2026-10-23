@@ -1770,7 +1770,7 @@ const SPECIES_VOICE = {
 // the people of each planet are real animated creatures (Quaternius, CC0): models/creatures/<kind>.glb with clips walk, idle, cheer (and run)
 const PEOPLE_KINDS = { greys: "Big-eyed aliens", frog: "Frog astronauts", bee: "Bee astronauts", flamingo: "Flamingo astronauts", panda: "Red panda astronauts", dino: "Dino-lings", imp: "Magma imps", mushroom: "Mushroom folk", spikecap: "Spike-caps", pinkblob: "Pink blobs", wizard: "Blob wizards", yeti: "Snow yetis", sprout: "Sprout aliens", stack: "Stack aliens", ghost: "Shadow ghosts", wisp: "Purple wisps", squidle: "Sky squids", glub: "Glubs", buzzer: "Buzzers", alpaking: "Alpakings", dragon: "Baby dragons", zorg: "Zorgons" };
 const REAL_KINDS = new Set(["zorg", "yeti", "imp"]);
-const KIND_GLOW = { imp: .8 }; // lava cracks shine on their own // realistic models (made with Meshy AI): full photo textures, not color palettes
+const KIND_GLOW = { imp: .8, zorg: .65, yeti: .4 }; // how much each kind lights itself up so it reads in shade (lava cracks shine) // realistic models (made with Meshy AI): full photo textures, not color palettes
 const FLOATERS = new Set(["sprout", "stack", "ghost", "wisp", "squidle", "glub", "buzzer", "alpaking", "dragon"]); // they hover instead of walking
 const OLD_KINDS = { human: "frog", green: "greys", robot: "bee", cyclops: "sprout", cat: "panda", bunny: "pinkblob", blob: "pinkblob" }; // older saves
 const PLANET_KINDS = { Bubblegum: "pinkblob", "Gouda Prime": "mushroom", Melonia: "frog", Inferno: "imp", "Disco Fever": "flamingo", Gloop: "glub", Frostbite: "yeti", "Terra Nova": "panda", "Zorg Prime": "zorg", "Krell Station": "dino",
@@ -1783,7 +1783,7 @@ function crowdKit(kind) { // load a creature once and bake its clips into still 
   new GLTFLoader().load("models/creatures/" + kind + ".glb", (gl) => {
     const root = gl.scene, mixer = new THREE.AnimationMixer(root), meshes = [];
     root.traverse((o) => { if (o.isMesh) meshes.push(o); });
-    const src = meshes[0].material, real = REAL_KINDS.has(kind), mat = new THREE.MeshStandardMaterial({ map: src.map, color: src.color, normalMap: real ? src.normalMap : null, roughness: real ? .6 : .7, metalness: 0, envMapIntensity: .4, emissiveMap: src.map, emissive: new THREE.Color().setScalar(KIND_GLOW[kind] || .22) }); // a little glow of their own so they still read in shade
+    const src = meshes[0].material, real = REAL_KINDS.has(kind), mat = new THREE.MeshStandardMaterial({ map: src.map, color: src.color, normalMap: real ? src.normalMap : null, roughness: real ? .6 : .7, metalness: 0, envMapIntensity: .4, emissiveMap: src.map, emissive: new THREE.Color().setScalar(KIND_GLOW[kind] || .3) }); // a little glow of their own so they still read in shade
     if (src.map && !real) { src.map.generateMipmaps = false; src.map.minFilter = src.map.magFilter = THREE.NearestFilter; } // a small color palette: no blurring the colors together far away
     const bake = () => { // every mesh's vertices as they are posed right now, in one geometry
       root.updateMatrixWorld(true);
@@ -2352,7 +2352,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     }
     // pose every creature: walking, running when scared, cheering, thrown around after a blast
     const by = this.crowdMeshes(); if (!by) return;
-    const big = walk && walk.p === this ? 1 : 1.8; this.bigK = this.bigK == null ? big : this.bigK + (big - this.bigK) * Math.min(1, dt * 1.5); // seen from the ship they stand out more; on foot they are your size
+    const big = walk && walk.p === this ? 1.25 : 2.2; this.bigK = this.bigK == null ? big : this.bigK + (big - this.bigK) * Math.min(1, dt * 1.5); // seen from the ship they stand out more; on foot they are your size
     const x = new THREE.Vector3(), sc = .85 * Math.sqrt(this.R / 1.6) * (this.style.size || 1) * this.bigK, M = new THREE.Matrix4(), dur = this.crowd.dur;
     for (const im of this.crowd.meshes) im.count = 0;
     _s.setScalar(sc);
