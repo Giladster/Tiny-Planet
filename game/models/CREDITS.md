@@ -14,6 +14,11 @@ CC BY 4.0 (credit the maker) or Sketchfab Standard (use in a project, no reselli
 | Alien Stingray | [Cool Alien Spaceship by Jungle Jim](https://sketchfab.com/3d-models/cool-alien-spaceship-by-jungle-jim-62918957e1fd4667b679259c95822c5e) | Jungle Jim | CC BY 4.0 |
 | Krell Wasp, Dart, Talon, Warlord (pirates only) | [LowPoly Spaceships](https://sketchfab.com/3d-models/lowpoly-spaceships-0d032f946bfb483ca3168b4616c624de) | Pedram Ashoori | CC BY 4.0 |
 
+## You (on foot)
+| In the game | Model | Maker | License |
+|---|---|---|---|
+| Your astronaut (astronaut.glb: rigged and animated with the Quaternius Universal Animation Library, CC0; NASA logo and Apollo 11 patch painted over with our own patches) | [Space suit](https://sketchfab.com/3d-models/space-suit-bdc42075279746dab4c8b54784276a20) | IgorSholopov | CC BY 4.0 |
+
 ## Space
 | In the game | Model | Maker | License |
 |---|---|---|---|

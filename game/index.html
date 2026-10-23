@@ -376,7 +376,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="group" data-tab="people"><span class="label">Your people</span>
     <div class="choice" id="peopleKinds"></div>
     <label class="slider">People size<input type="range" id="pp-size" min="0.6" max="2.2" step="0.05"></label>
-    <span class="small">Creatures by Quaternius (CC0), Zorgons, yetis and imps made with Meshy AI (CC BY 4.0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
+    <span class="small">Creatures by Quaternius (CC0), Zorgons, yetis and imps made with Meshy AI (CC BY 4.0), astronaut suit by IgorSholopov (CC BY 4.0) · <a href="models/CREDITS.md" target="_blank" rel="noopener">credits</a></span>
   </div>
 </section>
 
@@ -7034,13 +7034,14 @@ let walk = null, landTarget = null;
 const walkingOn = (p) => !!walk && walk.p === p;
 const walkLook = new THREE.Vector2();
 let walkDrag = false;
-const AVATAR = "panda"; // you are a little astronaut (Quaternius Ultimate Space Kit, CC0)
+const AVATAR = "models/astronaut.glb"; // you: a space explorer in a real textured suit, rigged with the Quaternius animation library (art/astronaut)
 const avatar = { root: null, mixer: null, acts: {}, k: 1, cur: null, loading: false };
 function loadAvatar() {
   if (avatar.root || avatar.loading) return; avatar.loading = true;
-  new GLTFLoader().load("models/creatures/" + AVATAR + ".glb", (gl) => {
+  new GLTFLoader().load(AVATAR, (gl) => {
     const inner = gl.scene;
-    inner.traverse((o) => { if (!o.isMesh) return; o.frustumCulled = false; const m = o.material; if (m.map) { m.map.generateMipmaps = false; m.map.minFilter = m.map.magFilter = THREE.NearestFilter; m.map.needsUpdate = true; m.emissiveMap = m.map; } m.emissive = new THREE.Color(.16, .16, .16); m.roughness = .6; m.metalness = 0; });
+    inner.traverse((o) => { if (!o.isMesh) return; o.frustumCulled = false; const m = o.material; if (m.map) { m.map.anisotropy = 4; m.emissiveMap = m.map; } m.emissive = new THREE.Color(.1, .1, .1); m.roughness = .7; m.metalness = 0; m.envMapIntensity = .5;
+      if (m.name === "helm_gold") { m.metalness = 1; m.roughness = .12; m.envMapIntensity = 1.6; m.emissive.setScalar(.03); } }); // a photo texture: keep its mipmaps, a little glow of its own so it reads in shade; the gold visor shines
     inner.updateMatrixWorld(true); const box = new THREE.Box3().setFromObject(inner, true); // precise: the skinned body as it really stands, like the baked planet people
     inner.position.set(-(box.min.x + box.max.x) / 2, -box.min.y, -(box.min.z + box.max.z) / 2);
     avatar.k = .21 / Math.max(box.max.y - box.min.y, (box.max.x - box.min.x) * .8, (box.max.z - box.min.z) * .8); // same sizing as the planet people

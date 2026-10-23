@@ -1,5 +1,6 @@
 # Rig a static Meshy model with the Quaternius Universal Animation Library (CC0) skeleton and clips.
 # Usage: python3.13 rig.py -- <meshy.glb> <UAL1.glb> <out.glb> <landmarks.json> [faces]
+# The source can also be a Mixamo-rigged .fbx (textures in ../textures or next to it): its own skin weights are kept, renamed to the library's bones.
 # landmarks.json: joint positions (Blender coords, Z up, feet at 0, model scaled to 1.829 tall, facing -Y)
 import bpy, sys, json, math
 from mathutils import Vector, Matrix, Quaternion
@@ -15,8 +16,31 @@ arm = next(o for o in bpy.data.objects if o.type == "ARMATURE")
 for o in [o for o in bpy.data.objects if o.type == "MESH"]: bpy.data.objects.remove(o)
 orig = {b.name: b.matrix_local.copy() for b in arm.data.bones}
 
-bpy.ops.import_scene.gltf(filepath=SRC, merge_vertices=True)
-me = next(o for o in bpy.data.objects if o.type == "MESH")
+MIXAMO = {"Hips": "pelvis", "Spine": "spine_01", "Spine1": "spine_02", "Spine2": "spine_03", "Neck": "neck_01", "Head": "Head"}
+for sd, s1 in (("Left", "l"), ("Right", "r")):
+    MIXAMO.update({sd + "Shoulder": "clavicle_" + s1, sd + "Arm": "upperarm_" + s1, sd + "ForeArm": "lowerarm_" + s1, sd + "Hand": "hand_" + s1,
+                   sd + "UpLeg": "thigh_" + s1, sd + "Leg": "calf_" + s1, sd + "Foot": "foot_" + s1, sd + "ToeBase": "ball_" + s1})
+    for f in ("Thumb", "Index", "Middle", "Ring", "Pinky"):
+        for i in (1, 2, 3): MIXAMO[sd + "Hand" + f + str(i)] = "%s_0%d_%s" % (f.lower(), i, s1)
+if SRC.lower().endswith(".fbx"):
+    import os
+    bpy.ops.import_scene.fbx(filepath=SRC)
+    me = next(o for o in bpy.data.objects if o.type == "MESH" and o.parent and o.parent != arm)
+    src_arm = me.parent
+    for img in bpy.data.images:  # the fbx keeps the artist's own disk paths: look for the files beside it instead
+        for d in (os.path.dirname(SRC), os.path.join(os.path.dirname(SRC), "..", "textures")):
+            f = os.path.join(d, img.name)
+            if os.path.exists(f): img.filepath = f; img.reload(); break
+    bpy.context.view_layer.objects.active = me
+    for m in list(me.modifiers): bpy.ops.object.modifier_apply(modifier=m.name)
+    mw = me.matrix_world.copy(); me.parent = None; me.matrix_world = mw
+    bpy.data.objects.remove(src_arm)
+    for g in me.vertex_groups:
+        n = g.name.split(":")[-1]
+        g.name = MIXAMO.get(n, "x_" + n)
+else:
+    bpy.ops.import_scene.gltf(filepath=SRC, merge_vertices=True)
+    me = next(o for o in bpy.data.objects if o.type == "MESH")
 bpy.ops.object.select_all(action="DESELECT"); me.select_set(True); bpy.context.view_layer.objects.active = me
 bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
 zs = [v.co.z for v in me.data.vertices]; s = 1.829 / (max(zs) - min(zs)); z0 = min(zs)
@@ -61,9 +85,28 @@ bpy.ops.object.mode_set(mode="OBJECT")
 
 # 2) skin the body to it
 bpy.ops.object.select_all(action="DESELECT"); me.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
-bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+own = any(g.name in arm.data.bones for g in me.vertex_groups)  # weights came with the model: keep them
+bpy.ops.object.parent_set(type="ARMATURE_NAME" if own else "ARMATURE_AUTO")
 unw = sum(1 for v in me.data.vertices if not any(g.weight > 0 for g in v.groups))
 print("unweighted verts", unw, "of", len(me.data.vertices))
+if unw > len(me.data.vertices) * .05:  # many separate or open pieces (a suit, a helmet...) beat auto weights: weight a solid voxel copy instead, then copy its weights across
+    me.parent = None; me.modifiers.clear(); me.vertex_groups.clear()
+    px = me.copy(); px.data = me.data.copy(); bpy.context.scene.collection.objects.link(px)
+    r = px.modifiers.new("vox", "REMESH"); r.mode = "VOXEL"; r.voxel_size = .025
+    bpy.ops.object.select_all(action="DESELECT"); px.select_set(True); bpy.context.view_layer.objects.active = px
+    bpy.ops.object.modifier_apply(modifier="vox")
+    px.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.parent_set(type="ARMATURE_AUTO")
+    print("voxel copy unweighted", sum(1 for v in px.data.vertices if not any(g.weight > 0 for g in v.groups)), "of", len(px.data.vertices))
+    for g in px.vertex_groups: me.vertex_groups.new(name=g.name)
+    t = me.modifiers.new("wt", "DATA_TRANSFER"); t.object = px; t.use_vert_data = True; t.data_types_verts = {"VGROUP_WEIGHTS"}
+    t.vert_mapping = "POLYINTERP_NEAREST"; t.layers_vgroup_select_src = "ALL"; t.layers_vgroup_select_dst = "NAME"
+    bpy.ops.object.select_all(action="DESELECT"); me.select_set(True); bpy.context.view_layer.objects.active = me
+    bpy.ops.object.modifier_apply(modifier="wt")
+    bpy.data.objects.remove(px)
+    me.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
+    bpy.ops.object.parent_set(type="ARMATURE_NAME")
+    print("unweighted after copy", sum(1 for v in me.data.vertices if not any(g.weight > 0 for g in v.groups)))
 
 # 3) turn every bone back to the library's rest direction (T-pose), bake that into the body, make it the new rest
 arm.animation_data_clear() if arm.animation_data else None
