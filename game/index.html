@@ -449,6 +449,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
   <div class="choice" id="godToggles"></div>
   <div class="row"><button id="godMoney">+100,000 credits</button><button id="godUnlock">Unlock all weapons</button></div>
   <div class="row"><button id="godPirates">Send pirates</button><button id="godHeal">Heal my planet</button><button id="godPrank">Prank me (test)</button><button id="godConquer">Conquer me (test)</button></div>
+  <div class="row"><button id="godWipe">💣 Reset whole world (all players)</button></div>
 </section>
 <section id="p-hail" class="hud panel side" data-panel="hail" hidden>
   <div class="ph"><span class="label" id="hailName">📡 Ship</span><button class="x" data-close="hail" aria-label="Close">×</button></div>
@@ -4737,6 +4738,11 @@ $("godHeal").addEventListener("click", () => {
   if (!home.alive) return $("rebuildHome").click();
   home.data.hp = 100; home.data.pop = home.data.maxPop; home.dmg.fill(0); home.rebuild(); home.syncPeople(true); renderInfo(); save(); toast("⚡ Planet healed");
 });
+$("godWipe").addEventListener("click", () => {
+  if (!net.me) return toast("⚡ Only works online, on the live game.", "boom", 3000);
+  if (!confirm("Reset the WHOLE world?\nEvery player, planet, conquest and chat message is deleted for everyone. This can't be undone.")) return;
+  net.send({ t: "godResetWorld" });
+});
 $("godConquer").addEventListener("click", () => { if (net.me) net.send({ t: "godConquer" }); else setConquered(home, { id: "bot", name: "Test Bot" }, home.data.pop); });
 $("godPrank").addEventListener("click", () => {
   const types = ["sign", "graffiti", "tp", "ducks", "statue"], type = types[(Math.random() * types.length) | 0], n = new THREE.Vector3().randomDirection();
@@ -5655,6 +5661,10 @@ function setupNet() {
   net.on("hurt", (m) => { if (mode !== "fly") return; const by = [...remotes.values()].find((r) => r.name === m.by); if (by && !pvpOk(by)) return; hurtPlayer(m.dmg, by); if (shipHp <= 0) toast(`💥 ${esc(m.by)} destroyed your ship!`, "boom", 3000); });
   net.on("shot", (m) => remoteShot(m));
   net.on("godNo", (m) => toast(m.why === "nokey" ? "⚡ God mode is off on this server. In Render → Environment, add ADMIN_KEY with a secret word, then try again." : "⚡ Wrong god key.", "boom", 6000));
+  net.on("worldReset", () => { // the owner wiped the galaxy: everyone starts fresh (sound/graphics settings and the god key stay)
+    try { for (const k of Object.keys(localStorage)) if (k.startsWith("tinyplanets.") && k !== GODKEY && k !== UIKEY) localStorage.removeItem(k); } catch {}
+    toast("💣 The galaxy was reset. Starting fresh…", "boom", 3000); setTimeout(() => location.reload(), 1500);
+  });
   net.on("god", () => { net.god = true; renderPanels(); renderGod(); toast("⚡ God mode is yours. Find it under ⚙."); if (ui.godMode.shield) net.send({ t: "godShield", on: true }); });
   net.on("prank", (m) => {
     const p = planetById(m.id); if (!p) return; (p.data.pranks ||= []).push(m.prank); p.rebuildPranks();

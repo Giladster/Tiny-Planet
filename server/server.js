@@ -257,6 +257,16 @@ function handle(ws, c, m) {
       broadcast({ t: "planetAdd", planet, player: publicPlayer(me) }, ws); send(ws, { t: "newHome" });
       break;
     }
+    case "godResetWorld": { // the owner wipes the whole galaxy (every planet, player and chat) to test from zero
+      if (!c.god) return;
+      for (const k of Object.keys(world.planets)) dirty.add("planet:" + k);
+      for (const k of Object.keys(world.players)) dirty.add("player:" + k);
+      world.planets = {}; world.players = {}; world.chat = []; dirty.add("chat");
+      for (const cl of clients.values()) { cl.player = null; cl.ship = null; }
+      flush(); console.log("World reset by the owner");
+      broadcast({ t: "worldReset" });
+      break;
+    }
     case "godShield": { if (!c.god || !mine) return; mine.shield = !!m.on; markPlanet(mine); break; }
     case "pvp": { if (!me) return; const target = socketOf(m.target); if (target) send(target, { t: "hurt", dmg: Math.min(60, +m.dmg || 0), by: me.name }); else hitAway(world.players[m.target], Math.min(60, +m.dmg || 0), me); break; }
   }
