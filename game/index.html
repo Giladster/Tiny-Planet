@@ -186,6 +186,11 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #styleRow { display: flex; flex-wrap: wrap; gap: 5px; }
 #radioGoal { padding: 7px 9px; border-radius: 8px; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.35); color: var(--accent); font: 500 12px var(--mono); }
 #radio.min #radioText { display: none; }
+dialog.dlg { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; width: min(420px, calc(100vw - 32px)); backdrop-filter: blur(12px); display: none; flex-direction: column; gap: 10px; }
+dialog.dlg[open] { display: flex; } dialog.dlg::backdrop { background: rgba(0,0,0,.35); }
+dialog.dlg .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } dialog.dlg .hail-opts { display: grid; gap: 6px; }
+#flagPreview { width: 192px; height: 128px; border-radius: 6px; border: 1px solid var(--line); align-self: center; }
+.tradeForm { display: grid; gap: 6px; } .tradeForm label { display: flex; gap: 8px; align-items: center; } .tradeForm input { width: 90px; font: 13px var(--body); color: var(--text); background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: 8px; padding: 5px 7px; }
 .fuelbar { width: 60px; } .fuelbar i { background: linear-gradient(90deg, #ff8a1f, #ffd23f); }
 .xpbar { width: 60px; } .xpbar i { background: linear-gradient(90deg, #6fe3ff, #c8a2ff); }
 #megaBar { position: fixed; z-index: 3; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: 300px; text-align: center; font: 600 12px var(--mono); letter-spacing: .08em; color: #9fe8ff; pointer-events: none; text-shadow: 0 0 8px rgba(111,227,255,.6); }
@@ -477,7 +482,8 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <section id="p-top" class="hud panel side" data-panel="top" hidden>
   <div class="ph"><span class="label">🏆 Galaxy Top 100</span><button class="x" data-close="top" aria-label="Close Top 100">×</button></div>
   <span class="small" id="topMe"></span>
-  <div id="topList" style="max-height:52vh;overflow-y:auto"></div>
+  <div id="topList" style="max-height:40vh;overflow-y:auto"></div>
+  <span class="label">👑 Emperors and planet owners</span><div id="topEmp" style="max-height:20vh;overflow-y:auto"></div>
 </section>
 <section id="p-help" class="hud panel" data-panel="help" hidden>
   <div class="ph"><span class="label">Flight controls</span><button class="x" data-close="help" aria-label="Close flight controls">×</button></div>
@@ -537,6 +543,16 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <div id="toasts"></div>
 <div id="flash"></div>
 <div class="hint" id="hint"></div>
+<dialog id="flagDlg" class="dlg"><div class="ph"><span class="label">🚩 Your flag</span></div>
+  <canvas id="flagPreview" width="192" height="128"></canvas>
+  <div class="row"><span class="small">Colors</span><input type="color" id="flagBg" aria-label="Flag color"><input type="color" id="flagFg" aria-label="Second color"></div>
+  <span class="small">Pattern</span><div class="choice" id="flagPatterns"></div>
+  <span class="small">Symbol</span><div class="choice" id="flagIcons"></div>
+  <div class="row"><label class="up">📷 Use a photo<input type="file" id="flagPhoto" accept="image/*" hidden></label><button id="flagNoPhoto" hidden>Remove photo</button></div>
+  <label class="row"><input type="checkbox" id="flagRoof"> Fly it on my ship's roof</label>
+  <div class="row"><button class="go" id="flagSave">Save flag</button><button id="flagCancel">Cancel</button></div>
+</dialog>
+<dialog id="gameDlg" class="dlg"><div class="ph"><span class="label" id="dlgTitle"></span><button class="x" id="dlgX" aria-label="Close">×</button></div><div class="say" id="dlgSay"></div><div id="dlgBody"></div><div class="hail-opts" id="dlgOpts"></div></dialog>
 <div id="landUi" class="hud" hidden><button class="go" id="landBtn"></button><span id="landHelp"></span></div>
 
 <div id="pad" aria-hidden="true">
@@ -562,7 +578,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
     <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button><button data-open="bolt">🤖 Ask Bolt</button>
   </div></div>
   <div class="dd"><button class="ddb" aria-label="Settings">⚙ ▾</button><div class="ddm" hidden>
-    <button data-open="help" data-fly>Flight controls</button><button id="musicBtn">Music</button><button id="soundBtn">Sounds</button><button id="engineBtn">Engine sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
+    <button data-open="help" data-fly>Flight controls</button><button id="musicBtn">Music</button><button id="soundBtn">Sounds</button><button id="engineBtn">Engine sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="flagBtn">🚩 My flag</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
   </div></div>
   <span id="netPill" hidden>● connecting…</span>
   <span class="sep" data-home></span>
@@ -2347,9 +2363,13 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     const hpBefore = this.data.hp;
     this.data.hp = Math.max(0, this.data.hp - cfg.hp);
     this.data.pop = Math.max(0, this.data.pop - this.data.maxPop * cfg.pop - flung * this.perPerson * .3);
+    if (indestructible(this)) { // homes and Main Galaxy planets can be beaten down, never destroyed
+      this.data.hp = Math.max(1, this.data.hp); this.data.pop = Math.max(this.data.maxPop * .05, this.data.pop);
+      if (!remote && hpBefore > 1 && this.data.hp <= 1) toast(isHomePlanet(this) ? "🏠 Home planets can't be destroyed. Conquer them with troops instead." : "🏙 Planets in the Main Galaxy can't be destroyed. Land and plant your flag to conquer it!", "", 4000);
+    }
     if (kind !== "laser") breakOff(this, n, kind === "bomb" ? 16 : 7, cfg.size);
     for (const m of [75, 50, 25]) if (hpBefore > m && this.data.hp <= m && this.data.hp > 0) this.collapse(m);
-    if (!remote && !this.isHome) { wallet.credits += { laser: .2, missile: 2, bomb: 6 }[kind] || 0; if (hpBefore > 0 && this.data.hp <= 0) earn(300, `${this.data.name} destroyed`); else earn(0); }
+    if (!remote && !this.isHome) { wallet.credits += { laser: .2, missile: 2, bomb: 6 }[kind] || 0; earn(0); } // a kill pays out in explode()
     this.lastHit = clock(); this.cheerUntil = 0; if (!remote) this.playerHitAt = clock();
     if (this.style && clock() - (this.voxAt || 0) > 1.2) { this.voxAt = clock(); sfx.creature(this.style.kind, flung ? "fling" : "panic", this.group.position); }
     afterDamage(this);
@@ -2553,6 +2573,7 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
   }
   explode() {
     if (!this.alive) return;
+    if (!this.isHome && clock() - (this.playerHitAt ?? -99) < 8) destroyedByMe(this); // you did it: one big payout
     const d = this.data; d.dead = true; d.hp = 0; d.pop = 0; d.troops = 0;
     const center = this.group.position.clone(), R = this.R;
     this.mat.emissive.set(0xff3a10);
@@ -2869,6 +2890,7 @@ function bar(a, b, r, mat) { // a thin rod between two points
 function makeShipModel(c, root) { // players' ships get their ship name painted on the wings
   const info = makeShipParts(c, root);
   if (c.name && !ui.low) try { paintShipName(c, root); } catch (e) { console.warn("name paint", e); }
+  if (c.roofFlag && c.roofFlag.bg) try { addRoofFlag(c, root, info); } catch (e) { console.warn("roof flag", e); }
   return info;
 }
 const nameTex = new Map();
@@ -4054,10 +4076,12 @@ function hailOptions(t) {
     ["👋 Wave", () => { net.send({ t: "wave", to: t.pid, kind: "wave" }); say("You waved. They'll see it on their screen!"); }],
     ["💬 Send a message", () => { $("hailMsgRow").hidden = false; $("hailMsg").focus(); }],
     ["⚔ Challenge to a duel", () => { net.send({ t: "wave", to: t.pid, kind: "duel" }); say("Challenge sent. Get ready! ⚔"); }],
+    ["💱 Offer a trade", () => openTradeOffer(t)],
   ];
   const o = [["👋 Say hi", () => say(pickLine(LINES[t.type] || LINES[t.role] || LINES.drift))]], role = t.role, type = t.type;
   if (role === "trader" && type !== "racer") o.push(
     ["🔧 Repair my ship · 💰20", () => buy(20, () => { shipHp = 100; say("All fixed. Fly safe! 🔧"); })],
+    ...intelOptions(),
     ...(wallet.res.fuel < FUEL_MAX - 1 ? [[`⛽ Fill up my fuel · 💰${fuelPrice()}`, () => buy(fuelPrice(), () => { wallet.res.fuel = FUEL_MAX; saveRes(); say("Tank's full. Happy flying! ⛽"); })]] : []),
     ...(wallet.res.metal + wallet.res.crystal > 0 ? [[`💱 Sell my 🔩 ${wallet.res.metal} metal + 💎 ${wallet.res.crystal} crystals · 💰${sellValue()}`, () => { const v = sellValue(); wallet.res.metal = wallet.res.crystal = 0; saveRes(); earn(v, "you sold your loot"); say("Pleasure doing business! 💱"); }]] : []),
     ["📦 Buy a mystery crate · 💰40", () => buy(40, () => { const r = Math.random(), win = r < .35 ? 0 : r < .8 ? 70 : 160; if (win) earn(win, "mystery crate"); say(win ? `Lucky you! The crate had ${win} credits inside. 🎉` : "Oops… it was full of rubber ducks. 🦆"); })],
@@ -4258,7 +4282,7 @@ const TUT = [
     } },
   { goal: (s) => `Visit the neighbors on ${s.name || "a nearby planet"}`, fly: true,
     enter(s) {
-      const near = planets.filter((p) => p !== home && p.alive && !p.data.npc).sort((a, b) => a.group.position.distanceTo(home.group.position) - b.group.position.distanceTo(home.group.position))[0];
+      const near = planets.filter((p) => p !== home && p.alive && !p.data.far && !p.data.wild).sort((a, b) => a.group.position.distanceTo(home.group.position) - b.group.position.distanceTo(home.group.position))[0];
       if (!near) return; s.name = near.data.name; s.target = near.data.id || near.data.name;
       radio(`Time to meet the neighbors! 👋 ${near.data.name} is close. Fly over and say hi. Hold Shift to boost!`); setNav(near);
     },
@@ -4390,9 +4414,9 @@ const BUILD_INFO = {
   alien: { cost: 30, fame: 3, text: "+3 fame" }, sign: { cost: 0, fame: 1, text: "free" },
 };
 const styleBonus = (k) => (wallet.style && STYLES[wallet.style] && STYLES[wallet.style].bonus === k ? 1.2 : 1);
-const incomePerMin = () => Math.round(state.home.decor.reduce((s, d) => s + (BUILD_INFO[d.type]?.income || 0), 0) * styleBonus("income"));
+const incomePerMin = () => Math.round(state.home.decor.reduce((s, d) => s + (BUILD_INFO[d.type]?.income || 0), 0) * styleBonus("income")) + claimIncome();
 const buildFame = () => state.home.decor.reduce((s, d) => s + (BUILD_INFO[d.type]?.fame || 0), 0);
-function fameOf() { const st = wallet.stats; return Math.round((wallet.xp + buildFame() * 10 + (st.raids || 0) * 40 + (st.arena || 0) * 30 + (st.bounties || 0) * 50) * styleBonus("fame")); }
+function fameOf() { const st = wallet.stats; return Math.round((wallet.xp + buildFame() * 10 + (st.raids || 0) * 40 + (st.arena || 0) * 30 + (st.bounties || 0) * 50 + myClaims().length * 25 + (st.destroyed || 0) * 40 + (empireOf(myId()) ? 500 : 0)) * styleBonus("fame")); }
 function payBuild(type) { // returns false if you can't afford it
   if (DECOR_LEVEL[type] && needLevel(DECOR_LEVEL[type], DECOR[type])) return false;
   const c = godOn("free") ? 0 : BUILD_INFO[type]?.cost || 0; if (!c) return true;
@@ -4455,13 +4479,13 @@ function renderGameInfo() { // planet panel: what your planet makes, your fame a
 }
 // ---- saving your progress on the server (it lives in the database when the server has one)
 let walletSent = "";
-function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY), found: wallet.found, species: wallet.species, res: wallet.res, drilled: wallet.drilled || {} }; }
+function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY), found: wallet.found, species: wallet.species, res: wallet.res, drilled: wallet.drilled || {}, flag: wallet.flag, enemies: wallet.enemies || [], emperor: !!wallet.emperor, empire: wallet.empire || null }; }
 function syncWallet() { if (!net.me || !gameStarted) return; const s = JSON.stringify(walletSnapshot()); if (s === walletSent) return; walletSent = s; net.send({ t: "wallet", wallet: JSON.parse(s) }); }
 setInterval(syncWallet, 4000);
 function restoreWallet(w) { // you joined from another browser, or this one was cleared: the server remembers you
   if (!w || typeof w !== "object") return;
   if ((w.xp | 0) < (wallet.xp | 0) && load(WALLETKEY)) return; // this browser is ahead
-  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now(), found: w.found && typeof w.found === "object" ? w.found : {}, species: Array.isArray(w.species) ? w.species : [], res: w.res && typeof w.res === "object" ? w.res : freshRes(), drilled: w.drilled && typeof w.drilled === "object" ? w.drilled : {} });
+  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now(), found: w.found && typeof w.found === "object" ? w.found : {}, species: Array.isArray(w.species) ? w.species : [], res: w.res && typeof w.res === "object" ? w.res : freshRes(), drilled: w.drilled && typeof w.drilled === "object" ? w.drilled : {}, flag: w.flag && w.flag.bg ? w.flag : wallet.flag || defaultFlag(), enemies: Array.isArray(w.enemies) ? w.enemies : [], emperor: !!w.emperor, empire: w.empire || null });
   saveWallet();
   if (typeof w.tut === "number") { tut = { step: Math.min(TUT.length, w.tut), n: 0 }; store(TUTKEY, tut); }
   if (w.missions && w.missions.day) { store(MISSIONKEY, w.missions); missions = null; }
@@ -4648,6 +4672,7 @@ function renderTop() {
   const el = $("topList"); if (!el) return;
   myRank = topList.findIndex((r) => r.me) + 1;
   $("topMe").textContent = myRank ? `You are #${myRank} with ${fmt(fameOf())} fame.` : `You have ${fmt(fameOf())} fame. Earn more to enter the Top 100!`;
+  $("topEmp").innerHTML = emperorsHtml();
   el.innerHTML = topList.map((r, i) => `<div class="prank-row${r.me ? " me" : ""}"><span>${i < 3 ? ["🥇", "🥈", "🥉"][i] : "#" + (i + 1)} <b>${esc(r.name)}</b> · ${esc(r.planet || "")}</span><span>Lv ${r.lv} · ⭐ ${fmt(r.fame)}</span></div>`).join("") || `<span class="small">Nobody is ranked yet. Be the first!</span>`;
   renderGameInfo();
 }
@@ -4670,7 +4695,7 @@ function gameStep(dt, t) {
     const left = raid.pirates.filter((p) => !p.dead);
     for (const p of left) p.hostile = true;
     if (!left.length) endRaid(true); else if (clock() > raid.until) endRaid(false);
-  } else if (tut.step >= TUT.length && lvl() >= 2 && clock() > nextRaid) { if (mode === "fly" && !arena) startRaid(); else nextRaid = clock() + 60; }
+  } // no surprise raids: homes are safe zones now (god mode can still send pirates)
   if (tut.step >= TUT.length && !gameEvents.length && clock() > nextEvent) { startEvent(); nextEvent = clock() + rnd(300, 480); }
   if ((evTick += dt) > 1) { evTick = 0; if (raid || gameEvents.length) renderEvents(); }
 }
@@ -5035,6 +5060,7 @@ function renderMap() {
     s += `<circle class="body" cx="${c.x}" cy="${c.z}" r="${r * 1.4}" fill="transparent" stroke="none"/></g>`;
     labels.push({ x: c.x, y: c.z - r - fs * .5, text: g.name + (d < g.r ? " (you are here)" : ""), col: g.color.replace(/[\d.]+\)$/, "1)"), pri: g === mapSelGal ? 3e9 : d < g.r ? 2e9 : g.r });
   });
+  s += empireMapSvg(fs);
   if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
   const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
   const shipMark = () => `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * .9} ${fs * .55},${-fs * .6} 0,${-fs * .3} ${-fs * .55},${-fs * .6}" fill="#6fe3ff"/></g>`;
@@ -5416,6 +5442,7 @@ class Npc {
     this.group.position.copy(c).add(new THREE.Vector3(this.orbitR, rnd(-2, 2), 0).applyAxisAngle(UP, this.orbitA));
     this.hp = this.maxHp; this.hostile = false; this.group.visible = true; this.dead = false; this.wreck = null;
     this.at = h || null; this.goal = null; this.wait = rnd(0, 3);
+    if (freePirate(this) && !this.opts.leader) { this.group.position.copy(openSpacePoint()); this.at = null; } // pirates live between the galaxies
     if (this.opts.leader) this.group.position.copy(this.opts.leader.group.position).add(new THREE.Vector3().randomDirection().multiplyScalar(6 + this.opts.leader.info.radius * 2));
     if (this.trail) this.trail.reset();
   }
@@ -5436,7 +5463,9 @@ class Npc {
       if (h) { goal = near(h, rnd(2.6, 5)); wait = rnd(1, 4); } else goal = pos.clone().add(new THREE.Vector3().randomDirection().multiplyScalar(30));
     } else if (r === "patrol") { // police cruise from planet to planet
       p = any(players.length ? players : live); if (p) { goal = near(p, 3.2); wait = rnd(2, 6); }
-    } else if (r === "pirate") { // pirates lurk near their station and along trade routes
+    } else if (r === "pirate" && freePirate(this)) { // pirates prowl open space between the galaxies
+      goal = openSpacePoint(pos); wait = rnd(2, 6);
+    } else if (r === "pirate") {
       p = h && Math.random() < .6 ? h : any(live); if (p) { goal = near(p, rnd(4, 9)); wait = rnd(2, 6); }
     } else if (r === "drift") { // giants slowly travel across the galaxy
       goal = centre.clone().add(new THREE.Vector3(rnd(-1, 1), 0, rnd(-1, 1)).normalize().multiplyScalar(rnd(80, 420))); wait = rnd(5, 15);
@@ -5509,6 +5538,7 @@ class Npc {
       if (this.hostile && L.role === "pirate") L.hostile = true;
     }
     if (clock() < (this.peaceUntil || 0)) this.hostile = false; // you paid them off
+    if (freePirate(this) && mode === "fly" && safeSpot(ship.position)) this.hostile = false; // inside a galaxy or near a home, pirates leave you alone
     const hired = mode === "fly" && clock() < (this.escortUntil || 0);
     const help = !hired && !this.hostile && this.role === "patrol" && mode === "fly" ? this.pirateNear() : null;
     if (stunned) { // knocked out by an EMP: drifting, sparking, no engines, no guns
@@ -5601,12 +5631,12 @@ function spawnNpcs() {
   const add = (type, n, opts = {}) => { for (let i = 0; i < n; i++) npcs.push(new Npc(type, { ...opts })); };
   const pack = (lead, follow, count, opts = {}) => { const L = new Npc(lead, { ...opts }); npcs.push(L); for (let i = 0; i < count; i++) npcs.push(new Npc(follow, { ...opts, leader: L, slot: i })); };
   add("trader", 6); add("guard", 4, { planet: "Zorg Prime" });
-  for (let i = 0; i < 3; i++) pack("pirateBoss", "pirate", 3, { planet: "Krell Station" }); // pirate gangs
+  for (let i = 0; i < 3; i++) pack("pirateBoss", "pirate", 3, { planet: "Krell Station", lair: true }); // pirate gangs, out in open space
   add("miner", 3); add("tourist", 4); add("squid", 3); add("racer", 3); add("crystal", 2);
   for (let i = 0; i < 2; i++) pack("police", "police", 2); // police squads
   for (let i = 0; i < 2; i++) pack("freighter", "escort", 3); // freighter convoys with escorts
   add("mothership", 3); add("kraken", 1); add("hive", 1);
-  pack("dreadnought", "pirate", 2, { planet: "Krell Station" });
+  pack("dreadnought", "pirate", 2, { planet: "Krell Station", lair: true });
 }
 function npcStep(dt, t) {
   for (const n of npcs) n.update(dt, t);
@@ -5717,7 +5747,7 @@ class RemoteShip {
   }
   setCfg(cfg) { if (!cfg) return; const k = JSON.stringify(cfg); if (k === this.cfgKey) return; this.cfgKey = k; this.info = makeShipModel(cfg, this.model); }
   setState(s) {
-    this.name = s.away ? s.name + " 💤" : s.name; this.away = !!s.away; this.hp = s.hp ?? 100; this.lv = s.lv || 1; this.seen = clock();
+    this.name = (isEmperor(s.pid) ? "👑 " : "") + (s.away ? s.name + " 💤" : s.name); this.away = !!s.away; this.hp = s.hp ?? 100; this.lv = s.lv || 1; this.seen = clock();
     this.tp.fromArray(s.p).sub(WORLD_OFFSET); this.tq.fromArray(s.q);
     if (!this.placed) { this.group.position.copy(this.tp); this.group.quaternion.copy(this.tq); this.placed = true; }
   }
@@ -5865,6 +5895,7 @@ function enterWorld(you, world) {
   $("p-join").hidden = true;
   $("resetAsk").textContent = "Reset my planet";
   restoreWallet(you.wallet);
+  claims = world.claims || {}; if (net.players[you.id]?.flag) wallet.flag = net.players[you.id].flag; else net.send({ t: "flag", flag: wallet.flag });
   startGame();
   if (you.lost) setTimeout(() => toast(`💥 While you were away, ${esc(you.lost.by)} shot down your ship on its way home. Bolt fixed it!`, "boom", 7000), 1500);
   toast(`🌍 Welcome, ${esc(you.name)}! This galaxy is live: other players can visit you.`, "", 5000);
@@ -6994,6 +7025,269 @@ function inFight() { // loud music only in a real fight: an angry ship close by,
   if (foeNear || now - lastPlayerHit < 6 || arena?.bots?.length) fightUntil = now + 12;
   return now < fightUntil;
 }
+// ================= exploring: flags, conquering, trading, destroying, revenge and emperors =================
+// Plant your flag on a planet to make it yours (wild ones right away, lived-on ones after you shoot their defenses down).
+// The Main Galaxy is the city: its planets can be conquered but never destroyed, and nobody can destroy a home planet.
+// Out in open space, planets can be blown up for one big payout. Own 5 planets close together and you are an Emperor.
+var claims = {}, myEmpireShip = null, tradeOffers = {};
+const MAIN_R = 2250, SAFE_R = 350, EMPIRE_N = 5, EMPIRE_SPREAD = 1500, CLAIMSKEY = "tinyplanets.claims", DEFENSE_DOWN = 40;
+const FLAG_ICONS = ["🚀", "⭐", "🌙", "☀️", "🔥", "⚡", "💀", "👑", "🐉", "🌀", "❤️", "🪐", "👽", "🦊", "🐺", "🍀", ""];
+const FLAG_PATTERNS = { plain: "Plain", stripe: "Stripes", cross: "Cross", split: "Split", star: "Circle" };
+const defaultFlag = () => ({ bg: "#2a6bff", fg: "#ffd23f", pattern: "star", icon: "🚀", img: "" });
+const worldPosOf = (p) => (p.data && Array.isArray(p.data.pos) ? V(p.data.pos) : p.group.position.clone().add(WORLD_OFFSET));
+const inMainGalaxy = (p) => worldPosOf(p).length() < MAIN_R;
+const isHomePlanet = (p) => p === home || !!p.data.ownerId;
+const indestructible = (p) => isHomePlanet(p) || inMainGalaxy(p);
+const claimOf = (p) => (p && p.data && claims[p.data.name]) || null;
+const myClaims = () => Object.entries(claims).filter(([, c]) => c.by === myId());
+const flagOf = (id) => (id === myId() ? wallet.flag : net.players[id]?.flag) || { ...defaultFlag(), bg: "#555a66", fg: "#c8ccd8", icon: "🏳" };
+function loadClaims(list) { claims = list && typeof list === "object" ? list : {}; syncClaimFlags(); }
+function saveClaimsLocal() { if (!net.me) store(CLAIMSKEY, claims); }
+// ---- flags: drawn on a little canvas, used on planets and on your ship's roof
+const flagTexCache = new Map();
+function drawFlag(f, cv, img) {
+  const x = cv.getContext("2d"), W = cv.width, H = cv.height;
+  x.fillStyle = f.bg; x.fillRect(0, 0, W, H); x.fillStyle = f.fg;
+  if (f.pattern === "stripe") x.fillRect(0, H / 3, W, H / 3);
+  else if (f.pattern === "cross") { x.fillRect(W * .3, 0, W * .14, H); x.fillRect(0, H * .43, W, H * .14); }
+  else if (f.pattern === "split") x.fillRect(0, 0, W / 2, H);
+  else if (f.pattern === "star") { x.beginPath(); x.arc(W / 2, H / 2, H * .34, 0, Math.PI * 2); x.fill(); }
+  if (img) { const k = Math.max((W - 12) / img.width, (H - 12) / img.height), w = img.width * k, h = img.height * k; x.save(); x.beginPath(); x.rect(6, 6, W - 12, H - 12); x.clip(); x.drawImage(img, (W - w) / 2, (H - h) / 2, w, h); x.restore(); }
+  else if (f.icon) { x.font = `${Math.round(H * .5)}px sans-serif`; x.textAlign = "center"; x.textBaseline = "middle"; x.fillText(f.icon, W / 2, H / 2 + H * .03); }
+}
+function flagTexture(f) {
+  const key = JSON.stringify(f); if (flagTexCache.has(key)) return flagTexCache.get(key);
+  const cv = document.createElement("canvas"); cv.width = 192; cv.height = 128; drawFlag(f, cv);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; flagTexCache.set(key, tex);
+  if (f.img) { const im = new Image(); im.onload = () => { drawFlag(f, cv, im); tex.needsUpdate = true; }; im.src = f.img; }
+  return tex;
+}
+function makeFlagMesh(f, h) { // a pole with your flag at the top; h = pole height
+  const g = new THREE.Group();
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(h * .018, h * .018, h, 8), new THREE.MeshStandardMaterial({ color: 0xd8dce6, metalness: .8, roughness: .3 }));
+  pole.position.y = h / 2; g.add(pole);
+  const cloth = new THREE.Mesh(new THREE.PlaneGeometry(h * .54, h * .36), new THREE.MeshStandardMaterial({ map: flagTexture(f), side: THREE.DoubleSide, roughness: .8, emissive: 0xffffff, emissiveMap: flagTexture(f), emissiveIntensity: .25 }));
+  cloth.position.set(h * .27, h * .8, 0); cloth.name = "flagCloth"; g.add(cloth);
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(h * .035, 10, 8), pole.material); knob.position.y = h; g.add(knob);
+  return g;
+}
+function addRoofFlag(c, root, info) { // the flag flies on your ship's roof
+  const L = info.len || .6, R = info.radius || .2, f = makeFlagMesh(c.roofFlag, L * .5);
+  f.position.set(0, R * .45, -L * .22); f.rotation.y = -Math.PI / 2; root.add(f);
+}
+function syncClaimFlags() { // a flag stands on every claimed planet
+  if (typeof planets === "undefined") return;
+  for (const p of planets) {
+    const c = claimOf(p), key = c ? c.by + JSON.stringify(flagOf(c.by)) + c.n : "";
+    if (p.claimKey === key) continue; p.claimKey = key;
+    if (p.flagObj) { p.flagObj.parent?.remove(p.flagObj); p.flagObj = null; }
+    if (!c || !p.mesh || !p.radiusAt) continue;
+    const n = V(c.n || [0, 1, 0]).normalize(), u = .21 * .85 * Math.sqrt(p.R / 1.6), f = makeFlagMesh(flagOf(c.by), u * 6);
+    f.position.copy(n).multiplyScalar(p.radiusAt(n) * .995); f.quaternion.setFromUnitVectors(UP, n); p.mesh.add(f); p.flagObj = f;
+  }
+  if (ui.map) renderMap();
+}
+function setClaim(name, c) { if (c) claims[name] = c; else delete claims[name]; saveClaimsLocal(); syncClaimFlags(); checkEmpire(); renderGameInfo(); }
+// ---- the flag designer
+let flagDraft = null;
+function openFlagDesigner() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  flagDraft = { ...wallet.flag }; $("flagRoof").checked = !!state.ship.roofFlag; renderFlagDesigner(); $("flagDlg").showModal();
+}
+function renderFlagDesigner() {
+  const f = flagDraft; $("flagBg").value = f.bg; $("flagFg").value = f.fg;
+  const cv = $("flagPreview"); drawFlag(f, cv); if (f.img) { const im = new Image(); im.onload = () => drawFlag(f, cv, im); im.src = f.img; }
+  choiceRow($("flagPatterns"), FLAG_PATTERNS, (k) => f.pattern === k, (k) => { f.pattern = k; renderFlagDesigner(); });
+  choiceRow($("flagIcons"), Object.fromEntries(FLAG_ICONS.map((i) => [i || "none", i || "None"])), (k) => (f.icon || "none") === k && !f.img, (k) => { f.icon = k === "none" ? "" : k; f.img = ""; renderFlagDesigner(); });
+  $("flagNoPhoto").hidden = !f.img;
+}
+$("flagBg").addEventListener("input", (e) => { flagDraft.bg = e.target.value; renderFlagDesigner(); });
+$("flagFg").addEventListener("input", (e) => { flagDraft.fg = e.target.value; renderFlagDesigner(); });
+$("flagNoPhoto").addEventListener("click", () => { flagDraft.img = ""; renderFlagDesigner(); });
+$("flagPhoto").addEventListener("change", (e) => { // your photo on the flag, made small so it travels fast
+  const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+  const im = new Image(); im.onload = () => {
+    const cv = document.createElement("canvas"); cv.width = 180; cv.height = 120; const x = cv.getContext("2d"), k = Math.max(180 / im.width, 120 / im.height);
+    x.drawImage(im, (180 - im.width * k) / 2, (120 - im.height * k) / 2, im.width * k, im.height * k);
+    flagDraft.img = cv.toDataURL("image/jpeg", .8); URL.revokeObjectURL(im.src); renderFlagDesigner();
+  };
+  im.src = URL.createObjectURL(file);
+});
+$("flagSave").addEventListener("click", () => {
+  wallet.flag = { ...flagDraft }; saveWallet();
+  state.ship.roofFlag = $("flagRoof").checked ? { ...wallet.flag } : null; buildShip(); save();
+  if (net.me) net.send({ t: "flag", flag: wallet.flag });
+  for (const p of planets) p.claimKey = null; syncClaimFlags(); $("flagDlg").close(); toast("🚩 Your flag is ready. Land on a planet and press F to plant it!", "", 3500);
+});
+$("flagCancel").addEventListener("click", () => $("flagDlg").close());
+$("flagBtn").addEventListener("click", openFlagDesigner);
+// ---- one small window for trading and offers
+function showDlg(title, text, opts, body) {
+  if (document.pointerLockElement) document.exitPointerLock();
+  $("dlgTitle").textContent = title; $("dlgSay").textContent = text; const el = $("dlgOpts"); el.innerHTML = "";
+  for (const [label, fn] of opts) { const b = document.createElement("button"); b.textContent = label; b.addEventListener("click", fn); el.append(b); }
+  const bd = $("dlgBody"); bd.innerHTML = ""; if (body) bd.append(body);
+  if (!$("gameDlg").open) $("gameDlg").showModal();
+}
+const closeDlg = () => $("gameDlg").open && $("gameDlg").close();
+$("dlgX").addEventListener("click", closeDlg);
+// ---- conquering: plant your flag
+function plantFlag() {
+  const w = walk; if (!w || w.phase !== "walk") return;
+  const p = w.p, name = p.data.name, c = claims[name];
+  if (p === home || p.data.ownerId) return toast("🏠 That's someone's home planet. Homes can't be taken with a flag.", "", 3500);
+  if (c && c.by === myId()) return toast("🚩 This planet is already yours!");
+  const town = !p.data.wild && (p.data.pop || 0) > 0, occupied = town || !!c;
+  if (occupied && (p.data.hp ?? 100) > DEFENSE_DOWN && !godOn("oneshot")) {
+    radio(`🛡 ${name}'s defenses are still up (${Math.round(p.data.hp ?? 100)}% health). Take off, shoot it under ${DEFENSE_DOWN}%, then land and plant your flag.`);
+    return toast(`🛡 Defenses up! Shoot ${esc(name)} under ${DEFENSE_DOWN}% first.`, "boom", 3500);
+  }
+  const n = w.pn.toArray().map(r3), pos = (p.data.pos ? V(p.data.pos) : ship.position.clone().add(WORLD_OFFSET)).toArray().map(Math.round); // the 3D model planets: where your ship is parked
+  setClaim(name, { by: myId(), byName: net.me ? net.me.name : state.home.owner, at: Date.now(), n, kind: town ? "town" : "wild", pos });
+  if (net.me) net.send({ t: "claim", name, n, kind: town ? "town" : "wild", pos });
+  avatarPlay("cheer"); sfx.place(); spark(w.p.spin.localToWorld(w.pn.clone().multiplyScalar(w.g)), w.u * 6, C(0xffd23f, 3));
+  wallet.stats.claims = (wallet.stats.claims || 0) + 1; addXp(occupied ? 80 : 40);
+  if (occupied) { // you take their stuff
+    const r = wallet.res, loot = { credits: town ? 150 + ((Math.random() * 100) | 0) : 60, metal: 10 + ((Math.random() * 15) | 0), crystal: 3 + ((Math.random() * 6) | 0) };
+    r.metal += loot.metal; r.crystal += loot.crystal; saveRes(); earn(loot.credits, `you took ${name}'s treasure`);
+    toast(`🚩 ${esc(name)} is yours! Loot: +${loot.metal} 🔩 +${loot.crystal} 💎`, "", 4000);
+  } else toast(`🚩 You planted your flag on ${esc(name)}. It's yours now!`, "", 3500);
+  radio(occupied ? `🚩 We conquered ${name}! It will pay us ${claimIncomeOf(town ? "town" : "wild")} credits a minute. 💰` : `🚩 ${name} is ours! Wild planets pay a little every minute. Own ${EMPIRE_N} planets close together and you become an Emperor. 👑`);
+}
+// ---- trading with the people who live on a planet
+const nameHash = (s) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+function openAlienTrade() {
+  const w = walk; if (!w || w.phase !== "walk") return;
+  const p = w.p; if (p.data.wild || !(p.data.pop > 0) || p === home) return toast("Nobody lives here to trade with.");
+  const h = nameHash(p.data.name), mp = 3 + (h % 4), cp = 8 + ((h >> 3) % 7), fp = .3 + ((h >> 6) % 4) * .1, r = wallet.res;
+  const fuelCost = Math.max(5, Math.ceil((FUEL_MAX - r.fuel) * fp)), mine = claimOf(p) && claimOf(p).by === myId();
+  const again = () => setTimeout(openAlienTrade, 10);
+  showDlg(`💱 Trading on ${p.data.name}`, `${mine ? "Your people here give you a friendly price. " : ""}Here they pay 💰${mp} for 🔩 metal and 💰${cp} for 💎 crystals.`, [
+    ...(r.metal ? [[`Sell 🔩 ${r.metal} metal · +💰${r.metal * mp}`, () => { earn(r.metal * mp, "metal sold"); r.metal = 0; saveRes(); again(); }]] : []),
+    ...(r.crystal ? [[`Sell 💎 ${r.crystal} crystals · +💰${r.crystal * cp}`, () => { earn(r.crystal * cp, "crystals sold"); r.crystal = 0; saveRes(); again(); }]] : []),
+    ...(r.fuel < FUEL_MAX - 1 ? [[`⛽ Fill up fuel · 💰${mine ? 0 : fuelCost}`, () => { const cost = mine || godOn("free") ? 0 : fuelCost; if (wallet.credits < cost) return $("dlgSay").textContent = "You need more credits."; wallet.credits -= cost; earn(0); r.fuel = FUEL_MAX; saveRes(); again(); }]] : []),
+    [`Buy 🔩 10 metal · 💰${mp * 15}`, () => { if (wallet.credits < mp * 15) return $("dlgSay").textContent = "You need more credits."; wallet.credits -= mp * 15; earn(0); r.metal += 10; saveRes(); again(); }],
+    ["👋 Done", closeDlg],
+  ]);
+  missionEvent("hail");
+}
+// ---- trading with other players: you give goods, they pay credits
+function openTradeOffer(t) {
+  const body = document.createElement("div"); body.className = "tradeForm";
+  const r = wallet.res, row = (k, label, max) => `<label>${label} <input type="number" min="0" max="${max}" value="0" data-k="${k}"> <small>of ${max}</small></label>`;
+  body.innerHTML = `<span class="small">You give:</span>${row("metal", "🔩 Metal", r.metal)}${row("crystal", "💎 Crystals", r.crystal)}${row("fuel", "⛽ Fuel", Math.floor(r.fuel))}<span class="small">They pay you:</span><label>💰 Credits <input type="number" min="0" value="0" data-k="credits"></label>`;
+  showDlg(`💱 Trade with ${t.name}`, "Make an offer. They get a window to say yes or no.", [["📨 Send offer", () => {
+    const o = {}; body.querySelectorAll("input").forEach((i) => (o[i.dataset.k] = Math.max(0, Math.floor(+i.value || 0))));
+    o.metal = Math.min(o.metal, r.metal); o.crystal = Math.min(o.crystal, r.crystal); o.fuel = Math.min(o.fuel, Math.floor(r.fuel));
+    if (!o.metal && !o.crystal && !o.fuel) return ($("dlgSay").textContent = "Pick something to give first.");
+    const id = Math.random().toString(36).slice(2, 9); tradeOffers[id] = { o, to: t.name };
+    net.send({ t: "trade", to: t.pid, id, offer: o }); $("dlgSay").textContent = "Offer sent. Waiting for an answer… 📨";
+  }], ["Cancel", closeDlg]], body);
+}
+const offerText = (o) => [o.metal && `🔩 ${o.metal} metal`, o.crystal && `💎 ${o.crystal} crystals`, o.fuel && `⛽ ${o.fuel} fuel`].filter(Boolean).join(", ");
+net.on("trade", (m) => {
+  const o = m.offer;
+  showDlg(`💱 Trade offer from ${m.from}`, `${m.from} gives you ${offerText(o)} for 💰${o.credits} credits.`, [
+    ["✅ Deal", () => {
+      if (wallet.credits < o.credits && !godOn("free")) return ($("dlgSay").textContent = `You need ${Math.ceil(o.credits - wallet.credits)} more credits.`);
+      if (!godOn("free")) wallet.credits -= o.credits; const r = wallet.res; r.metal += o.metal; r.crystal += o.crystal; r.fuel = Math.min(FUEL_MAX, r.fuel + o.fuel); saveRes(); earn(0);
+      net.send({ t: "tradeReply", to: m.fromId, id: m.id, ok: true }); closeDlg(); toast(`💱 Deal! You got ${offerText(o)}.`);
+    }],
+    ["❌ No thanks", () => { net.send({ t: "tradeReply", to: m.fromId, id: m.id, ok: false }); closeDlg(); }],
+  ]);
+});
+net.on("tradeReply", (m) => {
+  const t = tradeOffers[m.id]; if (!t) return; delete tradeOffers[m.id];
+  if (!m.ok) return toast(`💱 ${esc(m.from)} said no to your trade.`);
+  const r = wallet.res, o = t.o; r.metal = Math.max(0, r.metal - o.metal); r.crystal = Math.max(0, r.crystal - o.crystal); r.fuel = Math.max(0, r.fuel - o.fuel); saveRes();
+  earn(o.credits, `${m.from} took your trade`); closeDlg();
+});
+net.on("tradeNo", () => toast("💱 They just went offline. Try again later."));
+// ---- claims from the server
+net.on("claim", (m) => { if (m.claim) claims[m.name] = m.claim; else delete claims[m.name]; syncClaimFlags(); checkEmpire(); });
+net.on("flag", (m) => { (net.players[m.pid] ||= { id: m.pid }).flag = m.flag; syncClaimFlags(); });
+net.on("empire", (m) => { (net.players[m.pid] ||= { id: m.pid }).empire = m.empire; if (ui.map) renderMap(); if (ui.top) renderTop(); });
+// ---- income from your planets
+const claimIncomeOf = (kind) => (kind === "town" ? 6 : 3);
+function claimIncome() { const e = empireOf(myId()); return Math.round(myClaims().reduce((s, [, c]) => s + claimIncomeOf(c.kind), 0) * (e ? 1.5 : 1)); }
+// ---- destroying planets in open space
+function destroyedByMe(p) { // one big payout: credits, its metal and crystals, and fame
+  const R = Math.min(p.R, 40), metal = Math.round(20 + R * 2), crystal = Math.round(6 + R * .6), c = claimOf(p);
+  wallet.res.metal += metal; wallet.res.crystal += crystal; saveRes();
+  wallet.stats.destroyed = (wallet.stats.destroyed || 0) + 1; addXp(100);
+  earn(400, `${p.data.name} destroyed · +${metal} 🔩 +${crystal} 💎`);
+  if (c) setClaim(p.data.name, null);
+  if (net.me) net.send({ t: "destroyed", name: p.data.name });
+  radio(c && c.by !== myId() ? `💥 Boom! ${p.data.name} belonged to ${c.byName}. They'll know it was us… watch your back. 😬` : `💥 What a big bang! We grabbed ${metal} metal and ${crystal} crystals from the pieces.`);
+}
+// ---- revenge: someone took or destroyed your planet
+net.on("attacked", (m) => {
+  if (!m.by) return; (wallet.enemies ||= []).unshift({ id: m.by.id, name: m.by.name, what: m.what, planet: m.planet, at: m.at || Date.now() }); wallet.enemies.length = Math.min(wallet.enemies.length, 10); saveWallet();
+  const verb = m.what === "destroyed" ? "destroyed" : m.what === "conquered" ? "conquered" : "took";
+  toast(`😡 ${esc(m.by.name)} ${verb} ${esc(m.planet)}!`, "boom", 6000);
+  radio(`😡 ${m.by.name} ${verb} ${m.planet}${m.late ? " while you were away" : ""}! Any trader will sell us intel on where they live. Payback time? 🕵`);
+});
+function intelOptions() {
+  const e = (wallet.enemies || [])[0]; if (!e) return [];
+  return [[`🕵 Buy intel on ${e.name}'s home · 💰80`, () => buy(80, () => {
+    const pl = net.players[e.id], p = (pl && planetById(pl.planetId)) || planets.find((q) => q.data.ownerId === e.id);
+    if (!p) return say(`Nobody knows where ${e.name} lives right now. Try later.`);
+    (wallet.found ||= {})[p.data.name] = Math.max(wallet.found[p.data.name] || 0, 1); saveWallet(); setNav(p);
+    say(`Psst… ${e.name} lives on ${p.data.name}. I put it on your map. Don't tell them I told you. 🕵`);
+  })]];
+}
+// ---- emperors: 5 planets close together make your own galaxy
+function empireOf(id) {
+  const pts = Object.values(claims).filter((c) => c.by === id && Array.isArray(c.pos)).map((c) => V(c.pos));
+  let best = null;
+  for (const a of pts) { const near = pts.filter((b) => b.distanceTo(a) < EMPIRE_SPREAD); if (near.length >= EMPIRE_N && (!best || near.length > best.n)) best = { n: near.length, center: near.reduce((s, v) => s.add(v), new THREE.Vector3()).multiplyScalar(1 / near.length) }; }
+  if (!best) return null;
+  const pl = id === myId() ? { empire: wallet.empire } : net.players[id];
+  return { ...best, name: pl?.empire?.name || "A new empire", color: pl?.empire?.color || "#ffd23f" };
+}
+const isEmperor = (id) => !!empireOf(id);
+function checkEmpire() {
+  const e = empireOf(myId());
+  if (e && !wallet.emperor) {
+    wallet.emperor = true; saveWallet(); flashScreen("#ffd23f", .4); sfx.levelUp?.();
+    radio(`👑 We own ${e.n} planets close together. You're an EMPEROR now! You get a mothership, taxes from all your planets, and your own galaxy on everyone's map.`);
+    setTimeout(() => { const name = (prompt("👑 You're an Emperor! Name your galaxy:", (net.me ? net.me.name : "My") + "'s Empire") || "").trim().slice(0, 30); wallet.empire = { name: name || "My Empire", color: wallet.flag.bg }; saveWallet(); if (net.me) net.send({ t: "empire", name: wallet.empire.name, color: wallet.empire.color }); if (ui.map) renderMap(); }, 1200);
+  } else if (!e && wallet.emperor) { wallet.emperor = false; saveWallet(); radio("👑 We lost our empire… we need 5 planets close together again."); }
+  placeMothership(e);
+}
+function placeMothership(e) { // the Emperor's flying base: refuel there
+  if (!e) { if (myEmpireShip) { scene.remove(myEmpireShip); myEmpireShip = null; } return; }
+  if (!myEmpireShip) { myEmpireShip = new THREE.Group(); const m = new THREE.Group(); makeShipModel(NPC_TYPES.mothership.cfg, m); m.scale.setScalar(3); myEmpireShip.add(m); scene.add(myEmpireShip); }
+  myEmpireShip.position.copy(e.center).sub(WORLD_OFFSET).add(new THREE.Vector3(0, 60, 0));
+}
+const nearMothership = () => !!myEmpireShip && mode === "fly" && ship.position.distanceTo(myEmpireShip.position) < 120;
+function empireMapSvg(fs) { // every emperor's galaxy, in their color
+  let s = ""; const ids = new Set(Object.values(claims).map((c) => c.by));
+  for (const id of ids) { const e = empireOf(id); if (!e) continue; const c = e.center.clone().sub(WORLD_OFFSET), r = EMPIRE_SPREAD * .6;
+    s += `<circle cx="${c.x}" cy="${c.z}" r="${r}" fill="${e.color}" fill-opacity=".06" stroke="${e.color}" stroke-width="${fs * .16}" stroke-dasharray="${fs * .4} ${fs * .3}"/><text x="${c.x}" y="${c.z - r - fs * .4}" font-size="${fs}" text-anchor="middle" style="fill:${e.color}">👑 ${esc(e.name)}</text>`; }
+  for (const [name, c] of Object.entries(claims)) { if (!Array.isArray(c.pos)) continue; const v = V(c.pos).sub(WORLD_OFFSET), col = c.by === myId() ? "#ffd23f" : "#ff8aa0";
+    s += `<text x="${v.x}" y="${v.z + fs * 1.6}" font-size="${fs * .9}" text-anchor="middle" opacity=".9">🚩</text>`; void col; }
+  return s;
+}
+function emperorsHtml() {
+  const ids = [...new Set(Object.values(claims).map((c) => c.by))], list = ids.map((id) => ({ id, e: empireOf(id), n: Object.values(claims).filter((c) => c.by === id).length, name: id === myId() ? "You" : net.players[id]?.name || Object.values(claims).find((c) => c.by === id)?.byName || "Player" })).filter((x) => x.n).sort((a, b) => b.n - a.n).slice(0, 20);
+  if (!list.length) return `<span class="small">Nobody owns planets yet. Plant your flag first!</span>`;
+  return list.map((x, i) => `<div class="prank-row${x.id === myId() ? " me" : ""}"><span>${x.e ? "👑" : "#" + (i + 1)} <b>${esc(x.name)}</b>${x.e ? " · " + esc(x.e.name) : ""}</span><span>🚩 ${x.n} planets</span></div>`).join("");
+}
+// ---- pirates live out in open space, between the galaxies. Near a home, they leave you alone.
+const homesNear = (v, r) => planets.some((p) => p.data.ownerId && p.group.position.distanceTo(v) < r);
+const safeSpot = (v) => !!galaxyAt(v) || homesNear(v, SAFE_R);
+function openSpacePoint(near) { // a spot in open space (screen world), optionally close to another spot
+  for (let i = 0; i < 30; i++) {
+    let v;
+    if (near && i < 20) v = near.clone().add(new THREE.Vector3(rnd(-1, 1), rnd(-.3, .3), rnd(-1, 1)).normalize().multiplyScalar(rnd(60, 180)));
+    else { const a = Math.random() * Math.PI * 2, r = MAIN_R + rnd(200, 1100); v = new THREE.Vector3(Math.cos(a) * r, rnd(-150, 150), Math.sin(a) * r).sub(WORLD_OFFSET); }
+    if (!safeSpot(v)) return v;
+  }
+  return new THREE.Vector3(MAIN_R + 600, 0, 0).sub(WORLD_OFFSET);
+}
+const freePirate = (n) => (n.role === "pirate" || (n.opts && n.opts.lair)) && !n.raid && !n.tut;
+wallet.flag ||= defaultFlag();
 // ================= resources: fuel, metal, crystals =================
 // Fuel burns while your engines run (boost burns a lot more). It fills up for free near home.
 // Empty tank: no boost, weak engines, and Bolt points you home. Metal and crystals come from drilling wild planets.
@@ -7019,7 +7313,7 @@ function burnFuel(dt, thrust, boost) {
   if (wallet.res.fuel <= 0) { radio("⛽ We're out of fuel! The engines are weak now and boost is off. Follow the arrow home, I'll fill you up there. 🤖"); setNav(home); }
 }
 function resStep(dt) { // fill up near home, keep the HUD fresh, save now and then
-  const r = wallet.res, nearHome = mode !== "fly" ? mode === "home" || walkingOn(home) : ship.position.distanceTo(home.group.position) < home.R * 14 + 30;
+  const r = wallet.res, nearHome = mode !== "fly" ? mode === "home" || walkingOn(home) : ship.position.distanceTo(home.group.position) < home.R * 14 + 30 || nearMothership();
   if (nearHome && r.fuel < FUEL_MAX) { r.fuel = Math.min(FUEL_MAX, r.fuel + FUEL_HOME * dt); if (r.fuel >= FUEL_MAX && nav === home && mode === "fly") setNav(null); }
   if (clock() - resSaved > 2) { resSaved = clock(); saveWallet(); }
   renderRes(); drillStep(dt);
@@ -7166,7 +7460,7 @@ function flyStep(dt) {
     $("tPop").textContent = tgt.T.big ? "giant ship" : "ship"; $("tTroops").textContent = "· press I to talk";
   } else if (tgt) {
     const d = tgt.data, known = foundLv(tgt) > 1;
-    $("tName").textContent = known ? d.name : "❓ Unknown planet"; $("tOwner").textContent = known ? d.owner : "fly closer";
+    $("tName").textContent = known ? d.name : "❓ Unknown planet"; $("tOwner").textContent = known ? (claimOf(tgt) ? `🚩 ${claimOf(tgt).by === myId() ? "yours" : claimOf(tgt).byName}` : d.owner) : "fly closer";
     $("tHp").style.width = d.hp + "%"; $("tHpText").textContent = Math.ceil(d.hp) + "%";
     $("tPop").textContent = fmt(d.pop); $("tTroops").textContent = d.troops ? `· ${d.troops} troops` : "";
     const lp = livePranks(d); $("tPrankRow").hidden = !lp.length;
@@ -7211,7 +7505,7 @@ function updateTags() {
     const lv = foundLv(p);
     if (!lv) { p.tag.hidden = true; continue; }
     if (lv < 2) { p.tag.innerHTML = `${p === nav ? "➤ " : ""}❓ Unknown planet<br>${fmt(dist * 1000)} km`; continue; }
-    p.tag.innerHTML = `${p === nav ? "➤ " : ""}${esc(p.data.name)}<br><b>${esc(p.data.owner)}</b> · ${p.alive ? fmt(p.data.pop) + " people" : "destroyed"} · ${fmt(dist * 1000)} km${p.data.conqueredBy ? `<br>🏴 conquered by ${esc(p.data.conqueredBy.name)}` : ""}`;
+    p.tag.innerHTML = `${p === nav ? "➤ " : ""}${esc(p.data.name)}<br><b>${esc(p.data.owner)}</b> · ${p.alive ? fmt(p.data.pop) + " people" : "destroyed"} · ${fmt(dist * 1000)} km${p.data.conqueredBy ? `<br>🏴 conquered by ${esc(p.data.conqueredBy.name)}` : ""}${claimOf(p) ? `<br>🚩 ${claimOf(p).by === myId() ? "yours" : "owned by " + esc(claimOf(p).byName)}` : ""}`;
   }
   for (const n of fighters()) { // names over alien ships and other players that are close
     const d = n.group.position.distanceTo(ship.position), near = !n.dead && (n.remote ? d < 220 : flying && d < (n.hostile ? 140 : n.T && n.T.big ? 260 : 70));
@@ -7430,7 +7724,9 @@ function landUiStep() {
   } else if (mode === "walk") {
     el.hidden = false; const txt = "🚀 Take off";
     if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${txt} <small>Enter</small>`; }
-    const help = walk && walk.p.data.wild ? drillText() + " · WASD walk · Space jump" : "WASD walk · Shift run · Space jump · E say hi · drag the mouse to look";
+    const own = walk && walk.p !== home && !walk.p.data.ownerId && !(claimOf(walk.p) && claimOf(walk.p).by === myId()), town = walk && !walk.p.data.wild && walk.p.data.pop > 0 && walk.p !== home;
+    const help = walk && walk.p.data.wild ? drillText() + (own ? " · F plant your flag" : "") + " · WASD walk"
+      : town ? `T trade with the locals${own ? " · F plant your flag" : ""} · E say hi · WASD walk` : "WASD walk · Shift run · Space jump · E say hi · drag the mouse to look";
     if (h.textContent !== help) h.textContent = help;
   } else el.hidden = true;
 }
@@ -7880,6 +8176,8 @@ function leaveNow() { // the planet blew up or changed under you: Bolt beams you
 function walkKey(e) {
   if (e.code === "Enter") takeOff();
   if (e.code === "KeyE") sayHi();
+  if (e.code === "KeyF") plantFlag();
+  if (e.code === "KeyT") openAlienTrade();
 }
 $("landBtn").addEventListener("click", () => (mode === "walk" ? takeOff() : landTarget && startLanding(landTarget)));
 
@@ -7952,9 +8250,12 @@ function startGame() {
   { const dist = viewDistance(); camera.position.set(0, dist * .22, dist); }
   buildFarGiants(); renderer.setAnimationLoop(frame); setPill(); renderGod(); checkWhileAway(); renderLevel(); tutEnter(); gameInit();
   startLanded(home); // you always start on your own planet, next to your ship
+  if (!net.me) claims = load(CLAIMSKEY) || {};
+  syncClaimFlags(); checkEmpire();
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
 window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer, radio };
+window.__tp.explore = { plantFlag, openAlienTrade, openFlagDesigner, openTradeOffer, empireOf, checkEmpire, get claims() { return claims; }, setClaim, intelOptions, destroyedByMe, indestructible, openSpacePoint, freePirate, safeSpot, galaxyAt, get mothership() { return myEmpireShip; } };
 window.__tp.res = { drill, drillStep, drillsLeft, burnFuel, hasFuel, fuelFree };
 window.__tp.landing = { get walk() { return walk; }, get landTarget() { return landTarget; }, startLanding, takeOff, sayHi, landable, walkLook, get avatar() { return avatar; } };
 </script>

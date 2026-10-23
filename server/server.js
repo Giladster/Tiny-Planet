@@ -28,7 +28,7 @@ const clockStr = () => new Date().toISOString().slice(11, 16);
 
 // ---------------- world ----------------
 const store = await createStore();
-const world = { planets: {}, players: {}, chat: [] };
+const world = { planets: {}, players: {}, chat: [], claims: {} }; // claims: planets someone planted their flag on, by planet name
 const dirty = new Set();
 {
   const raw = await store.load();
@@ -36,6 +36,7 @@ const dirty = new Set();
     if (k.startsWith("planet:")) world.planets[v.id] = v;
     else if (k.startsWith("player:")) world.players[v.id] = v;
     else if (k === "chat") world.chat = v;
+    else if (k === "claims") world.claims = v || {};
   }
   console.log(`World loaded from ${store.kind}: ${Object.keys(world.planets).length} planets, ${Object.keys(world.players).length} players`);
 }
@@ -48,6 +49,7 @@ async function flush() {
     const [kind, kid] = k.split(":");
     if (kind === "planet") return [k, world.planets[kid] ?? null];
     if (kind === "player") { const p = world.players[kid]; return [k, p ?? null]; }
+    if (k === "claims") return [k, world.claims];
     return [k, world.chat];
   });
   try { await store.save(entries); } catch (e) { console.error("save failed, will retry", e.message); keys.forEach((k) => dirty.add(k)); }
@@ -55,10 +57,25 @@ async function flush() {
 setInterval(flush, 8000);
 for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, async () => { await flush(); process.exit(0); });
 
-function placeNewPlanet() { // new players get a spot on a spiral outside the starting planets
-  const n = Object.values(world.planets).filter((p) => p.ownerId).length;
-  const a = n * 2.399, r = 380 + 70 * Math.floor(n / 6);
-  return [Math.round(Math.cos(a) * r), Math.round((Math.random() - .5) * 80), Math.round(Math.sin(a) * r)];
+// The galaxies (same as the game). New players start out in open space, between the galaxies, so the busy
+// Main Galaxy never fills up with homes. The Main Galaxy is the city: planets there can be conquered, never destroyed.
+const GALAXIES = [{ c: [0, 0, 0], r: 2250 }, { c: [3200, 0, 900], r: 700 }, { c: [-2400, 0, -3000], r: 800 }, { c: [8000, 2600, -12500], r: 1500 }];
+const MAIN_R = 2250, SAFE_R = 350; // pirates leave you alone this close to any home
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const inMainGalaxy = (pos) => Array.isArray(pos) && Math.hypot(pos[0], pos[1], pos[2]) < MAIN_R;
+const isHome = (p) => !!p.ownerId;
+const indestructible = (p) => isHome(p) || inMainGalaxy(p.pos);
+function placeNewPlanet() { // a free spot in open space, out of every galaxy and away from other homes
+  const homes = Object.values(world.planets).filter((p) => p.ownerId).map((p) => p.pos);
+  let best = null;
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * Math.PI * 2, r = MAIN_R + 250 + Math.random() * (500 + i * 20), pos = [Math.round(Math.cos(a) * r), Math.round((Math.random() - .5) * 200), Math.round(Math.sin(a) * r)];
+    if (GALAXIES.some((g) => dist3(pos, g.c) < g.r + 150)) continue;
+    const gap = Math.min(Infinity, ...homes.map((h) => dist3(pos, h)));
+    if (gap > 220) return pos;
+    if (!best || gap > best.gap) best = { pos, gap };
+  }
+  return best ? best.pos : [MAIN_R + 400, 0, 0];
 }
 function uniqueName(name) {
   const taken = new Set(Object.values(world.planets).map((p) => p.name.toLowerCase()));
@@ -67,13 +84,19 @@ function uniqueName(name) {
   return out;
 }
 const levelOf = (xp) => { let lv = 1; while (xp >= 100 * (lv + 1) * lv) lv++; return lv; };
-const publicPlayer = (p) => ({ id: p.id, name: p.name, planetId: p.planetId, ship: p.ship });
-const snapshot = () => ({ planets: Object.values(world.planets), players: Object.values(world.players).map(publicPlayer), chat: world.chat });
+const publicPlayer = (p) => ({ id: p.id, name: p.name, planetId: p.planetId, ship: p.ship, flag: p.flag || null, empire: p.empire || null });
+const snapshot = () => ({ planets: Object.values(world.planets), players: Object.values(world.players).map(publicPlayer), chat: world.chat, claims: world.claims });
+function tellVictim(victimId, msg) { // you were attacked: tell you now, or when you come back
+  const v = world.players[victimId]; if (!v) return;
+  const s = socketOf(v.id); if (s) return send(s, { t: "attacked", ...msg });
+  (v.attacks ||= []).push(msg); if (v.attacks.length > 10) v.attacks.shift(); markPlayer(v);
+}
 function stat(p) { return { t: "stat", id: p.id, hp: p.hp, pop: p.pop, dead: !!p.dead, troops: p.troops || 0 }; }
 function applyHit(p, kind) {
   if (p.dead) return;
   if (kind === "atom") p.hp = 0;
   else { const d = DAMAGE[kind]; if (!d) return; p.hp = Math.max(0, p.hp - d.hp); p.pop = Math.max(0, p.pop - p.maxPop * d.pop); }
+  if (indestructible(p)) { p.hp = Math.max(1, p.hp); p.pop = Math.max(p.maxPop * .05, p.pop); } // homes and Main Galaxy planets can be beaten down, never destroyed
   if (p.hp <= 0 || p.pop <= 0) { p.dead = true; p.hp = 0; p.pop = 0; p.troops = 0; p.diedAt = Date.now(); }
 }
 
@@ -136,6 +159,7 @@ function handle(ws, c, m) {
       if (process.env.ADMIN_KEY && typeof m.god === "string" && m.god === process.env.ADMIN_KEY) { c.god = true; send(ws, { t: "god" }); } // only the game owner knows this key
       if (c.player && c.player.pending) { send(ws, { t: "paid", amount: c.player.pending, from: "Ransoms" }); c.player.pending = 0; markPlayer(c.player); }
       const lost = c.player && c.player.lost; if (lost) { delete c.player.lost; markPlayer(c.player); }
+      if (c.player && c.player.attacks && c.player.attacks.length) { const list = c.player.attacks; delete c.player.attacks; markPlayer(c.player); setTimeout(() => list.forEach((a) => send(ws, { t: "attacked", ...a, late: true })), 4000); }
       send(ws, { t: "welcome", you: c.player ? { ...publicPlayer(c.player), wallet: c.player.wallet || null, lost: lost || null } : null, world: snapshot(), needsSeed: !Object.values(world.planets).some((p) => !p.ownerId), boltAi: boltReady });
       break;
     }
@@ -261,11 +285,50 @@ function handle(ws, c, m) {
       if (!c.god) return;
       for (const k of Object.keys(world.planets)) dirty.add("planet:" + k);
       for (const k of Object.keys(world.players)) dirty.add("player:" + k);
-      world.planets = {}; world.players = {}; world.chat = []; dirty.add("chat");
+      world.planets = {}; world.players = {}; world.chat = []; world.claims = {}; dirty.add("chat"); dirty.add("claims");
       for (const cl of clients.values()) { cl.player = null; cl.ship = null; }
       flush(); console.log("World reset by the owner");
       broadcast({ t: "worldReset" });
       break;
+    }
+    case "flag": { // your flag: colors, a symbol, maybe your photo; it flies on your planets and maybe your ship
+      if (!me || !m.flag || typeof m.flag !== "object") return;
+      const f = m.flag, col = (x, d) => (typeof x === "string" && /^#[0-9a-f]{6}$/i.test(x) ? x : d);
+      const img = typeof f.img === "string" && f.img.length < 60000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(f.img) ? f.img : "";
+      me.flag = { bg: col(f.bg, "#2a6bff"), fg: col(f.fg, "#ffffff"), pattern: ["plain", "stripe", "cross", "split", "star"].includes(f.pattern) ? f.pattern : "plain", icon: text(f.icon, 4), img };
+      markPlayer(me); broadcast({ t: "flag", pid: me.id, flag: me.flag }); break;
+    }
+    case "claim": { // you planted your flag on a planet: it is yours now
+      if (!me || typeof m.name !== "string") return;
+      const name = text(m.name, 40), old = world.claims[name];
+      if (Object.values(world.planets).some((p) => p.ownerId && p.name === name)) return; // someone's home: only troops can take it
+      const n = Array.isArray(m.n) ? m.n.slice(0, 3).map((x) => +(+x || 0).toFixed(3)) : [0, 1, 0];
+      world.claims[name] = { by: me.id, byName: me.name, at: Date.now(), n, kind: m.kind === "town" ? "town" : "wild", pos: Array.isArray(m.pos) ? m.pos.slice(0, 3).map((x) => Math.round(+x || 0)) : null };
+      dirty.add("claims"); broadcast({ t: "claim", name, claim: world.claims[name] });
+      if (old && old.by !== me.id) tellVictim(old.by, { by: { id: me.id, name: me.name }, what: "took", planet: name, at: Date.now() });
+      broadcast({ t: "chat", msg: { who: "🚩", text: `${me.name} planted their flag on ${name}!`, t: clockStr() } });
+      break;
+    }
+    case "destroyed": { // you destroyed a planet out in open space: whatever was on it is gone, and so is its flag
+      if (!me || typeof m.name !== "string") return;
+      const name = text(m.name, 40), old = world.claims[name];
+      if (old) { delete world.claims[name]; dirty.add("claims"); broadcast({ t: "claim", name, claim: null }); if (old.by !== me.id) tellVictim(old.by, { by: { id: me.id, name: me.name }, what: "destroyed", planet: name, at: Date.now() }); }
+      broadcast({ t: "chat", msg: { who: "💥", text: `${me.name} blew up ${name}! 💥`, t: clockStr() } });
+      break;
+    }
+    case "empire": { // 5 planets close together: you are an Emperor and you name your galaxy
+      if (!me) return;
+      const mine = Object.values(world.claims).filter((k) => k.by === me.id).length; if (mine < 5) return;
+      me.empire = { name: text(m.name, 30).trim() || me.name + "'s Empire", color: typeof m.color === "string" && /^#[0-9a-f]{6}$/i.test(m.color) ? m.color : "#ffd23f" };
+      markPlayer(me); broadcast({ t: "empire", pid: me.id, empire: me.empire }); break;
+    }
+    case "trade": { // offer a trade to another player
+      if (!me || !m.offer) return; const to = socketOf(m.to); if (!to) return send(ws, { t: "tradeNo", why: "offline" });
+      const n = (x) => Math.max(0, Math.min(100000, Math.floor(+x || 0))), o = m.offer;
+      send(to, { t: "trade", from: me.name, fromId: me.id, id: text(m.id, 20), offer: { metal: n(o.metal), crystal: n(o.crystal), fuel: n(o.fuel), credits: n(o.credits) } }); break;
+    }
+    case "tradeReply": { // yes or no to a trade offer
+      if (!me) return; const to = socketOf(m.to); if (to) send(to, { t: "tradeReply", from: me.name, id: text(m.id, 20), ok: !!m.ok }); break;
     }
     case "godShield": { if (!c.god || !mine) return; mine.shield = !!m.on; markPlanet(mine); break; }
     case "pvp": { if (!me) return; const target = socketOf(m.target); if (target) send(target, { t: "hurt", dmg: Math.min(60, +m.dmg || 0), by: me.name }); else hitAway(world.players[m.target], Math.min(60, +m.dmg || 0), me); break; }
@@ -327,6 +390,7 @@ setInterval(() => {
     if (p.pop <= 0) {
       if (p.troopsBy && p.troopsBy.id !== p.ownerId && !p.conqueredBy) { // the troops win: the planet is conquered, not destroyed
         p.conqueredBy = p.troopsBy; p.pop = p.maxPop * .3; p.troops = 0;
+        if (p.ownerId) tellVictim(p.ownerId, { by: p.conqueredBy, what: "conquered", planet: p.name, at: Date.now() });
         broadcast({ t: "conquer", id: p.id, by: p.conqueredBy, pop: p.pop });
         broadcast({ t: "chat", msg: { who: "🏴", text: `${p.conqueredBy.name} conquered ${p.name}!`, t: clockStr() } });
       } else applyHit(p, "atom");
