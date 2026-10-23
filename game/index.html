@@ -7342,10 +7342,10 @@ function flyStep(dt) {
   const boost = (k("ShiftLeft") || k("ShiftRight")) && hasFuel(), size = state.ship.size, thrust = k("KeyW");
   // turning: the ship has weight. The mouse asks for a turn, and the ship's spin builds up, carries it round and eases out,
   // so it swings like a real spaceship instead of snapping. It still ends up exactly as far as you moved the mouse.
-  const SENS = ui.sens || .0026, heavy = Math.max(.75, Math.min(1.6, size)), boostK = mega ? .35 : boost && thrust ? .7 : 1;
+  const SENS = (ui.sens || .0026) * 1.6, heavy = Math.max(.75, Math.min(1.6, size)), boostK = mega ? .35 : boost && thrust ? .7 : 1;
   pendingTurn.x += mouseTurn.y * SENS; pendingTurn.y += -mouseTurn.x * SENS; mouseTurn.set(0, 0);
   pendingTurn.clampScalar(-1.2, 1.2);
-  const spinUp = 12 / heavy, pull = 5 / heavy, maxRate = 3.2 * boostK / Math.sqrt(heavy);
+  const spinUp = 24 / heavy, pull = 10 / heavy, maxRate = 4.8 * boostK / Math.sqrt(heavy); // snappy: the ship answers the mouse right away, then eases out
   _tv2.copy(pendingTurn).multiplyScalar(pull).clampScalar(-maxRate, maxRate);
   angVel.lerp(_tv2, 1 - Math.exp(-dt * spinUp));
   const my = angVel.x * dt, mx = angVel.y * dt; pendingTurn.x -= my; pendingTurn.y -= mx;
@@ -7403,15 +7403,15 @@ function flyStep(dt) {
   const L = ship.userData.len, spd = vel.length();
   const acc = (spd - (camFx.spd ?? spd)) / Math.max(dt, .001); camFx.spd = spd; camFx.acc += (acc - camFx.acc) * Math.min(1, dt * 3); // speeding up pulls the camera back, braking lets it catch up
   camFx.push += (THREE.MathUtils.clamp(camFx.acc / 160, -.25, .55) - camFx.push) * Math.min(1, dt * 4);
-  const dist = .3 + L * 2.7 + Math.min(1, spd / 150) * L * 1.1 + camFx.push * L * 1.4; // like No Man's Sky: the ship sits small and low, so you see lots of space ahead
-  const offWant = fwd.clone().multiplyScalar(-dist).addScaledVector(headUp, dist * .2);
+  const dist = .25 + L * 2 + Math.min(1, spd / 150) * L * .9 + camFx.push * L * 1.4; // like No Man's Sky: the ship sits small and low, so you see lots of space ahead
+  const offWant = fwd.clone().multiplyScalar(-dist).addScaledVector(headUp, dist * .3); // a little above, looking down along the flames
   camPos.lerp(offWant, 1 - Math.exp(-dt * 12)); if (camPos.length() > dist * 3) camPos.copy(offWant); // camPos = offset from the ship
   camera.position.copy(ship.position).add(camPos);
   const boostShake = (throttle > .7 ? (throttle - .7) * .03 * L : 0) + megaK * .03 * L; // the hull rumbles at full boost
   if (boostShake) camera.position.add(new THREE.Vector3((Math.sin(clock() * 61) + Math.sin(clock() * 23) * .6) * boostShake, (Math.sin(clock() * 47) + Math.sin(clock() * 31) * .6) * boostShake, 0).applyQuaternion(head));
   camFx.up.lerp(_rv.copy(headUp).applyAxisAngle(fwd, bank * .3), 1 - Math.exp(-dt * 4)).normalize(); camera.up.copy(camFx.up); // the camera rolls a moment after the ship, and tilts a little with the bank
   camFx.look.lerp(new THREE.Vector2(THREE.MathUtils.clamp(lean.x, -2, 2), THREE.MathUtils.clamp(lean.y, -2, 2)), 1 - Math.exp(-dt * 3)); // look a bit into the turn
-  camera.lookAt(ship.position.clone().addScaledVector(fwd, dist * 3.2).addScaledVector(headUp, dist * .3).addScaledVector(right, -camFx.look.x * dist * .35).addScaledVector(headUp, -camFx.look.y * dist * .25));
+  camera.lookAt(ship.position.clone().addScaledVector(fwd, dist * 3.2).addScaledVector(headUp, -dist * .35).addScaledVector(right, -camFx.look.x * dist * .35).addScaledVector(headUp, -camFx.look.y * dist * .25));
   camFx.kick *= Math.exp(-dt * 2.2);
   const fovWant = 64 + Math.min(14, spd / 10) + megaK * 28 + camFx.kick; if (Math.abs(fovWant - camera.fov) > .01) { camera.fov += (fovWant - camera.fov) * Math.min(1, dt * 2.5); camera.updateProjectionMatrix(); }
   camera.updateMatrixWorld();
@@ -7421,7 +7421,7 @@ function flyStep(dt) {
   gunHold(dt, (firing && weapon === "gun") || k("KeyL"));
   if (firing && (weapon === "heavy" || weapon === "bomb")) fireWeapon(weapon);
   const moving = throttle > .05 || spd > 2;
-  for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, .9 + throttle * (boost ? 5 : 3.2) + Math.random() * .5, boost && thrust);
+  for (const f of ship.userData.flames) f.visible = moving; setFlames(ship.userData, 1.6 + throttle * (boost ? 9 : 6) + Math.random() * .8, boost && thrust); // long flames, so you see them from behind too
   const boosting = boost && thrust;
   updateBoostFx(dt, boosting && throttle > .6); updateEngineGlow(throttle * (boosting ? 1.6 : 1) + (moving ? .15 : 0), boosting); updateWarpTunnel(boostFx.k);
   if (boosting && !wasBoost) { sfx.boostKick(); camFx.kick = 9; shake = Math.max(shake, .05 * L); }
