@@ -578,7 +578,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
     <button data-open="mail">Mailbox</button><button data-open="chat" data-home>Galaxy chat</button><button data-open="friends">👥 Friends</button><button data-open="bolt">🤖 Ask Bolt</button>
   </div></div>
   <div class="dd"><button class="ddb" aria-label="Settings">⚙ ▾</button><div class="ddm" hidden>
-    <button data-open="help" data-fly>Flight controls</button><button id="musicBtn">Music</button><button id="soundBtn">Sounds</button><button id="engineBtn">Engine sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="flagBtn">🚩 My flag</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
+    <button data-open="help" data-fly>Flight controls</button><button id="musicBtn">Music</button><button id="soundBtn">Sounds</button><button id="engineBtn">Engine sound</button><button id="landSoundBtn">Landing sound</button><button id="gfxBtn">Graphics</button><button id="godBtn">⚡ God mode</button><button id="resetAll" data-home>↺ Reset game</button><button id="flagBtn">🚩 My flag</button><button id="newPlayerBtn">🆕 Start as new player</button><button id="freePlayBtn">🎮 Free play</button>
   </div></div>
   <span id="netPill" hidden>● connecting…</span>
   <span class="sep" data-home></span>
@@ -846,28 +846,61 @@ const ENGINE_SOUNDS = (() => {
     } },
   };
 })();
-function landThud(ac, dest, nb, t = ac.currentTime) { // the ship's legs slam onto the ground: deep boom, metal clank, gravel crunch, then the legs hiss as they settle
-  const g = (v) => { const x = ac.createGain(); x.gain.value = v; return x; };
-  const env = (x, at, a, d, peak) => { x.gain.setValueAtTime(.0001, at); x.gain.exponentialRampToValueAtTime(peak, at + a); x.gain.exponentialRampToValueAtTime(.0001, at + a + d); return x; };
-  const n = (rate, at, dur) => { const s = ac.createBufferSource(); s.buffer = nb; s.loop = true; s.playbackRate.value = rate; s.start(at, Math.random() * 2); s.stop(at + dur + .1); return s; };
-  const f = (type, f0, f1, at, dur, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.Q.value = q; b.frequency.setValueAtTime(f0, at); if (f1 !== f0) b.frequency.exponentialRampToValueAtTime(f1, at + dur); return b; };
-  const o = (type, f0, f1, at, dur) => { const x = ac.createOscillator(); x.type = type; x.frequency.setValueAtTime(f0, at); x.frequency.exponentialRampToValueAtTime(f1, at + dur); x.start(at); x.stop(at + dur + .1); return x; };
-  // boom: a heavy weight hitting the ground
-  o("sine", 75, 30, t, .7).connect(env(g(0), t, .003, .7, .9)).connect(dest);
-  n(.5, t, .5).connect(f("lowpass", 900, 90, t, .45)).connect(env(g(0), t, .002, .45, 1.1)).connect(dest);
-  // clank: the metal legs ring for a moment
-  [[312, .12], [471, .09], [733, .06], [1180, .035]].forEach(([fr, v]) => o("triangle", fr, fr * .985, t, .45).connect(env(g(0), t + .004, .002, .4, v)).connect(dest));
-  n(1.6, t, .05).connect(f("highpass", 3000, 3000, t, .05)).connect(env(g(0), t, .001, .04, .35)).connect(dest);
-  // crunch: rocks and dirt under the feet
-  for (let i = 0; i < 9; i++) { const at = t + .01 + Math.random() * .28, fr = 900 + Math.random() * 1800; n(1, at, .04).connect(f("bandpass", fr, fr, at, .04, 2)).connect(env(g(0), at, .001, .03 + Math.random() * .03, .25 * (1 - i / 12))).connect(dest); }
-  // settle: the legs squash down with a hydraulic hiss
-  n(1.2, t + .12, .9).connect(f("bandpass", 4200, 2200, t + .12, .9, 1.4)).connect(env(g(0), t + .12, .08, .8, .07)).connect(dest);
-  o("sine", 130, 95, t + .1, .35).connect(env(g(0), t + .1, .02, .33, .12)).connect(dest);
-}
-
+// landing sounds, picked with the ⚙ menu: LAND_SOUNDS[key].play(ac, dest, noiseBuffer, time)
+const LAND_SOUNDS = (() => {
+  const kit = (ac, dest, nb) => {
+    const k = {
+      g: (v = 0) => { const x = ac.createGain(); x.gain.value = v; return x; },
+      env: (at, a, d, peak) => { const x = k.g(0); x.gain.setValueAtTime(.0001, at); x.gain.exponentialRampToValueAtTime(peak, at + a); x.gain.exponentialRampToValueAtTime(.0001, at + a + d); x.connect(dest); return x; },
+      n: (rate, at, dur) => { const s = ac.createBufferSource(); s.buffer = nb; s.loop = true; s.playbackRate.value = rate; s.start(at, Math.random() * 2); s.stop(at + dur + .1); return s; },
+      f: (type, f0, f1, at, dur, q = .7) => { const b = ac.createBiquadFilter(); b.type = type; b.Q.value = q; b.frequency.setValueAtTime(f0, at); if (f1 !== f0) b.frequency.exponentialRampToValueAtTime(f1, at + dur); return b; },
+      o: (type, f0, f1, at, dur) => { const x = ac.createOscillator(); x.type = type; x.frequency.setValueAtTime(f0, at); if (f1 !== f0) x.frequency.exponentialRampToValueAtTime(f1, at + dur); x.start(at); x.stop(at + dur + .1); return x; },
+      thump: (at, f0, f1, dur, v) => { k.o("sine", f0, f1, at, dur).connect(k.env(at, .006, dur, v)); k.n(.4, at, dur * .6).connect(k.f("lowpass", 500, 80, at, dur * .6)).connect(k.env(at, .004, dur * .6, v * .8)); },
+    };
+    return k;
+  };
+  return {
+    soft: { label: "Soft cushion", play(ac, dest, nb, t) { // a soft padded bump, then the air cushions let out a long sigh
+      const k = kit(ac, dest, nb);
+      k.thump(t, 62, 34, .45, .9);
+      k.n(1, t + .04, .8).connect(k.f("bandpass", 3000, 900, t + .04, .8, .8)).connect(k.env(t + .04, .06, .75, .09));
+      k.o("sine", 1400, 1300, t, .04).connect(k.env(t, .002, .04, .03));
+    } },
+    stomp: { label: "Two-leg stomp", play(ac, dest, nb, t) { // left leg, then right leg: two solid stomps and a small creak
+      const k = kit(ac, dest, nb);
+      [[0, 1], [.13, .8]].forEach(([d, v]) => { k.thump(t + d, 85, 36, .38, v); k.o("triangle", 620, 600, t + d, .12).connect(k.env(t + d, .002, .12, .05 * v)); });
+      k.o("sawtooth", 170, 130, t + .3, .35).connect(k.f("bandpass", 700, 500, t + .3, .35, 6)).connect(k.env(t + .3, .08, .27, .035));
+    } },
+    heavy: { label: "Heavy metal", play(ac, dest, nb, t) { // a big heavy ship: deep slam, the hull groans and the legs clank one after the other
+      const k = kit(ac, dest, nb);
+      k.thump(t, 55, 24, 1.1, 1.1);
+      k.n(.3, t, 1.2).connect(k.f("lowpass", 300, 60, t, 1.2)).connect(k.env(t, .01, 1.2, .5));
+      const gr = k.o("sawtooth", 95, 68, t + .1, .9), vib = k.o("sine", 7, 7, t + .1, .9), vg = k.g(3); vib.connect(vg).connect(gr.frequency);
+      gr.connect(k.f("bandpass", 380, 280, t + .1, .9, 7)).connect(k.env(t + .1, .15, .75, .06));
+      [0, .17].forEach((d) => [[240, .07], [377, .05], [590, .03]].forEach(([fr, v]) => k.o("triangle", fr, fr * .98, t + d, .5).connect(k.env(t + d + .003, .002, .5, v))));
+    } },
+    clamp: { label: "Magnetic clamp", play(ac, dest, nb, t) { // sci-fi: a thunk, the magnets lock on with a zap, then servos whir down
+      const k = kit(ac, dest, nb);
+      k.thump(t, 140, 55, .25, .8);
+      const z = k.o("square", 220, 180, t + .06, .22), rm = k.o("sine", 57, 57, t + .06, .22), rg = k.g(0); rm.connect(rg.gain); z.connect(rg);
+      rg.connect(k.f("bandpass", 1200, 700, t + .06, .22, 2)).connect(k.env(t + .06, .005, .2, .12));
+      [0, .05].forEach((d) => k.o("square", 2000, 2000, t + .06 + d, .015).connect(k.env(t + .06 + d, .001, .015, .03)));
+      k.o("sawtooth", 320, 80, t + .2, .55).connect(k.f("bandpass", 900, 300, t + .2, .55, 4)).connect(k.env(t + .2, .03, .5, .05));
+    } },
+    powerdown: { label: "Engine power-down", play(ac, dest, nb, t) { // a soft touch, then the engine winds down like a turbine switching off
+      const k = kit(ac, dest, nb);
+      k.thump(t, 70, 38, .4, .7);
+      k.o("sine", 950, 140, t + .02, 1.6).connect(k.env(t + .02, .02, 1.55, .05));
+      k.o("sine", 1425, 210, t + .02, 1.6).connect(k.env(t + .02, .02, 1.4, .02));
+      k.n(.7, t, 1.4).connect(k.f("lowpass", 1600, 120, t, 1.4)).connect(k.env(t, .02, 1.35, .25));
+      k.n(1.2, t + 1.1, .5).connect(k.f("highpass", 2500, 2500, t + 1.1, .5)).connect(k.env(t + 1.1, .05, .45, .04));
+    } },
+  };
+})();
 let ui = load(UIKEY) || { mail: true, chat: false, help: false, muted: false };
 if (ui.musicOff === undefined) ui.musicOff = !!ui.muted; // muted = game sounds off, musicOff = music off; they switch on and off apart
 if (!ENGINE_SOUNDS[ui.engine]) ui.engine = "jet";
+if (!LAND_SOUNDS[ui.land]) ui.land = "soft";
 if (ui.mail && ui.chat) ui.chat = false; // only one menu open at a time
 for (const k of ["info", "design", "build", "hangar", "map"]) ui[k] = false; // every visit starts in the main view
 let saveTimer = 0;
@@ -1220,8 +1253,8 @@ const sfx = (() => {
       const o = osc("sawtooth", 62, 44, t, sec), ol = filt("lowpass", 240, 140, t, sec), og = gain();
       og.gain.setValueAtTime(.0001, t); og.gain.exponentialRampToValueAtTime(1, t + .4); og.gain.exponentialRampToValueAtTime(.0001, t + sec); o.connect(ol).connect(og); out(og, .2, .15);
     },
-    touchdown() { // the landing legs hit the ground (landThud, above)
-      if (!ok()) return; const g = gain(); out(g, .6, .3); landThud(ac, g, noiseBuf());
+    touchdown() { // the landing legs hit the ground (LAND_SOUNDS, above)
+      if (!ok()) return; const g = gain(); out(g, .6, .3); LAND_SOUNDS[ui.land].play(ac, g, noiseBuf(), ac.currentTime);
     },
     step(heavy) { // a soft footstep on the ground
       if (!ok()) return; const t = ac.currentTime, n = noise(t, .08, rnd(.8, 1.2)), bp = filt("bandpass", rnd(500, 800), 300, t, .08, 1.2), g = env(gain(), t, .003, heavy ? .12 : .07); n.connect(bp).connect(g); out(g, heavy ? .22 : .1, .05);
@@ -3504,6 +3537,7 @@ function renderPanels() {
   $("musicBtn").textContent = ui.musicOff ? "🎵 Music: off" : "🎵 Music: on";
   $("musicBtn").classList.toggle("on", !ui.musicOff);
   $("engineBtn").textContent = "🚀 Engine: " + ENGINE_SOUNDS[ui.engine].label;
+  $("landSoundBtn").textContent = "🛬 Landing: " + LAND_SOUNDS[ui.land].label;
   $("gfxBtn").textContent = ui.low ? "Graphics: fast" : "Graphics: best";
   $("soundBtn").classList.toggle("on", !ui.muted);
   $("godBtn").classList.toggle("on", !!ui.god && !$("p-god").hidden);
@@ -3550,6 +3584,10 @@ $("engineBtn").addEventListener("click", () => { // try the next engine sound
   const keys = Object.keys(ENGINE_SOUNDS); ui.engine = keys[(keys.indexOf(ui.engine) + 1) % keys.length];
   sfx.setEngine(ui.engine); sfx.engine(1, false); setTimeout(() => sfx.engine(0, false, mode === "fly"), 900); // a short rev so you hear it
   saveUi(); renderPanels();
+});
+$("landSoundBtn").addEventListener("click", () => { // try the next landing sound
+  const keys = Object.keys(LAND_SOUNDS); ui.land = keys[(keys.indexOf(ui.land) + 1) % keys.length];
+  sfx.touchdown(); saveUi(); renderPanels();
 });
 
 function toast(html, cls = "", ms = 3000) {
