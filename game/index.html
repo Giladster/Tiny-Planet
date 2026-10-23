@@ -91,6 +91,11 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
 #p-map { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 32px)); max-height: calc(100% - 120px); overflow-y: auto; z-index: 4; }
 #mapSvg { width: 100%; aspect-ratio: 16 / 10; max-width: 100%; display: block; border-radius: 9px; background: radial-gradient(ellipse at center, rgba(70,60,140,.35), rgba(5,6,15,.9)); border: 1px solid var(--line); }
+#mapSvg { touch-action: none; cursor: grab; user-select: none; }
+#mapSvg.drag { cursor: grabbing; }
+#mapWrap { position: relative; }
+#mapZoom { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 5px; }
+#mapZoom button { width: 32px; height: 32px; padding: 0; font-size: 17px; line-height: 1; background: rgba(10,12,28,.75); }
 #mapSvg text { fill: var(--text); font-family: var(--mono); pointer-events: none; }
 #mapSvg .mp { cursor: pointer; }
 #mapSvg .mp:hover circle.body { stroke: var(--accent); }
@@ -420,7 +425,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 <section id="p-map" class="hud panel" data-panel="map" hidden>
   <div class="ph"><span class="label">Star map · click a planet</span><button class="x" data-close="map" aria-label="Close star map">×</button></div>
   <div class="row" id="mapGals"><button data-gal="all">🔭 All galaxies</button><button data-gal="main">Main Galaxy</button><button data-gal="prism">🌌 Prism Galaxy</button><button data-gal="codex">🧬 Aliens</button><button class="go" id="mapGalNav">Navigate</button><button id="mapArena">⚔ Arena</button></div>
-  <svg id="mapSvg" role="img" aria-label="Star map of all planets"></svg>
+  <div id="mapWrap"><svg id="mapSvg" role="img" aria-label="Star map of all planets. Scroll or pinch to zoom, drag to look around."></svg><div id="mapZoom"><button id="mapIn" aria-label="Zoom in" title="Zoom in">+</button><button id="mapOut" aria-label="Zoom out" title="Zoom out">−</button><button id="mapMe" aria-label="Show my ship" title="Show my ship">◎</button></div></div>
   <div id="mapCodex" hidden></div>
   <div id="mapCard"><span class="small">Click a planet on the map to see who owns it.</span></div>
 </section>
@@ -3279,7 +3284,7 @@ function setPanel(name, open) { // small panels on top of any view: map, mail, c
   if (name === "friends" && open) renderFriends();
   if (name === "bolt" && open) { renderBolt(); setTimeout(() => $("boltQ").focus(), 50); }
   if (name === "top" && open) requestTop();
-  if (name === "map" && open) { mapGal = shipInPrism() ? "prism" : "main"; renderMap(); renderMapCard(); }
+  if (name === "map" && open) { mapGal = "main"; mapSelGal = mapRumor = null; mapGo(mapAroundShip(), false); renderMapCard(); }
   renderPanels(); saveUi();
 }
 function renderPanels() {
@@ -4721,7 +4726,7 @@ function checkDiscover() { // every half second: spot planets you can see, visit
   }
 }
 function rumors() { // Bolt's tips: the 3 closest planets you haven't found, shown as a "?" somewhere near them
-  return planets.filter((p) => p !== home && foundLv(p) === 0 && onMap(p)).sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position)).slice(0, 3)
+  return planets.filter((p) => p !== home && foundLv(p) === 0 && !!p.data.far === shipInPrism()).sort((a, b) => a.group.position.distanceTo(ship.position) - b.group.position.distanceTo(ship.position)).slice(0, 3)
     .map((p) => { const r = seeded("rumor" + p.data.name), a = r() * 6.28, off = 40 + r() * 50; return { p, x: p.group.position.x + Math.cos(a) * off, z: p.group.position.z + Math.sin(a) * off, r: off + 20 }; });
 }
 // pictures for the map card: the real planet from the sunny side, and its creature
@@ -4757,84 +4762,159 @@ const fillFig = (img, kind) => creatureShot(kind, (url) => { if (img.isConnected
 // ================= star map + navigation =================
 let mapSel = null, nav = null, navArrow = null;
 const mapPlanetColor = (p) => (p.data.design.pattern === "none" ? p.data.design.low : p.data.design.p1);
-let mapGal = "main";
+let mapGal = "main", mapSelGal = null, mapRumor = null;
 const shipInPrism = () => ship.position.distanceTo(prismAt()) < PRISM.r * 2;
-const onMap = (p) => (mapGal === "prism") === !!p.data.far;
-let mapSelGal = null;
-document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.addEventListener("click", () => { mapGal = b.dataset.gal; mapSel = mapSelGal = null; renderMap(); renderMapCard(); }));
-const galEdge = (g, fs, label) => { // a galaxy's edge: where it starts and ends
-  const c = V(g.c).sub(WORLD_OFFSET), col = g.color.replace(/[\d.]+\)$/, "1)");
-  return `<circle cx="${c.x}" cy="${c.z}" r="${g.r}" fill="${g.color.replace(/[\d.]+\)$/, ".05)")}" stroke="${col}" stroke-width="${fs * .16}" stroke-dasharray="${fs * .9} ${fs * .5}" opacity=".8"/>`
+const galAt = (g) => V(g.c).sub(WORLD_OFFSET);
+const galEdge = (g, fs, label, r = g.r) => { // a galaxy's edge: where it starts and ends
+  const c = galAt(g), col = g.color.replace(/[\d.]+\)$/, "1)");
+  return `<circle cx="${c.x}" cy="${c.z}" r="${r}" fill="${g.color.replace(/[\d.]+\)$/, ".05)")}" stroke="${col}" stroke-width="${fs * .16}" stroke-dasharray="${fs * .9} ${fs * .5}" opacity=".8"/>`
     + (label ? `<text x="${c.x}" y="${c.z - g.r - fs * .5}" font-size="${fs * 1.1}" text-anchor="middle" style="fill:${col}">${esc(g.name)}${label === true ? "" : label}</text>` : "");
 };
-function renderGalaxyMap(svg) { // every galaxy seen from high above
-  const pts = GALAXIES.map((g) => [V(g.c).sub(WORLD_OFFSET), g.r]).concat([[ship.position.clone(), 300]]);
+// the map is one big view of space: wheel or pinch to zoom, drag to look around
+const MAP_FAR = 12000; // wider than this, you see whole galaxies instead of planets
+let mapView = { x: 0, z: 0, w: 1100 }, mapTween = null, mapRaf = 0, mapStarsAt = null, mapStarList = [];
+function mapFitAll() { // every galaxy and your ship
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-  for (const [p, r] of pts) { x0 = Math.min(x0, p.x - r); x1 = Math.max(x1, p.x + r); z0 = Math.min(z0, p.z - r); z1 = Math.max(z1, p.z + r); }
-  let w = (x1 - x0) * 1.1, h = (z1 - z0) * 1.1; if (w / h > 1.6) h = w / 1.6; else w = h * 1.6;
-  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, fs = w / 48;
-  svg.setAttribute("viewBox", `${cx - w / 2} ${cz - h / 2} ${w} ${h}`);
-  let s = `<defs>${GALAXIES.map((g, i) => `<radialGradient id="gg${i}"><stop offset="0" stop-color="#fff6e0" stop-opacity=".9"/><stop offset=".25" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity=".55"/><stop offset="1" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity="0"/></radialGradient>`).join("")}</defs>`;
-  for (let i = 0; i < 160; i++) { const r = seeded("gm" + i), x = cx - w / 2 + r() * w, z = cz - h / 2 + r() * h; s += `<circle cx="${x}" cy="${z}" r="${fs * .06}" fill="#fff" opacity="${(.2 + r() * .5).toFixed(2)}"/>`; }
-  if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
-  GALAXIES.forEach((g, i) => {
-    const c = V(g.c).sub(WORLD_OFFSET), d = ship.position.distanceTo(c), inside = d < g.r;
-    s += `<g class="mp" data-g="${i}"><circle cx="${c.x}" cy="${c.z}" r="${g.r * .8}" fill="url(#gg${i})"/>${galEdge(g, fs, inside ? " (you are here)" : ` · ${fmt(Math.max(0, d - g.r) * 1000)} km`)}`;
-    if (g === mapSelGal) s += `<circle cx="${c.x}" cy="${c.z}" r="${g.r * 1.08}" fill="none" stroke="#ffb547" stroke-width="${fs * .2}"/>`;
-    s += `<circle class="body" cx="${c.x}" cy="${c.z}" r="${g.r}" fill="transparent" stroke="none"/></g>`;
-  });
-  for (const p of planets) if (foundLv(p)) s += `<circle cx="${p.group.position.x}" cy="${p.group.position.z}" r="${fs * .12}" fill="${foundLv(p) > 1 ? esc(p.data.design.sea) : "#8a93b8"}" opacity=".9"/>`;
-  const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
-  s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * 1.2} ${fs * .75},${-fs * .8} 0,${-fs * .4} ${-fs * .75},${-fs * .8}" fill="#6fe3ff"/></g>`;
-  svg.innerHTML = s;
+  for (const [p, r] of GALAXIES.map((g) => [galAt(g), g.r]).concat([[ship.position, 300]])) { x0 = Math.min(x0, p.x - r); x1 = Math.max(x1, p.x + r); z0 = Math.min(z0, p.z - r); z1 = Math.max(z1, p.z + r); }
+  return { x: (x0 + x1) / 2, z: (z0 + z1) / 2, w: Math.max(x1 - x0, (z1 - z0) * 1.6) * 1.1 };
 }
+const mapFitGal = (g) => { const c = galAt(g); return { x: c.x, z: c.z, w: g.r * 2 * 1.6 * 1.05 }; };
+const mapAroundShip = () => ({ x: ship.position.x, z: ship.position.z, w: 1100 });
+const mapLimit = (v) => ({ ...v, w: Math.min(mapFitAll().w * 2, Math.max(150, v.w)) });
+const mapWhere = () => { const p = prismAt(); return mapView.w > MAP_FAR ? "all" : Math.hypot(mapView.x - p.x, mapView.z - p.z) < PRISM.r * 1.6 ? "prism" : "main"; };
+const mapRedraw = () => { if (!mapRaf) mapRaf = requestAnimationFrame(() => { mapRaf = 0; if (ui.map) renderMap(); }); };
+function mapGo(v, smooth = true) { // move the map's view, gliding there
+  v = mapLimit(v);
+  if (!smooth) { mapTween = null; mapView = v; return renderMap(); }
+  const from = { ...mapView }, t0 = performance.now();
+  const step = () => {
+    if (mapTween !== step || !ui.map) return;
+    const k = Math.min(1, (performance.now() - t0) / 380), e = 1 - (1 - k) ** 3;
+    mapView = { x: from.x + (v.x - from.x) * e, z: from.z + (v.z - from.z) * e, w: from.w * (v.w / from.w) ** e };
+    renderMap(); if (k < 1) requestAnimationFrame(step); else mapTween = null;
+  };
+  mapTween = step; requestAnimationFrame(step);
+}
+function mapStars() { // far-away stars, fixed in space so they move with the map
+  const key = WORLD_OFFSET.x + "," + WORLD_OFFSET.z;
+  if (mapStarsAt === key) return mapStarList;
+  const a = mapFitAll(), w = a.w * 2, h = w / 1.6, r = seeded("mapstars");
+  mapStarsAt = key; mapStarList = [];
+  for (let i = 0; i < 900; i++) mapStarList.push([a.x - w / 2 + r() * w, a.z - h / 2 + r() * h, (.2 + r() * .5).toFixed(2)]);
+  return mapStarList;
+}
+document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.addEventListener("click", () => {
+  const g = b.dataset.gal; mapSel = mapSelGal = mapRumor = null; mapGal = g;
+  if (g !== "codex") mapGo(g === "all" ? mapFitAll() : mapFitGal(g === "prism" ? PRISM : GALAXIES[0]));
+  renderMap(); renderMapCard();
+}));
 $("mapGalNav").addEventListener("click", () => { setNav(mapGal === "prism" ? PRISM_NAV : MAIN_NAV); if (mode === "home") startFlying(); renderMap(); });
+$("mapIn").addEventListener("click", () => mapGo({ ...mapView, w: mapView.w / 1.8 }));
+$("mapOut").addEventListener("click", () => mapGo({ ...mapView, w: mapView.w * 1.8 }));
+$("mapMe").addEventListener("click", () => mapGo(mapAroundShip()));
 function renderMap() {
   const svg = $("mapSvg");
+  if (mapGal !== "codex") { const was = mapGal; mapGal = mapWhere(); if (was !== mapGal && !mapSel && !mapSelGal && !mapRumor) renderMapCard(); }
   document.querySelectorAll("#mapGals [data-gal]").forEach((b) => b.classList.toggle("on", b.dataset.gal === mapGal));
-  svg.style.display = mapGal === "codex" ? "none" : ""; $("mapCodex").hidden = mapGal !== "codex"; $("mapGalNav").hidden = mapGal === "codex";
+  $("mapWrap").hidden = mapGal === "codex"; $("mapCodex").hidden = mapGal !== "codex";
+  $("mapGalNav").hidden = mapGal === "codex" || mapGal === "all" || (mapGal === "prism") === shipInPrism();
   if (mapGal === "codex") return renderCodex();
-  if (mapGal === "all") { $("mapGalNav").hidden = true; return renderGalaxyMap(svg); }
-  const here = (mapGal === "prism") === shipInPrism(), gname = mapGal === "prism" ? "Prism Galaxy" : "Main Galaxy";
-  $("mapGalNav").hidden = here; $("mapGalNav").textContent = `Navigate to ${gname}${mapGal === "prism" ? " · hold boost 10s for MEGA BOOST" : ""}`;
-  const pts = [...planets.filter((p) => onMap(p) && foundLv(p)).map((p) => p.group.position), ...(here ? [ship.position] : [])], gal = mapGal === "prism" ? PRISM : GALAXIES[0], gc = V(gal.c).sub(WORLD_OFFSET);
-  let x0 = gc.x - gal.r, x1 = gc.x + gal.r, z0 = gc.z - gal.r, z1 = gc.z + gal.r; // the whole galaxy, edge to edge
-  for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); }
-  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-  let w = x1 - x0 + 90, h = z1 - z0 + 90; if (w / h > 1.6) h = w / 1.6; else w = h * 1.6;
-  svg.setAttribute("viewBox", `${cx - w / 2} ${cz - h / 2} ${w} ${h}`);
-  const fs = w / 48;
-  let s = "";
-  for (let r = 100; r < w; r += 100) s += `<circle cx="${gc.x}" cy="${gc.z}" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
-  for (const g of GALAXIES) s += galEdge(g, fs, g === gal ? " · edge" : true);
+  $("mapGalNav").textContent = `Navigate to ${mapGal === "prism" ? "Prism Galaxy · hold boost 10s for MEGA BOOST" : "Main Galaxy"}`;
+  const { x: cx, z: cz, w } = mapView, h = w / 1.6, fs = w / 48, far = w > MAP_FAR;
+  const x0 = cx - w / 2, z0 = cz - h / 2, seen = (x, z, m = 0) => x > x0 - m && x < x0 + w + m && z > z0 - m && z < z0 + h + m;
+  svg.setAttribute("viewBox", `${x0} ${z0} ${w} ${h}`);
+  const glow = Math.min(1, Math.max(0, (w - 4000) / 8000));
+  let s = glow ? `<defs>${GALAXIES.map((g, i) => `<radialGradient id="gg${i}"><stop offset="0" stop-color="#fff6e0" stop-opacity=".9"/><stop offset=".25" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity=".55"/><stop offset="1" stop-color="${g.color.replace(/[\d.]+\)$/, "1)")}" stop-opacity="0"/></radialGradient>`).join("")}</defs>` : "";
+  for (const [x, z, o] of mapStars()) if (seen(x, z)) s += `<circle cx="${x}" cy="${z}" r="${fs * .06}" fill="#fff" opacity="${o}"/>`;
+  const gal = mapGal === "prism" ? PRISM : GALAXIES[0], gc = galAt(gal);
+  if (!far) { // distance rings around the galaxy's middle
+    let step = 100; while (w / step > 24) step *= 2;
+    const dc = Math.hypot(cx - gc.x, cz - gc.z);
+    for (let r = Math.max(step, Math.floor((dc - w) / step) * step); r < dc + w; r += step) s += `<circle cx="${gc.x}" cy="${gc.z}" r="${r}" fill="none" stroke="rgba(140,170,255,.12)" stroke-width="${fs * .08}"/>`;
+  }
+  const labels = []; // names that would cover each other: only the most important one shows
+  GALAXIES.forEach((g, i) => {
+    const c = galAt(g), d = ship.position.distanceTo(c), r = Math.max(g.r, fs * .8);
+    if (!seen(c.x, c.z, g.r * 1.3)) return;
+    if (glow) s += `<circle cx="${c.x}" cy="${c.z}" r="${g.r * .8}" fill="url(#gg${i})" opacity="${glow.toFixed(2)}"/>`;
+    if (!far) { s += galEdge(g, fs, g === gal ? " · edge" : true); return; }
+    s += `<g class="mp" data-g="${i}">${galEdge(g, fs, false, r)}`;
+    if (g === mapSelGal) s += `<circle cx="${c.x}" cy="${c.z}" r="${r * 1.08}" fill="none" stroke="#ffb547" stroke-width="${fs * .2}"/>`;
+    s += `<circle class="body" cx="${c.x}" cy="${c.z}" r="${r * 1.4}" fill="transparent" stroke="none"/></g>`;
+    labels.push({ x: c.x, y: c.z - r - fs * .5, text: g.name + (d < g.r ? " (you are here)" : ""), col: g.color.replace(/[\d.]+\)$/, "1)"), pri: g === mapSelGal ? 3e9 : d < g.r ? 2e9 : g.r });
+  });
   if (nav) s += `<line x1="${ship.position.x}" y1="${ship.position.z}" x2="${nav.group.position.x}" y2="${nav.group.position.z}" stroke="#6fe3ff" stroke-width="${fs * .18}" stroke-dasharray="${fs * .6} ${fs * .4}"/>`;
-  for (const [j, ru] of rumors().entries()) // Bolt's rumors: somewhere around here…
-    s += `<g class="mp" data-r="${j}"><circle class="body" cx="${ru.x}" cy="${ru.z}" r="${ru.r}" fill="rgba(255,181,71,.06)" stroke="#ffb547" stroke-width="${fs * .1}" stroke-dasharray="${fs * .4} ${fs * .4}"/><text x="${ru.x}" y="${ru.z + fs * .4}" font-size="${fs * 1.4}" text-anchor="middle">?</text><text x="${ru.x}" y="${ru.z + ru.r + fs * 1.1}" font-size="${fs * .8}" text-anchor="middle">Bolt's rumor</text></g>`;
-  planets.forEach((p, i) => {
-    const lv = foundLv(p);
-    if (!onMap(p) || !lv) return;
-    const { x, z } = p.group.position, r = Math.max(fs * .7, p.R * 4), d = p.data;
-    s += `<g class="mp" data-i="${i}">`;
-    if (lv === 1) { // spotted from far away: you don't know what it is yet
-      if (p === mapSel) s += `<circle cx="${x}" cy="${z}" r="${r * 1.7}" fill="none" stroke="#ffb547" stroke-width="${fs * .15}"/>`;
-      s += `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="#2a3150" stroke="#8a93b8" stroke-width="${fs * .15}"/><text x="${x}" y="${z + fs * .35}" font-size="${fs}" text-anchor="middle">?</text>`;
-      s += `<rect x="${x - r * 2}" y="${z - r * 2}" width="${r * 4}" height="${r * 4}" fill="transparent"/></g>`;
-      return;
+  const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
+  const shipMark = () => `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * .9} ${fs * .55},${-fs * .6} 0,${-fs * .3} ${-fs * .55},${-fs * .6}" fill="#6fe3ff"/></g>`;
+  const drawLabels = () => { const boxes = [];
+    for (const l of labels.sort((a, b) => b.pri - a.pri)) {
+      const hw = (l.text.length + 1) * fs * .31, b = [l.x - hw, l.y - fs * .9, l.x + hw, l.y + fs * .3];
+      if (boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1])) continue;
+      boxes.push(b); s += `<text x="${l.x}" y="${l.y}" font-size="${fs}" text-anchor="middle" stroke="rgba(5,6,15,.85)" stroke-width="${fs * .22}" paint-order="stroke"${l.col ? ` style="fill:${l.col}"` : ""}>${esc(l.text)}</text>`;
     }
+  };
+  if (far) { // so far out, planets are only dots
+    for (const p of planets) if (foundLv(p)) s += `<circle cx="${p.group.position.x}" cy="${p.group.position.z}" r="${fs * .12}" fill="${foundLv(p) > 1 ? esc(p.data.design.sea) : "#8a93b8"}" opacity=".9"/>`;
+    drawLabels(); svg.innerHTML = s + shipMark();
+    return;
+  }
+  for (const [j, ru] of rumors().entries()) // Bolt's rumors: somewhere around here…
+    if (seen(ru.x, ru.z, ru.r)) s += `<g class="mp" data-r="${j}"><circle class="body" cx="${ru.x}" cy="${ru.z}" r="${ru.r}" fill="rgba(255,181,71,.06)" stroke="#ffb547" stroke-width="${fs * .1}" stroke-dasharray="${fs * .4} ${fs * .4}"/><text x="${ru.x}" y="${ru.z + fs * .4}" font-size="${fs * 1.4}" text-anchor="middle">?</text><text x="${ru.x}" y="${ru.z + ru.r + fs * 1.1}" font-size="${fs * .8}" text-anchor="middle">Bolt's rumor</text></g>`;
+  planets.forEach((p, i) => {
+    const lv = foundLv(p), { x, z } = p.group.position, r = Math.max(fs * .7, p.R * 4), d = p.data;
+    if (!lv || !seen(x, z, r * 2)) return;
+    s += `<g class="mp" data-i="${i}">`;
     if (p === mapSel) s += `<circle cx="${x}" cy="${z}" r="${r * 1.7}" fill="none" stroke="#ffb547" stroke-width="${fs * .15}"/>`;
-    s += d.dead
-      ? `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="rgba(255,90,110,.12)" stroke="#ff5a6e" stroke-width="${fs * .12}" stroke-dasharray="${fs * .3}"/>`
-      : `<circle cx="${x}" cy="${z}" r="${r * 1.35}" fill="${esc(d.design.atmo)}" opacity=".18"/><circle class="body" cx="${x}" cy="${z}" r="${r}" fill="${esc(mapPlanetColor(p))}" stroke="${esc(d.design.sea)}" stroke-width="${fs * .2}"/>`;
-    s += `<text x="${x}" y="${z + r + fs * 1.2}" font-size="${fs}" text-anchor="middle">${esc(d.name)}${p === home ? " (you)" : d.npc ? " 👽" : ""}</text>`;
+    if (lv === 1) s += `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="#2a3150" stroke="#8a93b8" stroke-width="${fs * .15}"/><text x="${x}" y="${z + fs * .35}" font-size="${fs}" text-anchor="middle">?</text>`; // spotted from far away: you don't know what it is yet
+    else {
+      s += d.dead
+        ? `<circle class="body" cx="${x}" cy="${z}" r="${r}" fill="rgba(255,90,110,.12)" stroke="#ff5a6e" stroke-width="${fs * .12}" stroke-dasharray="${fs * .3}"/>`
+        : `<circle cx="${x}" cy="${z}" r="${r * 1.35}" fill="${esc(d.design.atmo)}" opacity=".18"/><circle class="body" cx="${x}" cy="${z}" r="${r}" fill="${esc(mapPlanetColor(p))}" stroke="${esc(d.design.sea)}" stroke-width="${fs * .2}"/>`;
+      const text = d.name + (p === home ? " (you)" : d.npc ? " 👽" : "");
+      labels.push({ x, y: z + r + fs * 1.2, text, pri: p === mapSel ? 3e9 : p === home ? 2e9 : p === nav ? 1e9 : p.R });
+    }
     s += `<rect x="${x - r * 2}" y="${z - r * 2}" width="${r * 4}" height="${r * 4}" fill="transparent"/></g>`;
   });
-  const f = FWD.clone().applyQuaternion(ship.quaternion), ang = Math.atan2(f.x, f.z) * -180 / Math.PI;
-  for (const n of npcs) if (!n.dead) s += `<circle cx="${n.group.position.x}" cy="${n.group.position.z}" r="${fs * (n.T.big ? .5 : .22)}" fill="${n.hostile ? "#ff5a6e" : n.type === "trader" ? "#c9c2a8" : "#9dff6a"}" opacity=".85"/>`;
-  s += `<g transform="translate(${ship.position.x} ${ship.position.z}) rotate(${ang})"><polygon points="0,${fs * .9} ${fs * .55},${-fs * .6} 0,${-fs * .3} ${-fs * .55},${-fs * .6}" fill="#6fe3ff"/></g>`;
-  svg.innerHTML = s;
+  for (const n of npcs) if (!n.dead && seen(n.group.position.x, n.group.position.z)) s += `<circle cx="${n.group.position.x}" cy="${n.group.position.z}" r="${fs * (n.T.big ? .5 : .22)}" fill="${n.hostile ? "#ff5a6e" : n.type === "trader" ? "#c9c2a8" : "#9dff6a"}" opacity=".85"/>`;
+  drawLabels(); svg.innerHTML = s + shipMark();
 }
-let mapRumor = null;
-$("mapSvg").addEventListener("click", (e) => { const g = e.target.closest(".mp"); if (!g) return; mapRumor = null; if (g.dataset.g) { mapSelGal = GALAXIES[+g.dataset.g]; mapSel = null; } else if (g.dataset.r) { mapRumor = rumors()[+g.dataset.r]; mapSel = null; } else mapSel = planets[+g.dataset.i]; renderMap(); renderMapCard(); });
+function mapPick(g) {
+  mapRumor = null;
+  if (g.dataset.g) { mapSelGal = GALAXIES[+g.dataset.g]; mapSel = null; }
+  else if (g.dataset.r) { mapRumor = rumors()[+g.dataset.r]; mapSel = mapSelGal = null; }
+  else { mapSel = planets[+g.dataset.i]; mapSelGal = null; }
+  renderMap(); renderMapCard();
+}
+{ // drag to look around, wheel or pinch to zoom; a tap without moving picks what's under it
+  const svg = $("mapSvg"), pts = new Map(); let moved = 0;
+  const toWorld = (px, py) => { const b = svg.getBoundingClientRect(); return { x: mapView.x + ((px - b.left) / b.width - .5) * mapView.w, z: mapView.z + ((py - b.top) / b.height - .5) * mapView.w / 1.6 }; };
+  const zoomAt = (k, px, py) => {
+    const a = toWorld(px, py), v = mapLimit({ ...mapView, w: mapView.w * k }), kk = v.w / mapView.w;
+    mapTween = null; mapView = { x: a.x + (mapView.x - a.x) * kk, z: a.z + (mapView.z - a.z) * kk, w: v.w }; mapRedraw();
+  };
+  const pan = (dx, dy) => { const k = mapView.w / svg.getBoundingClientRect().width; mapTween = null; mapView = { ...mapView, x: mapView.x - dx * k, z: mapView.z - dy * k }; mapRedraw(); };
+  svg.addEventListener("wheel", (e) => { e.preventDefault(); zoomAt(Math.exp(Math.max(-1, Math.min(1, e.deltaY * (e.deltaMode ? .05 : .0015)))), e.clientX, e.clientY); }, { passive: false });
+  svg.addEventListener("pointerdown", (e) => { if (!pts.size) moved = 0; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); try { svg.setPointerCapture(e.pointerId); } catch {} });
+  svg.addEventListener("pointermove", (e) => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 2) { // pinch
+      const [a, b] = [...pts.values()], d0 = Math.hypot(a.x - b.x, a.y - b.y), m0 = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+      p.x = e.clientX; p.y = e.clientY;
+      const d1 = Math.hypot(a.x - b.x, a.y - b.y), m1 = [(a.x + b.x) / 2, (a.y + b.y) / 2];
+      moved = 99; pan(m1[0] - m0[0], m1[1] - m0[1]); if (d0 > 0 && d1 > 0) zoomAt(d0 / d1, m1[0], m1[1]);
+      return;
+    }
+    const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (moved > 5) { svg.classList.add("drag"); pan(dx, dy); }
+  });
+  const up = (e) => {
+    if (!pts.delete(e.pointerId)) return;
+    if (!pts.size) svg.classList.remove("drag");
+    if (e.type === "pointerup" && !pts.size && moved <= 5) { const g = document.elementsFromPoint(e.clientX, e.clientY).map((el) => el.closest("#mapSvg .mp")).find(Boolean); if (g) mapPick(g); }
+  };
+  svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+}
 function renderCodex() { // the Alien Encyclopedia: every species you have met
   const kinds = Object.keys(PEOPLE_KINDS), known = new Set(godOn("map") ? kinds : wallet.species), visited = planets.filter((p) => foundLv(p) > 1);
   $("mapCodex").innerHTML = kinds.map((k) => known.has(k)
@@ -4844,13 +4924,13 @@ function renderCodex() { // the Alien Encyclopedia: every species you have met
 }
 function renderMapCard() {
   const el = $("mapCard"), p = mapSel;
-  if (mapGal === "all") {
-    const g = mapSelGal; if (!g) { el.innerHTML = `<span class="small">All galaxies from above. The dashed rings are where each galaxy starts and ends. Click one.</span>`; return; }
+  if (mapSelGal && mapGal !== "codex") {
+    const g = mapSelGal;
     const i = GALAXIES.indexOf(g), d = ship.position.distanceTo(V(g.c).sub(WORLD_OFFSET)), far = g === PRISM;
     el.innerHTML = `<h2>${esc(g.name)}</h2><div class="small">${d < g.r ? "You are inside it." : `Its edge is ${fmt((d - g.r) * 1000)} km away.`} It is ${fmt(g.r * 2000)} km wide.${far && d > g.r ? " Hold boost 10s for a MEGA BOOST to get there." : ""}</div>
       <div class="row">${d < g.r ? "" : `<button class="go" id="mcGalNav">${nav === GAL_NAV[i] ? "Navigating…" : "Navigate"}</button>`}<button id="mcGalOpen">See its planets</button></div>`;
     $("mcGalNav")?.addEventListener("click", () => { setNav(GAL_NAV[i]); if (mode === "home") startFlying(); });
-    $("mcGalOpen").addEventListener("click", () => { mapGal = far ? "prism" : "main"; mapSel = mapSelGal = null; renderMap(); renderMapCard(); });
+    $("mcGalOpen").addEventListener("click", () => { mapSel = mapSelGal = null; mapGo(mapFitGal(g)); renderMapCard(); });
     return;
   }
   if (mapGal === "codex") {
@@ -4865,7 +4945,8 @@ function renderMapCard() {
     $("mcNav").addEventListener("click", () => { setNav(ru.p); if (mode === "home") startFlying(); });
     return;
   }
-  if (!p) { el.innerHTML = `<span class="small">Click a planet on the map to see it. Planets you haven't found aren't on the map: fly around to spot them, and fly close to meet who lives there. The orange "?" are Bolt's rumors.</span>`; return; }
+  if (!p && mapGal === "all") { el.innerHTML = `<span class="small">All galaxies from above. The dashed rings are where each galaxy starts and ends. Click one, or zoom in to see its planets.</span>`; return; }
+  if (!p) { el.innerHTML = `<span class="small">Scroll or pinch to zoom, drag to look around. Click a planet on the map to see it. Planets you haven't found aren't on the map: fly around to spot them, and fly close to meet who lives there. The orange "?" are Bolt's rumors.</span>`; return; }
   const d = p.data, dist = ship.position.distanceTo(p.group.position), lv = foundLv(p);
   if (lv < 2) {
     el.innerHTML = `<h2>❓ Unknown planet</h2><div class="mcPics"><img class="shot blurred" alt="A far away planet"><div class="ph">?</div></div>
