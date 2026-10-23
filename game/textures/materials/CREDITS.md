@@ -13,5 +13,6 @@ Shrunk to 1024x1024 JPEG; gray ones keep the game's own colors and only add the 
 | castle_stone.jpg | [castle_wall_slates](https://polyhaven.com/a/castle_wall_slates) | castles, stone buildings |
 | slate.jpg (gray) | [roof_slates_02](https://polyhaven.com/a/roof_slates_02) | magic castle roofs |
 | marble.jpg (gray) | [marble_01](https://polyhaven.com/a/marble_01) | Pisa tower |
+| rock_debris.jpg (mostly gray), rock_debris_nor.jpg (normal map) | [rock_boulder_dry](https://polyhaven.com/a/rock_boulder_dry) | 3D rocks that break off planets and fly up when ships land or take off (512px) |
 
 Solar panels on satellites are drawn in code (no photo).

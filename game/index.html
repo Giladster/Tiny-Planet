@@ -2424,24 +2424,76 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     this.data.paint = this.paint.some((x) => x) ? b64(this.paint) : null;
   }
 }
+// real 3D rocks for debris: smooth lumpy stones with chipped faces, wearing a Poly Haven rock photo and its bump map (CC0, textures/materials/CREDITS.md)
+// the photo is wrapped from 3 sides in the rock's own space, so it sticks to the stone as it tumbles; the instance color tints it to the planet's ground
+const ROCK_KINDS = 4;
+const ROCK_TEX = (() => {
+  const map = photoTex("materials/rock_debris.jpg"), nor = new THREE.TextureLoader().load("textures/materials/rock_debris_nor.jpg");
+  map.wrapS = map.wrapT = nor.wrapS = nor.wrapT = THREE.RepeatWrapping; nor.anisotropy = 8; return { map, nor };
+})();
+function rockGeo(seed) {
+  let g = new THREE.IcosahedronGeometry(1, ui.low ? 2 : 3); g.deleteAttribute("normal"); g.deleteAttribute("uv"); g = mergeVertices(g);
+  const pa = g.attributes.position, v = new THREE.Vector3(), o = seed * 9.7;
+  const cuts = Array.from({ length: 4 + (seed % 3) }, () => ({ n: new THREE.Vector3().randomDirection(), d: rnd(.5, .75) })); // flat broken faces
+  const st = new THREE.Vector3(rnd(.75, 1.15), rnd(.55, .85), rnd(.8, 1.2)); // squashed and stretched, never a ball
+  for (let i = 0; i < pa.count; i++) {
+    v.fromBufferAttribute(pa, i);
+    const ridge = 1 - Math.abs(2 * noise(v.x * 2.6, v.y * 2.6 + o, v.z * 2.6) - 1); // sharp ridges and cracks, not a smooth potato
+    v.multiplyScalar(.74 + .34 * noise(v.x * 1.3 + o, v.y * 1.3, v.z * 1.3) + .13 * ridge * ridge + .05 * noise(v.x * 7, v.y * 7, v.z * 7 + o));
+    for (const c of cuts) { const h = v.dot(c.n) - c.d; if (h > 0) v.addScaledVector(c.n, -h * .97); }
+    v.multiply(st); pa.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals(); g.computeBoundingSphere(); return g;
+}
+let ROCK_GEOS;
+function rockMat(emissive = 0x000000) {
+  const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .92, metalness: 0, emissive });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.rMap = { value: ROCK_TEX.map }; sh.uniforms.rNor = { value: ROCK_TEX.nor };
+    sh.vertexShader = "varying vec3 vOP, vON, vAX, vAY, vAZ;\nvarying float vRI;\n" + sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>
+  vOP = position; vON = normal; mat3 rnm = normalMatrix;
+  #ifdef USE_INSTANCING
+  rnm = rnm * mat3(instanceMatrix); vRI = float(gl_InstanceID);
+  #else
+  vRI = 0.;
+  #endif
+  vAX = normalize(rnm * vec3(1., 0., 0.)); vAY = normalize(rnm * vec3(0., 1., 0.)); vAZ = normalize(rnm * vec3(0., 0., 1.));`);
+    sh.fragmentShader = "uniform sampler2D rMap, rNor;\nvarying vec3 vOP, vON, vAX, vAY, vAZ;\nvarying float vRI;\n" + sh.fragmentShader
+      .replace("#include <map_fragment>", `vec3 rN = normalize(vON), rW = pow(abs(rN), vec3(4.)); rW /= rW.x + rW.y + rW.z;
+vec3 rP = vOP * 1.4 + fract(vRI * vec3(.618, .414, .732)) * 7.;
+diffuseColor.rgb *= texture2D(rMap, rP.zy).rgb * rW.x + texture2D(rMap, rP.xz).rgb * rW.y + texture2D(rMap, rP.xy).rgb * rW.z;`)
+      .replace("#include <normal_fragment_maps>", `{ // bumps from the rock photo's normal map, blended from 3 sides (whiteout blend), then turned to view space
+  vec3 tx = texture2D(rNor, rP.zy).xyz * 2. - 1., ty = texture2D(rNor, rP.xz).xyz * 2. - 1., tz = texture2D(rNor, rP.xy).xyz * 2. - 1.;
+  tx = vec3(tx.xy + rN.zy, abs(tx.z) * rN.x); ty = vec3(ty.xy + rN.xz, abs(ty.z) * rN.y); tz = vec3(tz.xy + rN.xy, abs(tz.z) * rN.z);
+  vec3 on = normalize(tx.zyx * rW.x + ty.xzy * rW.y + tz.xyz * rW.z);
+  normal = normalize(vAX * on.x + vAY * on.y + vAZ * on.z) * faceDirection;
+}`);
+  };
+  return m;
+}
+const rockTint = (c) => { const l = c.r * .3 + c.g * .59 + c.b * .11; return c.lerp(_rockGray.setRGB(l, l, l), .35); }, _rockGray = new THREE.Color(); // real stone is less colorful than painted ground
+function rockMeshes(n, emissive) { // one instanced mesh per rock shape, so the pieces are not all the same stone
+  ROCK_GEOS ??= Array.from({ length: ROCK_KINDS }, (_, i) => rockGeo(i + 1));
+  const mat = rockMat(emissive);
+  return ROCK_GEOS.map((g) => { const im = new THREE.InstancedMesh(g, mat, n); im.frustumCulled = false; im.count = 0; im.setColorAt(0, new THREE.Color(1, 1, 1)); return im; });
+}
 // chunks of rock that break off a planet and tumble away
 const chunks = (() => {
-  const N = 400, im = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, flatShading: true, emissive: 0x401000 }), N);
-  im.frustumCulled = false; scene.add(im);
-  const list = []; let next = 0; const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-  for (let i = 0; i < N; i++) { im.setMatrixAt(i, zero); im.setColorAt(i, new THREE.Color(1, 1, 1)); list.push({ life: 0 }); }
+  const N = 400, per = N / ROCK_KINDS, ims = rockMeshes(per, 0x401000); ims.forEach((im) => scene.add(im));
+  const list = [], cnt = new Array(ROCK_KINDS).fill(0), sc = new THREE.Vector3(); let next = 0;
+  for (let i = 0; i < N; i++) list.push({ life: 0, kind: i % ROCK_KINDS, col: new THREE.Color() });
   return {
-    spawn(p, v, size, color, life = rnd(2.5, 4.5)) { const c = list[next]; Object.assign(c, { p: p.clone(), v, size, life, max: life, ax: new THREE.Vector3().randomDirection(), a: 0, w: rnd(2, 8) }); im.setColorAt(next, color); im.instanceColor.needsUpdate = true; next = (next + 1) % N; },
+    spawn(p, v, size, color, life = rnd(2.5, 4.5)) { const c = list[next]; Object.assign(c, { p: p.clone(), v, size, life, max: life, ax: new THREE.Vector3().randomDirection(), a: rnd(0, 6), w: rnd(2, 8) }); rockTint(c.col.copy(color)); next = (next + 1) % N; },
     update(dt) {
-      let any = false;
-      list.forEach((c, i) => {
-        if (c.life <= 0) return; any = true; c.life -= dt;
+      cnt.fill(0);
+      for (const c of list) {
+        if (c.life <= 0) continue; c.life -= dt; if (c.life <= 0) continue;
         c.v.multiplyScalar(1 - dt * .4); c.p.addScaledVector(c.v, dt); c.a += c.w * dt;
         if (Math.random() < dt * 4) smoke.spawn(c.p, new THREE.Vector3(), .8, c.size * 1.6, SMOKE0, SMOKE1, 1.5, .5);
-        _q.setFromAxisAngle(c.ax, c.a);
-        im.setMatrixAt(i, c.life <= 0 ? zero : _m.compose(c.p, _q, _v.setScalar(c.size * Math.min(1, c.life / c.max * 3))));
-      });
-      if (any) im.instanceMatrix.needsUpdate = true;
+        const im = ims[c.kind], j = cnt[c.kind]++;
+        _q.setFromAxisAngle(c.ax, c.a); im.setMatrixAt(j, _m.compose(c.p, _q, sc.setScalar(c.size * Math.min(1, c.life / c.max * 3)))); im.setColorAt(j, c.col);
+      }
+      ims.forEach((im, k) => { if (im.count || cnt[k]) { im.count = cnt[k]; im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; } });
     },
   };
 })();
@@ -2503,25 +2555,27 @@ function megaBoom(planet, center, R) {
     fire.spawn(center.clone().addScaledVector(v, R * rnd(.2, 1)), v.clone().multiplyScalar(sp * R), rnd(.8, 2.4), (fast ? rnd(.06, .18) : rnd(.2, .8)) * R, fast ? HOT : warm, i % 3 ? mid : deep, fast ? .5 : 2.2, .9);
   }
   for (let i = 0; i < 900; i++) { v.randomDirection(); smoke.spawn(center.clone().addScaledVector(v, R * .8), v.clone().multiplyScalar(rnd(.8, 4) * R), rnd(2.5, 5), rnd(.6, 1.6) * R, SMOKE0, SMOKE1, 3, .6); }
-  const N = 380, chunks = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: .85, flatShading: true, emissive: 0xff5010, emissiveIntensity: .6 }), N);
-  chunks.frustumCulled = false;
-  const data = [], cc = new THREE.Color(), cols = planet.geo.attributes.color;
+  const N = 380, per = Math.ceil(N / ROCK_KINDS), chunks = rockMeshes(per, 0xff5010), mat = chunks[0].material; // glowing hot real rocks
+  mat.emissiveIntensity = .6;
+  const data = [], cc = new THREE.Color(), cols = planet.model ? null : planet.geo.attributes.color;
   for (let i = 0; i < N; i++) {
     v.randomDirection();
-    data.push({ p: center.clone().addScaledVector(v, R * rnd(.3, 1)), v: v.clone().multiplyScalar(rnd(2, 12) * R), s: rnd(.04, .22) * R, ax: new THREE.Vector3().randomDirection(), a: 0, w: rnd(2, 9) });
-    const u = (Math.random() * planet.U) | 0; cc.setRGB(cols.getX(u), cols.getY(u), cols.getZ(u)); chunks.setColorAt(i, cc);
+    const im = chunks[i % ROCK_KINDS], j = (i / ROCK_KINDS) | 0;
+    data.push({ im, j, p: center.clone().addScaledVector(v, R * rnd(.3, 1)), v: v.clone().multiplyScalar(rnd(2, 12) * R), s: rnd(.04, .22) * R, ax: new THREE.Vector3().randomDirection(), a: rnd(0, 6), w: rnd(2, 9) });
+    if (cols) { const u = (Math.random() * planet.U) | 0; cc.setRGB(cols.getX(u), cols.getY(u), cols.getZ(u)); } else cc.set(planet.data.design?.low ?? 0x8a7a6a);
+    im.setColorAt(j, rockTint(cc)); im.count = Math.max(im.count, j + 1);
   }
-  scene.add(chunks);
+  chunks.forEach((im) => { im.instanceColor.needsUpdate = true; scene.add(im); });
   const sc = new THREE.Vector3();
   addFx(9, (k, dt) => {
-    chunks.material.emissiveIntensity = .6 * (1 - k);
-    data.forEach((c, i) => {
+    mat.emissiveIntensity = .6 * (1 - k);
+    data.forEach((c) => {
       c.v.multiplyScalar(1 - dt * .5); c.p.addScaledVector(c.v, dt); c.a += c.w * dt;
       if (Math.random() < .05 && k < .5) fire.spawn(c.p, c.v.clone().multiplyScalar(.1), .6, c.s * 1.5, ORANGE, DARK, 1, .5);
-      _q.setFromAxisAngle(c.ax, c.a); _m.compose(c.p, _q, sc.setScalar(c.s * (k > .8 ? (1 - k) * 5 : 1))); chunks.setMatrixAt(i, _m);
+      _q.setFromAxisAngle(c.ax, c.a); _m.compose(c.p, _q, sc.setScalar(c.s * (k > .8 ? (1 - k) * 5 : 1))); c.im.setMatrixAt(c.j, _m);
     });
-    chunks.instanceMatrix.needsUpdate = true;
-  }, () => { scene.remove(chunks); chunks.geometry.dispose(); });
+    chunks.forEach((im) => (im.instanceMatrix.needsUpdate = true));
+  }, () => { chunks.forEach((im) => { scene.remove(im); im.dispose(); }); mat.dispose(); });
 }
 
 let home, planets = [];
