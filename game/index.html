@@ -186,6 +186,7 @@ body.joining .hud:not(#p-join), body.joining .hint { display: none !important; }
 #styleRow { display: flex; flex-wrap: wrap; gap: 5px; }
 #radioGoal { padding: 7px 9px; border-radius: 8px; background: rgba(255,181,71,.1); border: 1px solid rgba(255,181,71,.35); color: var(--accent); font: 500 12px var(--mono); }
 #radio.min #radioText { display: none; }
+.fuelbar { width: 60px; } .fuelbar i { background: linear-gradient(90deg, #ff8a1f, #ffd23f); }
 .xpbar { width: 60px; } .xpbar i { background: linear-gradient(90deg, #6fe3ff, #c8a2ff); }
 #megaBar { position: fixed; z-index: 3; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: 300px; text-align: center; font: 600 12px var(--mono); letter-spacing: .08em; color: #9fe8ff; pointer-events: none; text-shadow: 0 0 8px rgba(111,227,255,.6); }
 #megaBar .bar { height: 6px; margin-top: 5px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
@@ -507,7 +508,7 @@ kbd { font: 11px var(--mono); padding: 1px 6px; border-radius: 4px; border: 1px 
 </section>
 
 <div id="flyHud" class="hud" hidden>
-  <span>SHIP <b id="hudShip">—</b></span><span>HULL <span class="hpbar"><i id="hudHpBar"></i></span> <b id="hudHp">100</b>%</span><span>SPEED <b id="hudSpeed">0</b> km/s</span><span>💰 <b id="hudCredits">0</b></span><span>LV <b id="hudLv">1</b> <span class="hpbar xpbar"><i id="hudXp"></i></span></span>
+  <span>SHIP <b id="hudShip">—</b></span><span>HULL <span class="hpbar"><i id="hudHpBar"></i></span> <b id="hudHp">100</b>%</span><span>SPEED <b id="hudSpeed">0</b> km/s</span><span>💰 <b id="hudCredits">0</b></span><span title="Fuel">⛽ <span class="hpbar fuelbar"><i id="hudFuelBar"></i></span> <b id="hudFuel">100</b></span><span title="Metal and crystals">🔩 <b id="hudMetal">0</b> 💎 <b id="hudCrystal">0</b></span><span>LV <b id="hudLv">1</b> <span class="hpbar xpbar"><i id="hudXp"></i></span></span>
   <span id="navHud" hidden>NAV <b id="navName"></b> <b id="navDist"></b><button id="navStop" aria-label="Stop navigation">✕</button></span>
 </div>
 <section id="target" class="hud" hidden>
@@ -3956,6 +3957,8 @@ function hailOptions(t) {
   const o = [["👋 Say hi", () => say(pickLine(LINES[t.type] || LINES[t.role] || LINES.drift))]], role = t.role, type = t.type;
   if (role === "trader" && type !== "racer") o.push(
     ["🔧 Repair my ship · 💰20", () => buy(20, () => { shipHp = 100; say("All fixed. Fly safe! 🔧"); })],
+    ...(wallet.res.fuel < FUEL_MAX - 1 ? [[`⛽ Fill up my fuel · 💰${fuelPrice()}`, () => buy(fuelPrice(), () => { wallet.res.fuel = FUEL_MAX; saveRes(); say("Tank's full. Happy flying! ⛽"); })]] : []),
+    ...(wallet.res.metal + wallet.res.crystal > 0 ? [[`💱 Sell my 🔩 ${wallet.res.metal} metal + 💎 ${wallet.res.crystal} crystals · 💰${sellValue()}`, () => { const v = sellValue(); wallet.res.metal = wallet.res.crystal = 0; saveRes(); earn(v, "you sold your loot"); say("Pleasure doing business! 💱"); }]] : []),
     ["📦 Buy a mystery crate · 💰40", () => buy(40, () => { const r = Math.random(), win = r < .35 ? 0 : r < .8 ? 70 : 160; if (win) earn(win, "mystery crate"); say(win ? `Lucky you! The crate had ${win} credits inside. 🎉` : "Oops… it was full of rubber ducks. 🦆"); })],
     ...(mkOf("pulse") >= 2 ? [] : [["🔫 Fit twin barrels on my Laser cannon (Mk 2) · 💰120", () => buy(120, () => { wallet.arms.pulse = 2; saveWallet(); syncArmsLook(); buildShip(); save(); say("Fitted! Twin barrels, double the lasers. Go get 'em! 🔫"); toast("🛒 Laser cannon Mk 2!"); renderHail(); })]]),
     ["🗺 Ask for a tip", () => { const c = planets.filter((p) => p !== home && p.alive && !p.data.npc); const p = c[(Math.random() * c.length) | 0]; if (!p) return say("Quiet galaxy today."); setNav(p); say(`Psst… ${p.data.name} has ${fmt(p.data.pop)} people and nobody has pranked them in ages. 😈 I put it on your nav.`); }]);
@@ -4351,13 +4354,13 @@ function renderGameInfo() { // planet panel: what your planet makes, your fame a
 }
 // ---- saving your progress on the server (it lives in the database when the server has one)
 let walletSent = "";
-function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY), found: wallet.found, species: wallet.species }; }
+function walletSnapshot() { return { credits: Math.floor(wallet.credits), xp: wallet.xp | 0, owned: wallet.owned, arms: wallet.arms, style: wallet.style || null, friends: wallet.friends, stats: wallet.stats, lastIncome: wallet.lastIncome || 0, fame: fameOf(), tut: tut.step, missions: load(MISSIONKEY), found: wallet.found, species: wallet.species, res: wallet.res, drilled: wallet.drilled || {} }; }
 function syncWallet() { if (!net.me || !gameStarted) return; const s = JSON.stringify(walletSnapshot()); if (s === walletSent) return; walletSent = s; net.send({ t: "wallet", wallet: JSON.parse(s) }); }
 setInterval(syncWallet, 4000);
 function restoreWallet(w) { // you joined from another browser, or this one was cleared: the server remembers you
   if (!w || typeof w !== "object") return;
   if ((w.xp | 0) < (wallet.xp | 0) && load(WALLETKEY)) return; // this browser is ahead
-  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now(), found: w.found && typeof w.found === "object" ? w.found : {}, species: Array.isArray(w.species) ? w.species : [] });
+  Object.assign(wallet, { credits: +w.credits || 0, xp: w.xp | 0, owned: Array.isArray(w.owned) ? w.owned : [], arms: w.arms && typeof w.arms === "object" ? w.arms : armsFrom(w.owned), style: w.style || null, friends: Array.isArray(w.friends) ? w.friends : [], stats: w.stats || {}, lastIncome: w.lastIncome || Date.now(), found: w.found && typeof w.found === "object" ? w.found : {}, species: Array.isArray(w.species) ? w.species : [], res: w.res && typeof w.res === "object" ? w.res : freshRes(), drilled: w.drilled && typeof w.drilled === "object" ? w.drilled : {} });
   saveWallet();
   if (typeof w.tut === "number") { tut = { step: Math.min(TUT.length, w.tut), n: 0 }; store(TUTKEY, tut); }
   if (w.missions && w.missions.day) { store(MISSIONKEY, w.missions); missions = null; }
@@ -6893,12 +6896,68 @@ function inFight() { // loud music only in a real fight: an angry ship close by,
   if (foeNear || now - lastPlayerHit < 6 || arena?.bots?.length) fightUntil = now + 12;
   return now < fightUntil;
 }
+// ================= resources: fuel, metal, crystals =================
+// Fuel burns while your engines run (boost burns a lot more). It fills up for free near home.
+// Empty tank: no boost, weak engines, and Bolt points you home. Metal and crystals come from drilling wild planets.
+const FUEL_MAX = 100, FUEL_BURN = { cruise: .06, boost: .4, mega: 1.6 }, FUEL_HOME = 10; // per second
+const freshRes = () => ({ fuel: FUEL_MAX, metal: 0, crystal: 0 });
+wallet.res ||= freshRes();
+let resSaved = 0, fuelWarned = 0;
+function saveRes() { saveWallet(); renderRes(); }
+const fuelFree = () => godOn("free") || tut.step < TUT.length; // the tutorial never runs you dry
+const hasFuel = () => wallet.res.fuel > 0 || fuelFree();
+const fuelPrice = () => Math.max(5, Math.ceil((FUEL_MAX - wallet.res.fuel) * .4));
+const sellValue = () => wallet.res.metal * 4 + wallet.res.crystal * 10;
+function renderRes() {
+  const r = wallet.res, f = Math.ceil(r.fuel);
+  $("hudFuel").textContent = f; $("hudFuelBar").style.width = (r.fuel / FUEL_MAX * 100) + "%";
+  $("hudFuel").style.color = f <= 20 ? "var(--danger)" : ""; $("hudMetal").textContent = r.metal; $("hudCrystal").textContent = r.crystal;
+}
+function burnFuel(dt, thrust, boost) {
+  if (!thrust || fuelFree() || wallet.res.fuel <= 0) return;
+  const was = wallet.res.fuel;
+  wallet.res.fuel = Math.max(0, was - dt * (mega ? FUEL_BURN.mega : boost ? FUEL_BURN.boost : FUEL_BURN.cruise));
+  if (was > 25 && wallet.res.fuel <= 25 && clock() > fuelWarned) { fuelWarned = clock() + 30; radio("⛽ Fuel is getting low, explorer. Drill a wild planet, buy some from a trader, or come home to fill up."); }
+  if (wallet.res.fuel <= 0) { radio("⛽ We're out of fuel! The engines are weak now and boost is off. Follow the arrow home, I'll fill you up there. 🤖"); setNav(home); }
+}
+function resStep(dt) { // fill up near home, keep the HUD fresh, save now and then
+  const r = wallet.res, nearHome = mode !== "fly" ? mode === "home" || walkingOn(home) : ship.position.distanceTo(home.group.position) < home.R * 14 + 30;
+  if (nearHome && r.fuel < FUEL_MAX) { r.fuel = Math.min(FUEL_MAX, r.fuel + FUEL_HOME * dt); if (r.fuel >= FUEL_MAX && nav === home && mode === "fly") setNav(null); }
+  if (clock() - resSaved > 2) { resSaved = clock(); saveWallet(); }
+  renderRes(); drillStep(dt);
+}
+// drilling: stand still on a wild planet and hold R. Each planet has a few good spots a day.
+const DRILL_TIME = 2.4, DRILLS_PER_PLANET = 6;
+const drill = { t: 0, fx: 0 };
+function drillsLeft(p) { const d = (wallet.drilled ||= {})[p.data.name], day = new Date().toDateString(); return d && d.day === day ? Math.max(0, DRILLS_PER_PLANET - d.n) : DRILLS_PER_PLANET; }
+function drillText() {
+  const left = drillsLeft(walk.p);
+  if (!left) return "⛏ Drilled out for today. Try another wild planet!";
+  return drill.t > 0 ? `⛏ Drilling… ${Math.round(drill.t / DRILL_TIME * 100)}%` : `⛏ Hold R to drill for fuel, metal and crystals (${left} spots left)`;
+}
+function drillStep(dt) {
+  const w = walk, on = mode === "walk" && w && w.phase === "walk" && w.p.data.wild && w.ground && w.spd < w.u * .1 && keys.has("KeyR") && drillsLeft(w.p) > 0;
+  if (!on) { drill.t = 0; return; }
+  drill.t += dt; drill.fx -= dt;
+  const n = toWorldDir(w.p, w.pn), at = w.p.spin.localToWorld(w.pn.clone().multiplyScalar(w.g)).addScaledVector(toWorldDir(w.p, w.face), w.u * .5);
+  if (drill.fx <= 0) { drill.fx = .12; spark(at, w.u * 2, C(0xffc37a, 2)); if (Math.random() < .2) { const g = groundColor(w.p, w.pn); groundBlast(at, n, w.u * 1.2, [g.r, g.g, g.b], 2, 0); } shake = Math.max(shake, .02 * w.u); }
+  if (drill.t < DRILL_TIME) return;
+  drill.t = 0;
+  const day = new Date().toDateString(), d = wallet.drilled[w.p.data.name];
+  wallet.drilled[w.p.data.name] = d && d.day === day ? { day, n: d.n + 1 } : { day, n: 1 };
+  const big = Math.random() < .15, fuel = (big ? 20 : 8) + ((Math.random() * 6) | 0), metal = (big ? 8 : 3) + ((Math.random() * 3) | 0), crystal = Math.random() < (big ? 1 : .5) ? 1 + ((Math.random() * (big ? 4 : 2)) | 0) : 0;
+  const r = wallet.res; r.fuel = Math.min(FUEL_MAX, r.fuel + fuel); r.metal += metal; r.crystal += crystal; saveRes();
+  spark(at, w.u * 5, C(0x9df0ff, 3)); sfx.place(); avatarPlay("cheer");
+  toast(`⛏ ${big ? "Big find! " : ""}+${fuel} ⛽ fuel · +${metal} 🔩 metal${crystal ? ` · +${crystal} 💎 crystals` : ""}`, "", 2400);
+  if (!wallet.stats.drilled) radio("⛏ Nice drilling! Fuel goes right into the tank. Sell metal and crystals to any trader for credits. 🤖");
+  wallet.stats.drilled = (wallet.stats.drilled || 0) + 1;
+}
 function flyStep(dt) {
   const k = (c) => keys.has(c);
   if (playerDead) return;
   if (clock() - lastPlayerHit > 4) shipHp = Math.min(100, shipHp + 5 * dt * (wallet.style === "ice" ? 2 : 1)); // shields recharge
   $("hudHp").textContent = Math.ceil(shipHp); $("hudHp").style.color = shipHp < 35 ? "var(--danger)" : ""; $("hudHpBar").style.width = shipHp + "%"; $("hudHpBar").style.filter = shipHp < 35 && Math.sin(clock() * 12) > 0 ? "brightness(1.8)" : "";
-  const boost = k("ShiftLeft") || k("ShiftRight"), size = state.ship.size, thrust = k("KeyW");
+  const boost = (k("ShiftLeft") || k("ShiftRight")) && hasFuel(), size = state.ship.size, thrust = k("KeyW");
   // turning: the ship has weight. The mouse asks for a turn, and the ship's spin builds up, carries it round and eases out,
   // so it swings like a real spaceship instead of snapping. It still ends up exactly as far as you moved the mouse.
   const SENS = ui.sens || .0026, heavy = Math.max(.75, Math.min(1.6, size)), boostK = mega ? .35 : boost && thrust ? .7 : 1;
@@ -6932,7 +6991,8 @@ function flyStep(dt) {
   }
   const headUp = UP.clone().applyQuaternion(head), fwd = FWD.clone().applyQuaternion(head), right = new THREE.Vector3(-1, 0, 0).applyQuaternion(head);
   // engines: power builds up and fades out instead of switching on and off
-  throttle += ((thrust ? (boost ? 1 : .55) : 0) - throttle) * Math.min(1, dt * (thrust ? 2.2 : 3));
+  burnFuel(dt, thrust, boost);
+  throttle += ((thrust ? (boost ? 1 : hasFuel() ? .55 : .3) : 0) - throttle) * Math.min(1, dt * (thrust ? 2.2 : 3));
   megaStep(dt, boost && thrust);
   const max = mega ? MEGA_SPEED : boost && thrust ? 150 : 28;
   vel.addScaledVector(fwd, throttle * (mega ? MEGA_SPEED * 1.2 : boost ? 300 : 47) * dt);
@@ -7101,7 +7161,7 @@ $("resetAsk").addEventListener("click", () => { $("resetConfirm").hidden = false
 $("resetNo").addEventListener("click", () => { $("resetConfirm").hidden = true; $("resetAskRow").hidden = false; });
 $("resetAll").addEventListener("click", () => { setView("planet"); $("resetConfirm").hidden = false; $("resetAskRow").hidden = true; });
 function resetPlayerStuff() { // money, weapons, missions, and everyone's anger at you
-  Object.assign(wallet, { credits: 150, owned: [], arms: armsFrom([]), xp: 0, style: null, stats: {}, lastIncome: Date.now() }); saveWallet();
+  Object.assign(wallet, { credits: 150, owned: [], arms: armsFrom([]), xp: 0, style: null, stats: {}, lastIncome: Date.now(), res: freshRes(), drilled: {} }); saveWallet();
   if (raid) raid = null; bounties.length = 0; gameEvents.forEach((e) => e.objs.forEach((m) => scene.remove(m))); gameEvents.length = 0; arena = null; renderEvents(); try { localStorage.removeItem(JOBDAY); } catch {}
   try { localStorage.removeItem(MISSIONKEY); localStorage.removeItem(SEENKEY); } catch {}
   tut = { step: 0, n: 0 }; store(TUTKEY, tut); radioQ = []; renderLevel(); tutEnter();
@@ -7279,7 +7339,9 @@ function landUiStep() {
     const txt = `🛬 Land on ${landTarget.data.name}`; if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${esc(txt)} <small>Enter</small>`; h.textContent = ""; }
   } else if (mode === "walk") {
     el.hidden = false; const txt = "🚀 Take off";
-    if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${txt} <small>Enter</small>`; h.textContent = "WASD walk · Shift run · Space jump · E say hi · drag the mouse to look"; }
+    if (b.dataset.t !== txt) { b.dataset.t = txt; b.innerHTML = `${txt} <small>Enter</small>`; }
+    const help = walk && walk.p.data.wild ? drillText() + " · WASD walk · Space jump" : "WASD walk · Shift run · Space jump · E say hi · drag the mouse to look";
+    if (h.textContent !== help) h.textContent = help;
   } else el.hidden = true;
 }
 function modelBodies(g) { // the round bodies inside a downloaded 3D planet model (not its rings or cloud shell)
@@ -7769,7 +7831,7 @@ function frame() {
     } else controls.update();
     if (camera.fov !== 55) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
-  landUiStep(); boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t); busyStep(dt);
+  landUiStep(); resStep(dt); boltStep(dt); armsStep(dt); npcStep(dt, t); tutStep(dt, t); farStep(dt, t); gameStep(dt, t); busyStep(dt);
   if (mode !== "fly" || !nav) $("navTag").hidden = true;
   if (mode !== "fly" && mega) endMega(); junkStep(dt); remoteStep(dt, t);
   if (mode === "home") for (const f of ship.userData.flames) if (view !== "hangar") f.visible = true;
@@ -7803,6 +7865,7 @@ function startGame() {
 }
 if (net.online) { document.body.classList.add("joining"); $("p-join").hidden = false; setupNet(); } else startGame();
 window.__tp = { game: { addXp, startRaid, startEvent, spawnBounty, get raid() { return raid; }, bounties, gameEvents, get arena() { return arena; }, arenaAt, wallet, incomePerMin, fameOf, get topList() { return topList; }, lvl, M, payBuild, setView, pvpOk, get state() { return state; }, get lastPlayerAttack() { return lastPlayerAttack; } }, get tut() { return { tut, tutS }; }, get far() { return { mega, boostHold, megaK, prism: prismAt(), giants: farGiants }; }, setPanel, net, remotes, get home() { return home; }, npcs, camera, aimPoint, get aimPlanet() { return aimPlanet; }, get view() { return view; }, get mode() { return mode; }, get state() { return state; }, get planets() { return planets; }, ship, keys, fireWeapon, setNav, vel, aimNdc, head, hurtPlayer, radio };
+window.__tp.res = { drill, drillStep, drillsLeft, burnFuel, hasFuel, fuelFree };
 window.__tp.landing = { get walk() { return walk; }, get landTarget() { return landTarget; }, startLanding, takeOff, sayHi, landable, walkLook, get avatar() { return avatar; } };
 </script>
 </body>
