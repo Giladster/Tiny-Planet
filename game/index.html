@@ -1392,7 +1392,20 @@ varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5)
 }
 
 // ================= particles =================
+const FIRE_T = { value: 0 }; // shared clock for every engine flame, fire and smoke puff
 const NEAR_FADE = { value: 1 }; // particles fade out right in front of the camera; smaller while you walk on a planet
+// 16 different billowy puffs in one picture (4x4), so fire and smoke are lumpy rolling clouds, not round dots.
+// alpha = how thick the puff is; red = the same puff seen a bit lower-right, used to shade smoke as if lit from above
+const PUFFS = (() => {
+  const S = 128, cv = document.createElement("canvas"); cv.width = cv.height = S * 4; const x = cv.getContext("2d"), img = x.createImageData(S * 4, S * 4), d = img.data;
+  const dens = (u, v, q) => { const w = fbm(u, v, q * 2.3, 1.4, 5 + q * 11), r = Math.hypot(u + (w - .5) * .4, v + (fbm(v, u, q * 1.9, 1.4, 41 + q) - .5) * .4);
+    const n = fbm(u, v, q * 3.7, 2.4, 17 + q * 5) * .75 + fbm(u, v, q * 1.3, 6, 29 + q) * .25; return Math.max(0, Math.min(1, (1 - r) * 1.35 - .05 + (n - .5) * .75)); };
+  for (let q = 0; q < 16; q++) for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const u = i / S * 2 - 1, v = j / S * 2 - 1, a = dens(u, v, q), lo = dens(u + .09, v + .09, q), k = (((q >> 2) * S + j) * S * 4 + (q & 3) * S + i) * 4;
+    d[k] = Math.min(255, lo * 255); d[k + 1] = d[k + 2] = 255; d[k + 3] = Math.pow(a, 1.3) * 255;
+  }
+  x.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.NoColorSpace; t.premultiplyAlpha = false; return t;
+})();
 class Particles {
   constructor(n, additive) {
     this.n = n; this.i = 0;
@@ -1400,20 +1413,22 @@ class Particles {
     this.c0 = new Float32Array(n * 3); this.c1 = new Float32Array(n * 3);
     this.size = new Float32Array(n); this.alpha = new Float32Array(n); this.base = new Float32Array(n);
     this.life = new Float32Array(n); this.max = new Float32Array(n); this.grow = new Float32Array(n); this.drag = new Float32Array(n);
-    const g = this.geo = new THREE.BufferGeometry();
+    this.info = new Float32Array(n * 2); // per puff: a random seed (which puff and how it turns) and its age 0..1
+    const g = this.geo = new THREE.BufferGeometry(); g.setAttribute("pinfo", new THREE.BufferAttribute(this.info, 2));
     g.setAttribute("position", new THREE.BufferAttribute(this.pos, 3)); g.setAttribute("pcol", new THREE.BufferAttribute(this.col, 3));
     g.setAttribute("psize", new THREE.BufferAttribute(this.size, 1)); g.setAttribute("palpha", new THREE.BufferAttribute(this.alpha, 1));
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { scale: { value: 400 }, nearK: NEAR_FADE }, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-      vertexShader: `attribute vec3 pcol; attribute float psize; attribute float palpha; uniform float scale, nearK; varying vec3 vC; varying float vA;
-        void main(){ vC=pcol; vec4 mv=modelViewMatrix*vec4(position,1.); vA=palpha*smoothstep(.2*nearK,2.5*nearK,-mv.z); gl_Position=projectionMatrix*mv; gl_PointSize=min(512., psize*scale/max(.05,-mv.z)); }`,
-      fragmentShader: additive
-        ? `
-float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
-varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, .0,r); gl_FragColor=vec4(vC*a*vA,1.); }`
-        : `
-float rsmooth(float a, float b, float x){ return 1. - smoothstep(b, a, x); }
-varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5); float a=rsmooth(.5, .1,r); gl_FragColor=vec4(vC,a*vA*.75); }`,
+      uniforms: { scale: { value: 400 }, nearK: NEAR_FADE, puffs: { value: PUFFS }, time: FIRE_T }, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      vertexShader: `attribute vec3 pcol; attribute float psize; attribute float palpha; attribute vec2 pinfo; uniform float scale, nearK, time; varying vec3 vC; varying float vA, vK; varying vec2 vRot, vCell;
+        void main(){ vC=pcol; vK=pinfo.y; vec4 mv=modelViewMatrix*vec4(position,1.); vA=palpha*smoothstep(.2*nearK,2.5*nearK,-mv.z); gl_Position=projectionMatrix*mv; gl_PointSize=min(512., psize*scale/max(.05,-mv.z));
+          float r = pinfo.x * 6.283 + time * (pinfo.x - .5) * 1.6 + pinfo.y * (pinfo.x - .5) * 3.; vRot = vec2(cos(r), sin(r)); float f = floor(fract(pinfo.x * 7.31) * 16.); vCell = vec2(mod(f, 4.), floor(f / 4.)); }`,
+      fragmentShader: `uniform sampler2D puffs; varying vec3 vC; varying float vA, vK; varying vec2 vRot, vCell;
+        vec4 puff(){ vec2 p = gl_PointCoord - .5; p = vec2(p.x * vRot.x - p.y * vRot.y, p.x * vRot.y + p.y * vRot.x); if (dot(p, p) > .25) return vec4(0.); return texture2D(puffs, (clamp(p + .5, .01, .99) + vCell) * .25); }
+        ` + (additive
+        ? `void main(){ vec4 t = puff(); float e = vK * .55, a = clamp((t.a - e) / (1. - e), 0., 1.); // flames burn away into thin wisps as they age
+            gl_FragColor = vec4(vC * a * (.55 + .9 * a) * vA, 1.); }` // the thick middle burns brighter
+        : `void main(){ vec4 t = puff(); float e = vK * .25, a = clamp((t.a - e) / (1. - e), 0., 1.); float lit = mix(1., clamp(1. + (t.a - t.r) * 1.6, .7, 1.2), smoothstep(.1, .6, t.a)); // smoke is lit from above, darker underneath
+            gl_FragColor = vec4(vC * lit, a * vA * .85); }`),
     });
     this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; scene.add(this.points);
   }
@@ -1422,7 +1437,7 @@ varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5)
     const i = this.i; this.i = (i + 1) % this.n;
     this.pos.set([p.x, p.y, p.z], i * 3); this.vel.set([v.x, v.y, v.z], i * 3);
     this.c0.set(c0, i * 3); this.c1.set(c1, i * 3);
-    this.life[i] = life; this.max[i] = life; this.base[i] = size; this.grow[i] = grow; this.drag[i] = drag;
+    this.life[i] = life; this.max[i] = life; this.base[i] = size; this.grow[i] = grow; this.drag[i] = drag; this.info[i * 2] = Math.random(); this.info[i * 2 + 1] = 0;
   }
   update(dt) {
     for (let i = 0; i < this.n; i++) {
@@ -1430,14 +1445,14 @@ varying vec3 vC; varying float vA; void main(){ float r=length(gl_PointCoord-.5)
       this.life[i] -= dt;
       const k = 1 - Math.max(0, this.life[i]) / this.max[i], d = Math.max(0, 1 - this.drag[i] * dt), j = i * 3;
       for (let a = 0; a < 3; a++) { this.vel[j + a] *= d; this.pos[j + a] += this.vel[j + a] * dt; this.col[j + a] = this.c0[j + a] + (this.c1[j + a] - this.c0[j + a]) * k; }
-      this.size[i] = this.base[i] * (1 + this.grow[i] * k);
+      this.size[i] = this.base[i] * (1 + this.grow[i] * k); this.info[i * 2 + 1] = k;
       this.alpha[i] = (1 - k * k) * Math.min(1, k * 12 + .3);
     }
     const g = this.geo.attributes;
-    g.position.needsUpdate = g.pcol.needsUpdate = g.psize.needsUpdate = g.palpha.needsUpdate = true;
+    g.position.needsUpdate = g.pcol.needsUpdate = g.psize.needsUpdate = g.palpha.needsUpdate = g.pinfo.needsUpdate = true;
   }
 }
-const fire = new Particles(9000, true), smoke = new Particles(3000, false);
+const fire = new Particles(9000, true), smoke = new Particles(6000, false);
 const C = (hex, k = 1) => { const c = new THREE.Color(hex); return [c.r * k, c.g * k, c.b * k]; };
 const HOT = C(0xfff2c0, 3.2), ORANGE = C(0xff8a2a, 2.2), RED = C(0xff3010, 1.2), DARK = C(0x3a1408, .4), SMOKE0 = C(0x4a4450), SMOKE1 = C(0x18161c);
 
@@ -1481,6 +1496,43 @@ function ring(at, normal, size, dur, color, width = .12) {
   const m = new THREE.Mesh(new THREE.RingGeometry(1 - width, 1, 128), new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   m.position.copy(at); m.lookAt(at.clone().add(normal)); scene.add(m);
   addFx(dur, (k) => { m.scale.setScalar(.05 + size * (1 - (1 - k) ** 3)); m.material.opacity = (1 - k) ** 1.5; }, () => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+}
+// a hit on the ground: a fireball rolling up off the surface, black smoke climbing after it, a skirt of dust blown out along the ground,
+// glowing embers arcing away, rocks flung up, and fire that keeps burning in the crater for a moment. dust = ground color [r, g, b]
+const BLAST_HOT = C(0xffe0a0, 2.4), BLAST_MID = C(0xff9a3a, 1.7), BLAST_SMOKE0 = C(0x6a625c);
+function groundBlast(at, nrm, s, dust, rocks = 0, burn = 1) {
+  const v = new THREE.Vector3(), t = new THREE.Vector3(), d1 = [dust[0] * .6, dust[1] * .6, dust[2] * .6], up = (x) => (x.dot(nrm) < 0 ? x.addScaledVector(nrm, -2 * x.dot(nrm)) : x); // keep it above the ground
+  const fl = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: new THREE.Color(5, 3.6, 2.2), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+  fl.position.copy(at).addScaledVector(nrm, .15 * s); scene.add(fl);
+  addFx(.4, (k) => { fl.scale.setScalar(s * (.8 + k * 3)); fl.material.opacity = (1 - k) ** 2; }, () => { scene.remove(fl); fl.material.dispose(); });
+  for (let i = 0; i < 18 + 30 * s; i++) { up(v.randomDirection()); // the fireball: hot puffs that rise, swell and cool to orange, deep red and soot
+    const core = i % 4 === 0; fire.spawn(at.clone().addScaledVector(v, rnd(0, .15) * s), v.clone().multiplyScalar(rnd(.3, 1.6) * s).addScaledVector(nrm, rnd(.3, 1.1) * s), rnd(.5, 1.2) * (core ? .7 : 1), rnd(.16, .38) * s, core ? BLAST_HOT : BLAST_MID, core ? ORANGE : i % 3 ? RED : DARK, 2.6, 2.4); }
+  for (let i = 0; i < 8 + 18 * s; i++) { up(v.randomDirection()); // black smoke rising out of the fire
+    smoke.spawn(at.clone().addScaledVector(nrm, rnd(.1, .4) * s).addScaledVector(v, .15 * s), nrm.clone().multiplyScalar(rnd(.35, .9) * s).addScaledVector(v, rnd(.1, .35) * s), rnd(2, 3.6), rnd(.16, .32) * s, BLAST_SMOKE0, SMOKE1, 3.2, .7); }
+  for (let i = 0; i < 12 + 22 * s; i++) { t.randomDirection().projectOnPlane(nrm).normalize(); // dust blown out across the ground
+    smoke.spawn(at.clone().addScaledVector(t, rnd(.05, .25) * s), t.clone().multiplyScalar(rnd(.9, 2.4) * s).addScaledVector(nrm, rnd(.05, .3) * s), rnd(1.2, 2.2), rnd(.08, .18) * s, dust, d1, 3.6, 2.2); }
+  for (let i = 0; i < 10 + 26 * s; i++) { up(v.randomDirection()); // glowing embers flying out
+    fire.spawn(at, v.clone().multiplyScalar(rnd(1.5, 4.5) * s).addScaledVector(nrm, rnd(.4, 2) * s), rnd(.5, 1.3), rnd(.025, .05) * s, HOT, ORANGE, 0, .7); }
+  const rc = new THREE.Color(dust[0], dust[1], dust[2]);
+  for (let i = 0; i < rocks; i++) { up(v.randomDirection()); chunks.spawn(at.clone().addScaledVector(v, .1 * s), nrm.clone().multiplyScalar(rnd(1, 2.6) * s).addScaledVector(v, rnd(.6, 1.8) * s), rnd(.035, .08) * s, rc, rnd(1.6, 3)); }
+  if (burn > 0) { const p = at.clone(), n = nrm.clone(), w = new THREE.Vector3(); // fire keeps burning in the crater, then dies down to smoke
+    addFx(burn * rnd(1.6, 2.6), (k, dt) => {
+      let m = dt * 26 * (1 - k * .7); while (m > 0) { if (Math.random() < m) { w.randomDirection().projectOnPlane(n).multiplyScalar(rnd(0, .14) * s);
+        fire.spawn(p.clone().add(w), n.clone().multiplyScalar(rnd(.25, .6) * s).add(w), rnd(.4, .8), rnd(.1, .2) * s * (1 - k * .5), BLAST_MID, Math.random() < .5 ? RED : DARK, 1.4, 1.2); } m--; }
+      if (Math.random() < dt * 9) smoke.spawn(p.clone().addScaledVector(n, .3 * s), n.clone().multiplyScalar(rnd(.3, .6) * s), rnd(1.8, 2.8), rnd(.12, .22) * s, BLAST_SMOKE0, SMOKE1, 2.8, .5);
+    }, () => {});
+  }
+  shake = Math.max(shake, .05 * s * Math.max(0, 1 - camera.position.distanceTo(at) / 30));
+}
+function starBlast(at, nrm, s) { // a shot into a star: a blinding flash and a solar flare of burning gas looping out of the surface
+  const v = new THREE.Vector3(), SUN_HOT = C(0xffe8b0, 1.7), SUN_MID = C(0xff9a30, 1.3), SUN_DEEP = C(0xd03a08, .7);
+  flashAt(at, new THREE.Color(3, 2.4, 1.4), 5 * s, .5); ring(at, nrm, 3 * s, .8, new THREE.Color(3, 2.2, 1), .06);
+  for (let i = 0; i < 40 + 40 * s; i++) { v.randomDirection(); if (v.dot(nrm) < 0) v.addScaledVector(nrm, -2 * v.dot(nrm));
+    fire.spawn(at, v.clone().multiplyScalar(rnd(.5, 2.2) * s).addScaledVector(nrm, rnd(.5, 1.5) * s), rnd(.6, 1.4), rnd(.15, .4) * s, i % 3 ? SUN_MID : SUN_HOT, SUN_DEEP, 2.4, 1.6); }
+  const side = new THREE.Vector3().randomDirection().projectOnPlane(nrm).normalize(); // the flare: a loop of hot gas arching out and falling back
+  for (let i = 0; i < 80; i++) { const a = Math.random() * Math.PI, p = at.clone().addScaledVector(side, Math.cos(a) * 1.4 * s).addScaledVector(nrm, Math.sin(a) * 1.6 * s).add(v.randomDirection().multiplyScalar(rnd(0, .18) * s));
+    fire.spawn(p, nrm.clone().multiplyScalar(rnd(.1, .3) * s), rnd(1, 1.8), rnd(.2, .38) * s, i % 4 ? SUN_MID : SUN_HOT, SUN_DEEP, 1.4, 1.5); }
+  for (let i = 0; i < 30 + 30 * s; i++) { v.randomDirection(); fire.spawn(at, v.multiplyScalar(rnd(2, 6) * s), rnd(.4, 1), rnd(.03, .06) * s, SUN_HOT, SUN_MID, 0, .6); }
 }
 function flashScreen(color = "#fff", strength = 1) {
   const f = $("flash"); f.style.transition = "none"; f.style.background = color; f.style.opacity = strength;
@@ -2169,6 +2221,11 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     if (!remote && net.me && this.data.id) net.send({ t: "hit", id: this.data.id, n: n.toArray().map(r3), kind });
     this.stamp(n, kind);
     this.dirty = true;
+    { // every hit blows up: fire, smoke, dust the color of the ground there and rocks
+      const surf = this.mesh.localToWorld(n.clone().multiplyScalar(this.radiusAt(n))), nrm = surf.clone().sub(this.group.position).normalize();
+      const g = groundColor(this, n).lerp(new THREE.Color(0xc8b8a0), .3), dust = [g.r, g.g, g.b];
+      if (camera.position.distanceTo(surf) < 120) groundBlast(surf, nrm, kind === "bomb" ? 3 : kind === "laser" ? .6 : 1.6, dust, kind === "bomb" ? 10 : kind === "laser" ? (Math.random() < .5 ? 2 : 1) : 5, kind === "laser" ? .35 : kind === "bomb" ? 1.6 : 1);
+    }
     const before = this.data.decor.length;
     this.data.decor = this.data.decor.filter((d) => d.type === "mailbox" || V(d.n).normalize().distanceTo(n) > cfg.size * 1.1);
     if (this.data.decor.length !== before) { this.rebuildDecor(); boom(this.mesh.localToWorld(n.clone().multiplyScalar(this.R)), .6); }
@@ -2226,7 +2283,8 @@ totalEmissiveRadiance += vec3(1.0, .7, .36) * vCity * town * night * 2.4;`);
     }
     this.dirty = true;
     const at = this.mesh.localToWorld(n.clone().multiplyScalar(this.R));
-    boom(at, 1.6 * (this.data.wild ? Math.min(this.R, 9) : this.R)); breakOff(this, n, 30, size); this.fling(n, size, 3); // big wild planets: a cave-in, not a blinding flash
+    boom(at, 1.6 * (this.data.wild ? Math.min(this.R, 9) : this.R)); breakOff(this, n, 30, size);
+    { const g = groundColor(this, n).lerp(new THREE.Color(0xc8b8a0), .3); groundBlast(at, at.clone().sub(this.group.position).normalize(), 2.5 * Math.min(this.R / 1.6, 4), [g.r, g.g, g.b], 12, 2); } this.fling(n, size, 3); // big wild planets: a cave-in, not a blinding flash
     sfx.rumble(at); setTimeout(() => sfx.boom(2.5, at), 300);
     shake = Math.max(shake, .12 * Math.max(0, 1 - camera.position.distanceTo(at) / 40));
     toast(`⚠ ${esc(this.data.name)} is breaking apart!`, "boom", 2200);
@@ -3097,7 +3155,6 @@ function makeModelShip(bm, c, root) {
   collectParts(root, info);
   return info;
 }
-const FIRE_T = { value: 0 }; // shared clock for every engine flame
 const FLAME_SHEET = new THREE.PlaneGeometry(1, 1, 1, 8);
 function makeFireMat(c) { // engine fire: a white-hot core fading through the engine color into soft flickering edges, with shock diamonds when boosting
   const U = { color: { value: new THREE.Color(c.flame).multiplyScalar(1.6) }, boost: { value: 0 }, time: FIRE_T };
@@ -6436,6 +6493,18 @@ function boltStep(dt) {
       const hit = hitSphere(p0, b.obj.position, p.group.position, p.R * 1.01);
       if (hit) { impact(b, p, hit); gone = true; break; }
     }
+    if (!gone) for (const g of MODEL_PLANETS) { // the downloaded planets and the Tiny Sun: shots blow up on them (they are too big to break)
+      const bodies = modelBodies(g);
+      for (const bd of bodies) {
+        const c = bodyCenter(bd), hit = hitSphere(p0, b.obj.position, c, bd.R); if (!hit) continue;
+        const nrm = hit.clone().sub(c).normalize(), s = { laser: .7, missile: 1.6, bomb: 3, atom: 4 }[b.kind] || 1.2;
+        if (g.moons && bd === bodies[0]) starBlast(hit, nrm, s); // the sun in the middle of the Tiny Sun's system
+        else { const d = new THREE.Color(g.tone).lerp(new THREE.Color(0xc8b8a0), .25); groundBlast(hit, nrm, s, [d.r, d.g, d.b], b.kind === "laser" ? 2 : 8, 1); }
+        if (b.kind !== "laser" || Math.random() < .3) sfx.boom(b.kind === "laser" ? .4 : s, hit);
+        gone = true; break;
+      }
+      if (gone) break;
+    }
     if (gone) { freeBolt(b); bolts.splice(i, 1); }
   }
 }
@@ -7271,16 +7340,23 @@ function padJets(power, k) { // four landing thrusters under the hull, firing st
     if (lv > .25 && Math.random() < .7) fire.spawn(j.g.position, _v.set(0, -1, 0).applyQuaternion(q).multiplyScalar(L * rnd(2, 3.5)), rnd(.1, .2), L * rnd(.04, .07), C(state.ship.flame, 2.2), C(state.ship.flame, .2), 1.5); // hot exhaust shooting down
   });
 }
-function kickDust(rate) { // dust and air blasted out across the ground under the thrusters
-  const w = walk, p = w.p, nW = toWorldDir(p, w.n), L = w.L * w.s, t = new THREE.Vector3(), at = new THREE.Vector3(), v = new THREE.Vector3();
-  const cnt = Math.round(rate * 12);
-  for (let i = 0; i < cnt; i++) {
+function kickDust(rate) { // the thrusters blast the ground: a ring of dust billows out, a fast low sheet of wind-blown grit races ahead of it, the ground glows
+  const w = walk, p = w.p, nW = toWorldDir(p, w.n), L = w.L * w.s, t = new THREE.Vector3(), at = new THREE.Vector3(), v = new THREE.Vector3(), c = w.dust;
+  const lite = [Math.min(1, c[0] * 1.1 + .1), Math.min(1, c[1] * 1.1 + .1), Math.min(1, c[2] * 1.1 + .1)];
+  for (let i = 0, cnt = Math.round(rate * 14); i < cnt; i++) { // big rolling billows
     t.randomDirection().projectOnPlane(w.n).normalize();
-    const dn = w.n.clone().addScaledVector(t, (L * rnd(.15, .55)) / w.g).normalize();
-    at.copy(dn).multiplyScalar(groundAtGrid(p, dn) + w.u * .1); p.spin.localToWorld(at);
-    v.copy(toWorldDir(p, t)).multiplyScalar(L * rnd(1.4, 3.2) * (.5 + rate)).addScaledVector(nW, L * rnd(.05, .4));
-    const c = w.dust, k = rnd(.75, 1.15);
-    smoke.spawn(at, v, rnd(.7, 1.6), L * rnd(.012, .03), [c[0] * k, c[1] * k, c[2] * k], [c[0] * .8, c[1] * .8, c[2] * .8], 6, 2.2);
+    const dn = w.n.clone().addScaledVector(t, (L * rnd(.1, .5)) / w.g).normalize();
+    at.copy(dn).multiplyScalar(groundAtGrid(p, dn) + w.u * .15); p.spin.localToWorld(at);
+    v.copy(toWorldDir(p, t)).multiplyScalar(L * rnd(1, 2.4) * (.5 + rate)).addScaledVector(nW, L * rnd(.08, .4));
+    const k = rnd(.75, 1.15);
+    smoke.spawn(at, v, rnd(1.4, 2.8), L * rnd(.05, .1), [c[0] * k, c[1] * k, c[2] * k], [c[0] * .75, c[1] * .75, c[2] * .75], 4, 2);
+  }
+  for (let i = 0, cnt = Math.round(rate * 8); i < cnt; i++) { // the wind: grit hugging the ground, racing out far past the cloud
+    t.randomDirection().projectOnPlane(w.n).normalize();
+    const dn = w.n.clone().addScaledVector(t, (L * rnd(.15, .6)) / w.g).normalize();
+    at.copy(dn).multiplyScalar(groundAtGrid(p, dn) + w.u * .05); p.spin.localToWorld(at);
+    v.copy(toWorldDir(p, t)).multiplyScalar(L * rnd(3.5, 6.5) * (.6 + rate * .6)).addScaledVector(nW, L * rnd(0, .1));
+    smoke.spawn(at, v, rnd(.4, .85), L * rnd(.008, .018), lite, c, 3, 1.1);
   }
   if (Math.random() < rate * .8) { at.copy(w.n).multiplyScalar(w.g + w.u * .05); p.spin.localToWorld(at); fire.spawn(at, v.set(0, 0, 0), .25, L * rnd(.2, .35), C(0xff9a50, .9 * rate), C(0xff5020, .1)); } // the ground glows hot under the jets
   for (let i = 0; i < 2; i++) if (Math.random() < rate) { // little stones and grass bits flicked up
@@ -7350,7 +7426,7 @@ function landingStep(dt) {
     const wob = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(w.t * 1.7) * .05 * (1 - k), 0, Math.sin(w.t * 2.3) * .06 * (1 - k)));
     placeShip(pos, w.QT.clone().multiply(wob), w.s);
     padJets(1.15 - k * .35, 1 - k);
-    const rate = ss(L * 2.6, 0, hgt); if (rate > .02) kickDust(rate);
+    const rate = ss(L * 3.2, 0, hgt); if (rate > .02) kickDust(rate);
     shake = Math.max(shake, .006 * rate);
     const orbit = w.camL.clone().applyAxisAngle(w.n, -k * .25);
     camTo(orbit, pos.clone().lerp(w.T, .4), w.n, 1 - Math.exp(-dt * 6));
@@ -7584,7 +7660,7 @@ function takeoffStep(dt) {
     const k = Math.min(1, w.t / LI), e = k * k, hgt = e * L * 2;
     const wob = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.sin(w.t * 1.9) * .04 * k, 0, Math.sin(w.t * 2.5) * .05 * k));
     placeShip(w.T.clone().addScaledVector(w.n, hgt), w.QT.clone().multiply(wob), w.s);
-    padJets(.6 + k * .6, k); const rate = ss(L * 2.6, 0, hgt) * Math.min(1, w.t * 3); if (rate > .02) kickDust(rate);
+    padJets(.6 + k * .6, k); const rate = ss(L * 3.2, 0, hgt) * Math.min(1, w.t * 3); if (rate > .02) kickDust(rate);
     shake = Math.max(shake, .008 * rate);
     camTo(camSide, w.T.clone().addScaledVector(w.n, hgt * .8), w.n, 1 - Math.exp(-dt * 5));
     if (k >= 1) { w.phase = "leave"; w.t = 0; setWalkLook(false); sfx.boostKick(); w.QU = basisQ(w.x, w.f.clone().negate(), w.n); }
